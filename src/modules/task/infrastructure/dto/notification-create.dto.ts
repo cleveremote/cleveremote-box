@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationModel } from 'src/modules/task/domain/models/notification.model';
+import { ExecutionModel } from 'src/modules/task/domain/models/execution.model';
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 
 
@@ -40,14 +40,14 @@ export class NotificationCreateDTO {
     @ApiProperty({ required: false, description: 'En cas d\'un incident, cette valeur permettra de connaitre si elle est résolue ou pas.' })
     public isResolved: boolean;
 
-    public static mapToNotificationModel(notificationCreateDTO: NotificationCreateDTO): NotificationModel {
-        const notification = new NotificationModel();
-        notification.title = notificationCreateDTO.title;
-        notification.description = notificationCreateDTO.description;
-        notification.startDate = new Date(notificationCreateDTO.startDate);
-        notification.endDate = new Date(notificationCreateDTO.endDate);
-        notification.notificationScope = notificationCreateDTO.notificationScope;
-        notification.isResolved = notificationCreateDTO.isResolved;
+    public static mapToNotificationModel(notificationCreateDTO: NotificationCreateDTO): ExecutionModel {
+         const notification = new ExecutionModel();
+        // notification.title = notificationCreateDTO.title;
+        // notification.description = notificationCreateDTO.description;
+        // notification.startDate = new Date(notificationCreateDTO.startDate);
+        // notification.endDate = new Date(notificationCreateDTO.endDate);
+        // notification.notificationScope = notificationCreateDTO.notificationScope;
+        // notification.isResolved = notificationCreateDTO.isResolved;
         return notification;
     }
 }

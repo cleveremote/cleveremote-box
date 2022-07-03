@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationModel } from 'src/modules/task/domain/models/notification.model';
+import { ExecutionModel } from 'src/modules/task/domain/models/execution.model';
 import { IsArray, IsNotEmpty, IsString } from 'class-validator';
 
 export class NotificationResponseDTO {
@@ -46,17 +46,8 @@ export class NotificationResponseDTO {
     @ApiProperty()
     public isResolved: boolean;
 
-    public static mapToNotificationResponseDTO(notification: NotificationModel): NotificationResponseDTO {
+    public static mapToNotificationResponseDTO(notification: ExecutionModel): NotificationResponseDTO {
         const notificationResponseDTO = new NotificationResponseDTO();
-        notificationResponseDTO.id = notification.id;
-        notificationResponseDTO.title = notification.title;
-        notificationResponseDTO.description = notification.description;
-        notificationResponseDTO.startDate = notification.startDate.toString();
-        notificationResponseDTO.endDate = notification.endDate.toString();
-        notificationResponseDTO.notificationScope = notification.notificationScope;
-        notificationResponseDTO.createdAt = notification.createdAt?.toString();
-        notificationResponseDTO.updatedAt = notification.updatedAt.toString();
-        notificationResponseDTO.isResolved = notification.isResolved;
         return notificationResponseDTO;
     }
 }

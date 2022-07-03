@@ -8,36 +8,34 @@ export class CycleModel implements IExecutable {
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public sequences: SequenceModel[] = [];
 
-    public async execute(action: ExecutableAction): Promise<boolean> {
-        throw new Error("Method not implemented.");
-    }
     public getModules(): ModuleModel[] {
-        throw new Error("Method not implemented.");
+        let modules: ModuleModel[] = [];
+        this.sequences.forEach(sequence => {
+            modules = modules.concat(sequence.modules);
+            modules = [...new Set([...modules, ...sequence.modules])];
+        });
+        return modules;
     }
 
     public exists(module: ModuleModel): boolean {
-        throw new Error("Method not implemented.");
+        return this.getModules().includes(module);
     }
 
     public async reset(): Promise<boolean> {
-        throw new Error("Method not implemented.");
+        this.sequences.forEach(async sequence => {
+            await sequence.reset();
+        });
+        this.status = ExecutableStatus.STOPPED;
+        return true;
     }
 
-    public getType(): ExecutableType {
-        return ExecutableType.CYCLE;
-    }
-
-    public getChilds(): SequenceModel[] {
-        return this.sequences;
-    }
-
-    public getExecutionStructure(): { portNum: number[]; duration: number; }[] {
-        const executionLst: { portNum: number[]; duration: number; }[] = [];
+    public getExecutionStructure(): { portNums: number[]; duration: number; }[] {
+        const executionLst: { portNums: number[]; duration: number; }[] = [];
         const sequences: SequenceModel[] = this.sequences;
         sequences.forEach(sequence => {
             const portNums = sequence.modules.map((x) => x.portNum);
             const duration = sequence.duration;
-            executionLst.push({ portNum: portNums, duration });
+            executionLst.push({ portNums: portNums, duration });
         });
         return executionLst;
     }

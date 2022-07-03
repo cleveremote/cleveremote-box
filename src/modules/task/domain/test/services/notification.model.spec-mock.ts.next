@@ -1,0 +1,6 @@
+import { ExecutionModel } from 'src/modules/task/domain/models/execution.model';
+
+export function CreateNotification(id: string): ExecutionModel {
+    const notification = new ExecutionModel();
+    return notification;
+}

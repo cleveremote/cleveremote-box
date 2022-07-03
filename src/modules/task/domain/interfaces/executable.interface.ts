@@ -38,13 +38,10 @@ export enum TASK {
 
 export interface IExecutable {
     id: string;
-    status:ExecutableStatus;
-    execute(action: ExecutableAction): Promise<boolean>;
+    status:ExecutableStatus
     reset(): Promise<boolean>;
     getModules(): ModuleModel[];
-    getChilds():SequenceModel[]|CycleModel[]|ModuleModel[];
-    getType():ExecutableType;
     exists(module: ModuleModel): boolean;
-    getExecutionStructure():{ portNum: number[], duration: number }[];
+    getExecutionStructure():{ portNums: number[], duration: number }[];
     
 }

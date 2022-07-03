@@ -2,7 +2,7 @@
 // import { Endpoint } from '@framework/decorator/endpoint.decorator';
 // import { User, UserModel } from '@framework/decorator/user.decorator';
 import { Body, Controller, HttpException, Param, UnauthorizedException } from '@nestjs/common';
-import { TaskService } from 'src/modules/task/domain/services/notification.service';
+import { ExecutionService } from 'src/modules/task/domain/services/execution.service';
 import { ActiveNotificationsFetchUC } from 'src/modules/task/use-cases/active-notifications-fetch.uc';
 import { NotificationCreateUC } from 'src/modules/task/use-cases/notification-create.uc';
 import { NotificationDeleteUC } from 'src/modules/task/use-cases/notification-delete.uc';
@@ -17,7 +17,7 @@ import { NotificationResponseDTO } from '../dto/notification-response.dto';
 @Controller('espace-vente/notifications')
 export class NotificationController {
 
-    public constructor(private notificationService: TaskService) { }
+    public constructor(private notificationService: ExecutionService) { }
 
     // // @Endpoint({
     // //     method: 'GET',

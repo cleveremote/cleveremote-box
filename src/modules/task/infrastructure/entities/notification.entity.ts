@@ -1,4 +1,4 @@
-import { NotificationModel } from 'src/modules/task/domain/models/notification.model';
+import { ExecutionModel } from 'src/modules/task/domain/models/execution.model';
 
 export class NotificationEntity {
    public id: string;
@@ -23,35 +23,11 @@ export class NotificationEntity {
 
     public isResolved: boolean;
 
-    public static mapToNotificationModel(notificationEntity: NotificationEntity): NotificationModel {
-        return {
-            id: notificationEntity.id,
-            title: notificationEntity.title,
-            description: notificationEntity.description,
-            startDate: notificationEntity.startDate,
-            endDate: notificationEntity.endDate,
-            notificationScope: notificationEntity.notificationScope.split(','),
-            login: notificationEntity.login,
-            createdAt: notificationEntity.createdAt,
-            updatedAt: notificationEntity.updatedAt,
-            isResolved: notificationEntity.isResolved,
-            updatedBy: notificationEntity.updatedBy
-        };
+    public static mapToNotificationModel(notificationEntity: NotificationEntity): ExecutionModel {
+        return null;
     }
 
-    public static mapToNotificationEntity(notification: NotificationModel): NotificationEntity {
-        return {
-            id: notification.id,
-            title: notification.title,
-            description: notification.description,
-            startDate: notification.startDate,
-            endDate: notification.endDate,
-            notificationScope: notification.notificationScope.join(','),
-            login: notification.login,
-            createdAt: notification.createdAt,
-            updatedAt: notification.updatedAt,
-            isResolved: notification.isResolved,
-            updatedBy: notification.updatedBy
-        };
+    public static mapToNotificationEntity(notification: ExecutionModel): NotificationEntity {
+        return null;
     }
 }
