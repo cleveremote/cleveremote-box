@@ -13,6 +13,7 @@ module.exports = {
         'ts'
     ],
     collectCoverageFrom: [
+        'src/common/**/*.ts',
         'src/modules/**/{use-cases,domain}/**/*.ts',
         '!src/modules/**/*.spec-mock.ts'
     ],

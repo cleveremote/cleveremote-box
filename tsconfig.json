@@ -18,8 +18,8 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@order/*": [
-        "src/modules/task/*"
+      "@process/*": [
+        "src/modules/process/*"
       ],
       "@framework/*": [
         "src/common/framework/*"
