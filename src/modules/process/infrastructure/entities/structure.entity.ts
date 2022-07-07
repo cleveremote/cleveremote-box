@@ -41,7 +41,6 @@ export class StructureEntity {
             });
             struct.cycles.push(cycle);
         });
-        console.log('struct buildes', struct);
         return struct;
     }
 

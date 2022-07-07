@@ -13,10 +13,8 @@ export class SocketIoClientStrategy extends Server
     /* istanbul ignore next */
     public listen(callback: () => void): void {
         this.client.on('connection', () => {
-            console.log('connect');
         });
         this.client.on('error', (error) => {
-            console.log(error);
         });
 
         this.messageHandlers.forEach((handler, pattern) => {

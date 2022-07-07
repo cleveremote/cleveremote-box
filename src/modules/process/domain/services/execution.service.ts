@@ -15,32 +15,47 @@ export class ProcessService {
     public async execute(execution: ProcessModel): Promise<boolean> {
         await this.configurationService.getConfiguration();
         execution = this._initializeTask(execution);
-        this.execQueue.push(execution);
         if (execution.mode === ExecutableMode.FORCE) {
-            const conflictedExecutables: IExecutable[] =
-                await this._getConflictedExecutables(execution);
-            conflictedExecutables.forEach(async (executable) => {
-                await executable.reset();
-            });
+            await this._resetConflictedProcesses(execution);
         } else if (execution.mode === ExecutableMode.QUEUED) {
             throw new Error('Method not implemented.');
         }
 
-        return execution.execute().then((response) => {
-            const index = this.execQueue.map(x => x.task.id).indexOf(execution.task.id);
+        execution.instance = execution.execute().subscribe(
+            {
+                next: (x) => { console.log('got value ' + x); },
+                error: (err) => { console.error('something wrong occurred: ' + err); },
+                complete: () => {
+                    const index = this.execQueue.map(x => x.task.id).indexOf(execution.task.id);
+                    this.execQueue.splice(index, 1);
+                }
+            }
+        );
+        this.execQueue.push(execution);
+
+        return true;
+    }
+
+    private async _resetConflictedProcesses(execution): Promise<boolean> {
+        const conflictedExecutables: IExecutable[] =
+            await this._getConflictedExecutables(execution); 
+        conflictedExecutables.forEach(async (executable) => {
+            const index = this.execQueue.map(x => x.task.id).indexOf(executable.id);
+            this.execQueue[index].instance.unsubscribe();
             this.execQueue.splice(index, 1);
-            return response;
+            await executable.reset();
         });
+
+        return true;
     }
 
     private async _getConflictedExecutables(execution: ProcessModel): Promise<IExecutable[]> {
-        console.log('test execution.task', execution.task);
         const modules = execution.task.getModules();
         const conflictedExecutable: IExecutable[] = [];
         const tasksInProccess = this.execQueue.map(x => x.task);
         modules.forEach((module) => {
             tasksInProccess.forEach((task) => {
-                if (task.exists(module)) {
+                if (task.exists(module) && !conflictedExecutable.find((x)=>x.id===task.id)) {
                     conflictedExecutable.push(task);
                 }
             })
@@ -50,14 +65,12 @@ export class ProcessService {
     }
 
     private _initializeTask(execution: ProcessModel): ProcessModel {
+        this.configurationService.structure.getModules().forEach(module => {
+            module.execute(0);
+        });
         const struct = this.configurationService.structure;
         const taskId = execution.task.id;
-        console.log('id seraching for ' + execution.task.id)
-        console.log(' searching in ');
-        console.log(this.configurationService.structure.cycles);
         const found = struct.cycles.find(x => x.id === taskId) || struct.sequences.find(x => x.id === taskId);
-        console.log('found');
-        console.log(found);
         execution.task = found;
         return execution;
     }

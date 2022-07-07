@@ -4,20 +4,20 @@ import { Socket, io } from 'socket.io-client';
 
 @Injectable()
 export class SocketIoClientProvider {
-    @Inject(ConfigService)
-    private readonly _config: ConfigService;
+  @Inject(ConfigService)
+  private readonly config: ConfigService;
 
-    private _socket: Socket;
+  private socket: Socket;
 
-    private _connect(): Socket {
-        this._socket = io(this._config.get('SOCKET_SERVER'));
-        return this._socket;
+  private connect() {
+    this.socket = io(this.config.get('SOCKET_SERVER'));
+    return this.socket;
+  }
+
+  getSocket = () => {
+    if (!this.socket) {
+      return this.connect();
     }
-
-    public getSocket = (): Socket => {
-        if (!this._socket) {
-            return this._connect();
-        }
-        return this._socket;
-    };
+    return this.socket;
+  };
 }

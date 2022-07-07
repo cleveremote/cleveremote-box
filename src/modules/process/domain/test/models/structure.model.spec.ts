@@ -103,8 +103,6 @@ describe('StructureModel model', () => {
         structure.cycles = [cycle, cycle2];
         structure.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4]
 
-        console.log('jsonStruct', JSON.stringify(structure));
-
         const modules = structure.getModules();
         expect(modules).toBeDefined();
         expect(modules).toHaveLength(5);

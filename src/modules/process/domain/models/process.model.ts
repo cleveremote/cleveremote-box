@@ -1,4 +1,4 @@
-import { delay, lastValueFrom, map, mergeMap, Observable, of } from 'rxjs';
+import { delay, from, lastValueFrom, map, mergeMap, Observable, of, Subscription, tap } from 'rxjs';
 import {
     ExecutableAction,
     ExecutableMode,
@@ -14,33 +14,39 @@ export class ProcessModel {
     public type: ConditionType;
     public function: string;
     public mode: ExecutableMode;
+    public instance: Subscription;
 
     // eslint-disable-next-line max-lines-per-function
-    public execute(): Promise<boolean> {
+    public execute(): Observable<boolean> {
         if (this.action === ExecutableAction.OFF) {
-            return this.task.reset().then((data) => {
-                this.task.status = ExecutableStatus.STOPPED;
-                return data;
-            });
+            return from(this.task.reset())
+                .pipe(map((data) => {
+                    this.task.status = ExecutableStatus.STOPPED;
+                    return data;
+                }));
         }
 
         const executionLst = this.task.getExecutionStructure();
-        let obs: Observable<{ portNums: number[]; duration: number } | boolean> =
-            ProcessModel.ofNull<{ portNums: number[]; duration: number } | boolean>();
+        let obs: Observable<{ portNums: number[]; duration: number }> =
+            ProcessModel.ofNull<{ portNums: number[]; duration: number }>()
+                .pipe(tap((x) => { this.task.status = ExecutableStatus.IN_PROCCESS }
+                ));
 
         executionLst.forEach((sequence, index) => {
             const o = this.createExecObs(executionLst[index - 1], sequence);
             obs = obs.pipe(mergeMap(() => o));
         });
 
-        const obsChaining = obs.pipe(map(() => {
-            this.task.status = ExecutableStatus.IN_PROCCESS;
+        const obsChaining = obs.pipe(map((lastPins) => {
+            const modules = this.task.getModules();
+            lastPins.portNums.forEach((previousPin) => {
+                modules.find(x => x.portNum === previousPin).execute(0);
+                this.task.status = ExecutableStatus.STOPPED;
+            });
             return true;
         }));
 
-        return lastValueFrom(obsChaining);
-
-
+        return obsChaining;
     }
 
     private createExecObs(
@@ -63,24 +69,37 @@ export class ProcessModel {
     private _switchProcess(previousPins: number[], currentPins: number[]): boolean {
         const modules = this.task.getModules();
         const processedPreviousPins: number[] = [];
+        previousPins.forEach((previousPin) => {
+            // const currentModule = modules.find((x) => x.portNum === currentPin);
+            // if (previousPins.includes(currentPin)) {
+            //     if (currentModule.status !== ModuleStatus.ON) {
+            //         currentModule.execute(1);
+            //         processedPreviousPins.push(currentPin);
+            //     }
+            // } else {
+            //     currentModule.execute(1);
+            // }
+            modules.find(x => x.portNum === previousPin).execute(0);
+        });
         currentPins.forEach((currentPin) => {
-            const currentModule = modules.find((x) => x.portNum === currentPin);
-            if (previousPins.includes(currentPin)) {
-                if (currentModule.status !== ModuleStatus.ON) {
-                    currentModule.execute(1);
-                    processedPreviousPins.push(currentPin);
-                }
-            } else {
-                currentModule.execute(1);
-            }
+            // const currentModule = modules.find((x) => x.portNum === currentPin);
+            // if (previousPins.includes(currentPin)) {
+            //     if (currentModule.status !== ModuleStatus.ON) {
+            //         currentModule.execute(1);
+            //         processedPreviousPins.push(currentPin);
+            //     }
+            // } else {
+            //     currentModule.execute(1);
+            // }
+            modules.find(x => x.portNum === currentPin).execute(1);
         });
-        previousPins = previousPins.filter((x) => !processedPreviousPins.includes(x));
-        const moduleToSwitchOff = modules.filter((x) =>
-            previousPins.includes(x.portNum)
-        );
-        moduleToSwitchOff.forEach((module) => {
-            module.execute(0);
-        });
+        // previousPins = previousPins.filter((x) => !processedPreviousPins.includes(x));
+        // const moduleToSwitchOff = modules.filter((x) =>
+        //     previousPins.includes(x.portNum)
+        // );
+        // moduleToSwitchOff.forEach((module) => {
+        //     module.execute(0);
+        // });
         return true;
     }
 

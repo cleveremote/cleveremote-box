@@ -12,7 +12,6 @@ export class ExecutionController {
     @UsePipes(ValidationPipe)
     @MessagePattern('execution/task')
     public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<void> {
-        console.log(processExecuteDTO);
         const uc = new ProcessExecuteUC(this._processService);
         const input = ProcessExecuteDTO.mapToProcessModel(processExecuteDTO);
         await uc.execute(input);
