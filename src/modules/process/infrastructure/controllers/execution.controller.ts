@@ -11,9 +11,9 @@ export class ExecutionController {
     public constructor(private readonly _processService: ProcessService) { }
     @UsePipes(ValidationPipe)
     @MessagePattern('execution/task')
-    public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<void> {
+    public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<boolean> {
         const uc = new ProcessExecuteUC(this._processService);
         const input = ProcessExecuteDTO.mapToProcessModel(processExecuteDTO);
-        //await uc.execute(input);
+        return uc.execute(input);
     }
 }
