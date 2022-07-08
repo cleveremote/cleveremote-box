@@ -28,13 +28,13 @@ describe('SocketIoClientProxyService', () => {
     });
 
     it('should dispatch', async () => {
-        await service.sendMessage({ pattern: 'greeting-from-client', data: 'Ohayo' })
+        await service.sendMessage({ pattern: 'test-with-response', data: 'Ohayo' })
             .then(data => { console.log(data); })
             .catch(err => { console.log(err); });
     });
 
     it('should dispatch timeout', async () => {
-        await service.dispatchEvent({ pattern: 'greeting-from-client', data: 'Ohayo' })
+        await service.dispatchEvent({ pattern: 'test-with-no-response', data: 'Ohayo' })
             .then(data => { console.log(data); })
             .catch(err => { console.log(err); });
     });

@@ -1,4 +1,4 @@
-import { delay, from, lastValueFrom, map, mergeMap, Observable, of, Subscription, tap } from 'rxjs';
+import { delay, from, map, mergeMap, Observable, of, Subscription, tap } from 'rxjs';
 import {
     ExecutableAction,
     ExecutableMode,
@@ -6,7 +6,6 @@ import {
     IExecutable,
     ExecutableStatus
 } from '../interfaces/executable.interface';
-import { ModuleStatus } from '../interfaces/structure.interface';
 
 export class ProcessModel {
     public task: IExecutable;
@@ -28,16 +27,15 @@ export class ProcessModel {
 
         const executionLst = this.task.getExecutionStructure();
         let obs: Observable<{ portNums: number[]; duration: number }> =
-            ProcessModel.ofNull<{ portNums: number[]; duration: number }>()
-                .pipe(tap((x) => { this.task.status = ExecutableStatus.IN_PROCCESS }
-                ));
+            ProcessModel._ofNull<{ portNums: number[]; duration: number }>()
+                .pipe(tap(() => { this.task.status = ExecutableStatus.IN_PROCCESS }));
 
         executionLst.forEach((sequence, index) => {
-            const o = this.createExecObs(executionLst[index - 1], sequence);
+            const o = this._createExecObs(executionLst[index - 1], sequence);
             obs = obs.pipe(mergeMap(() => o));
         });
 
-        const obsChaining = obs.pipe(map((lastPins) => {
+        return obs.pipe(map((lastPins) => {
             const modules = this.task.getModules();
             lastPins.portNums.forEach((previousPin) => {
                 modules.find(x => x.portNum === previousPin).execute(0);
@@ -45,11 +43,13 @@ export class ProcessModel {
             });
             return true;
         }));
-
-        return obsChaining;
     }
 
-    private createExecObs(
+    public reset(): Promise<boolean> {
+        return this.task.reset();
+    }
+
+    private _createExecObs(
         previousSeq: { portNums: number[]; duration: number },
         currentSec: { portNums: number[]; duration: number }
     ): Observable<{ portNums: number[]; duration: number }> {
@@ -68,42 +68,18 @@ export class ProcessModel {
 
     private _switchProcess(previousPins: number[], currentPins: number[]): boolean {
         const modules = this.task.getModules();
-        const processedPreviousPins: number[] = [];
+
+        console.log('directions', modules.map(x => x.direction));
         previousPins.forEach((previousPin) => {
-            // const currentModule = modules.find((x) => x.portNum === currentPin);
-            // if (previousPins.includes(currentPin)) {
-            //     if (currentModule.status !== ModuleStatus.ON) {
-            //         currentModule.execute(1);
-            //         processedPreviousPins.push(currentPin);
-            //     }
-            // } else {
-            //     currentModule.execute(1);
-            // }
             modules.find(x => x.portNum === previousPin).execute(0);
         });
         currentPins.forEach((currentPin) => {
-            // const currentModule = modules.find((x) => x.portNum === currentPin);
-            // if (previousPins.includes(currentPin)) {
-            //     if (currentModule.status !== ModuleStatus.ON) {
-            //         currentModule.execute(1);
-            //         processedPreviousPins.push(currentPin);
-            //     }
-            // } else {
-            //     currentModule.execute(1);
-            // }
             modules.find(x => x.portNum === currentPin).execute(1);
         });
-        // previousPins = previousPins.filter((x) => !processedPreviousPins.includes(x));
-        // const moduleToSwitchOff = modules.filter((x) =>
-        //     previousPins.includes(x.portNum)
-        // );
-        // moduleToSwitchOff.forEach((module) => {
-        //     module.execute(0);
-        // });
         return true;
     }
 
-    public static ofNull<T>(): Observable<T> {
+    private static _ofNull<T>(): Observable<T> {
         return of(null as T);
     }
 }

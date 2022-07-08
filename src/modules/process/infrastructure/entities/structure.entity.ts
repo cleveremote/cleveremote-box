@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ModuleModel } from '@process/domain/models/module.model';
@@ -13,7 +14,8 @@ export class StructureEntity {
         struct.sequences = [];
         const data = JSON.parse(structureEntity.configuration) as StructureModel;
 
-        // mapping 
+        // mapping
+        // eslint-disable-next-line max-lines-per-function
         data.cycles.forEach((cycledData) => {
             const cycle = new CycleModel();
             cycle.id = cycledData.id;

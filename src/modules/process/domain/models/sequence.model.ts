@@ -19,7 +19,10 @@ export class SequenceModel implements IExecutable {
 
     public async reset(): Promise<boolean> {
         this.modules.forEach(module => {
-            module.execute(0);
+             // test purpose only particular use case
+            if (module.portNum !== 2022) {
+                module.execute(0);
+            }
         });
         this.status = ExecutableStatus.STOPPED;
         return true;

@@ -1,103 +1,107 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="36" failures="0" errors="0" time="10.852">
-  <testsuite name="Notification Service unit testing " errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:41:54" time="2.231" tests="1">
-    <testcase classname="Notification Service unit testing  Should save configuration &amp; read It" name="Notification Service unit testing  Should save configuration &amp; read It" time="0.085">
+<testsuites name="jest tests" tests="38" failures="0" errors="0" time="16.275">
+  <testsuite name="CyleModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:44" time="9.27" tests="5">
+    <testcase classname="CyleModel model Should create a new cycle Model &amp; check its struct validity" name="CyleModel model Should create a new cycle Model &amp; check its struct validity" time="0.006">
     </testcase>
-  </testsuite>
-  <testsuite name="ModuleModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:41:57" time="2.268" tests="4">
-    <testcase classname="ModuleModel model Should create a new module Model" name="ModuleModel model Should create a new module Model" time="0.003">
-    </testcase>
-    <testcase classname="ModuleModel model Should create a new module Model &amp; reconfigure module" name="ModuleModel model Should create a new module Model &amp; reconfigure module" time="0.001">
-    </testcase>
-    <testcase classname="ModuleModel model Should create a new module Model &amp; switch on wait 500 then switch off" name="ModuleModel model Should create a new module Model &amp; switch on wait 500 then switch off" time="2.002">
-    </testcase>
-    <testcase classname="ModuleModel model Should create a new module Model &amp; must raise error " name="ModuleModel model Should create a new module Model &amp; must raise error " time="0.013">
-    </testcase>
-  </testsuite>
-  <testsuite name="SocketIoClientProxyService" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:41:59" time="0.903" tests="5">
-    <testcase classname="SocketIoClientProxyService should be defined" name="SocketIoClientProxyService should be defined" time="0.017">
-    </testcase>
-    <testcase classname="SocketIoClientProxyService should connect" name="SocketIoClientProxyService should connect" time="0.011">
-    </testcase>
-    <testcase classname="SocketIoClientProxyService should close" name="SocketIoClientProxyService should close" time="0.007">
-    </testcase>
-    <testcase classname="SocketIoClientProxyService should dispatch" name="SocketIoClientProxyService should dispatch" time="0.027">
-    </testcase>
-    <testcase classname="SocketIoClientProxyService should dispatch timeout" name="SocketIoClientProxyService should dispatch timeout" time="0.019">
-    </testcase>
-  </testsuite>
-  <testsuite name="Notification Service unit testing " errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:00" time="0.759" tests="5">
-    <testcase classname="Notification Service unit testing  Should return all notifications" name="Notification Service unit testing  Should return all notifications" time="0.105">
-    </testcase>
-    <testcase classname="Notification Service unit testing  execute sequence" name="Notification Service unit testing  execute sequence" time="0.027">
-    </testcase>
-    <testcase classname="Notification Service unit testing  Should return all notifications not force" name="Notification Service unit testing  Should return all notifications not force" time="0.075">
-    </testcase>
-    <testcase classname="Notification Service unit testing  Should return all notifications check conflicted" name="Notification Service unit testing  Should return all notifications check conflicted" time="0.05">
-    </testcase>
-    <testcase classname="Notification Service unit testing  Should proccess queue mode" name="Notification Service unit testing  Should proccess queue mode" time="0.014">
-    </testcase>
-  </testsuite>
-  <testsuite name="SocketIoClientStrategy" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:01" time="0.694" tests="2">
-    <testcase classname="SocketIoClientStrategy should be defined" name="SocketIoClientStrategy should be defined" time="0.019">
-    </testcase>
-    <testcase classname="SocketIoClientStrategy &amp; reuses provider.getSocket() should be defined" name="SocketIoClientStrategy &amp; reuses provider.getSocket() should be defined" time="0.007">
-    </testcase>
-  </testsuite>
-  <testsuite name="AppController" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:01" time="0.637" tests="1">
-    <testcase classname="AppController root should return &quot;Hello World!&quot;" name="AppController root should return &quot;Hello World!&quot;" time="0.013">
-    </testcase>
-  </testsuite>
-  <testsuite name="SocketIoClientProvider" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:02" time="0.636" tests="1">
-    <testcase classname="SocketIoClientProvider should be defined" name="SocketIoClientProvider should be defined" time="0.017">
-    </testcase>
-  </testsuite>
-  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:03" time="0.485" tests="1">
-    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.003">
-    </testcase>
-  </testsuite>
-  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:03" time="0.512" tests="1">
-    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.004">
-    </testcase>
-  </testsuite>
-  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:04" time="0.439" tests="1">
-    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.008">
-    </testcase>
-  </testsuite>
-  <testsuite name="ExecutionModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:04" time="0.403" tests="3">
-    <testcase classname="ExecutionModel model Should create a new execution Model &amp; execute it" name="ExecutionModel model Should create a new execution Model &amp; execute it" time="0.006">
-    </testcase>
-    <testcase classname="ExecutionModel model Should create a new execution Model &amp; execute it &amp; stop it" name="ExecutionModel model Should create a new execution Model &amp; execute it &amp; stop it" time="0.057">
-    </testcase>
-    <testcase classname="ExecutionModel model Should create a new execution Model with sequence &amp; execute it &amp; stop it" name="ExecutionModel model Should create a new execution Model with sequence &amp; execute it &amp; stop it" time="0.015">
-    </testcase>
-  </testsuite>
-  <testsuite name="CyleModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:05" time="0.199" tests="5">
-    <testcase classname="CyleModel model Should create a new cycle Model &amp; check its struct validity" name="CyleModel model Should create a new cycle Model &amp; check its struct validity" time="0.007">
-    </testcase>
-    <testcase classname="CyleModel model Should create a new cycle Model &amp; and exectStruct" name="CyleModel model Should create a new cycle Model &amp; and exectStruct" time="0.003">
+    <testcase classname="CyleModel model Should create a new cycle Model &amp; and exectStruct" name="CyleModel model Should create a new cycle Model &amp; and exectStruct" time="0.002">
     </testcase>
     <testcase classname="CyleModel model Should create a new cycle Model &amp; and get modules" name="CyleModel model Should create a new cycle Model &amp; and get modules" time="0.001">
     </testcase>
-    <testcase classname="CyleModel model Should create a new cycle Model &amp; and check if module exists in this cycle" name="CyleModel model Should create a new cycle Model &amp; and check if module exists in this cycle" time="0.001">
+    <testcase classname="CyleModel model Should create a new cycle Model &amp; and check if module exists in this cycle" name="CyleModel model Should create a new cycle Model &amp; and check if module exists in this cycle" time="0.002">
     </testcase>
-    <testcase classname="CyleModel model Should create a new cycle Model &amp; and reset it" name="CyleModel model Should create a new cycle Model &amp; and reset it" time="0.006">
+    <testcase classname="CyleModel model Should create a new cycle Model &amp; and reset it" name="CyleModel model Should create a new cycle Model &amp; and reset it" time="0.002">
     </testcase>
   </testsuite>
-  <testsuite name="SequenceModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:05" time="0.2" tests="5">
-    <testcase classname="SequenceModel model Should create a new sequence Model" name="SequenceModel model Should create a new sequence Model" time="0.003">
+  <testsuite name="SocketIoClientProvider" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:44" time="10.847" tests="1">
+    <testcase classname="SocketIoClientProvider should be defined" name="SocketIoClientProvider should be defined" time="0.027">
+    </testcase>
+  </testsuite>
+  <testsuite name="AppController" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:44" time="10.948" tests="1">
+    <testcase classname="AppController root should return &quot;Hello World!&quot;" name="AppController root should return &quot;Hello World!&quot;" time="0.135">
+    </testcase>
+  </testsuite>
+  <testsuite name="SocketIoClientStrategy" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:45" time="11.04" tests="2">
+    <testcase classname="SocketIoClientStrategy should be defined" name="SocketIoClientStrategy should be defined" time="0.051">
+    </testcase>
+    <testcase classname="SocketIoClientStrategy &amp; reuses provider.getSocket() should be defined" name="SocketIoClientStrategy &amp; reuses provider.getSocket() should be defined" time="0.009">
+    </testcase>
+  </testsuite>
+  <testsuite name="SocketIoClientProxyService" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:45" time="11.32" tests="5">
+    <testcase classname="SocketIoClientProxyService should be defined" name="SocketIoClientProxyService should be defined" time="0.158">
+    </testcase>
+    <testcase classname="SocketIoClientProxyService should connect" name="SocketIoClientProxyService should connect" time="0.016">
+    </testcase>
+    <testcase classname="SocketIoClientProxyService should close" name="SocketIoClientProxyService should close" time="0.011">
+    </testcase>
+    <testcase classname="SocketIoClientProxyService should dispatch" name="SocketIoClientProxyService should dispatch" time="0.197">
+    </testcase>
+    <testcase classname="SocketIoClientProxyService should dispatch timeout" name="SocketIoClientProxyService should dispatch timeout" time="0.075">
+    </testcase>
+  </testsuite>
+  <testsuite name="ModuleModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:54" time="2.351" tests="4">
+    <testcase classname="ModuleModel model Should create a new module Model" name="ModuleModel model Should create a new module Model" time="0.004">
+    </testcase>
+    <testcase classname="ModuleModel model Should create a new module Model &amp; reconfigure module" name="ModuleModel model Should create a new module Model &amp; reconfigure module" time="0.001">
+    </testcase>
+    <testcase classname="ModuleModel model Should create a new module Model &amp; switch on wait 500 then switch off" name="ModuleModel model Should create a new module Model &amp; switch on wait 500 then switch off" time="2.003">
+    </testcase>
+    <testcase classname="ModuleModel model Should create a new module Model &amp; must raise error " name="ModuleModel model Should create a new module Model &amp; must raise error " time="0.011">
+    </testcase>
+  </testsuite>
+  <testsuite name="SequenceModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:56" time="0.279" tests="5">
+    <testcase classname="SequenceModel model Should create a new sequence Model" name="SequenceModel model Should create a new sequence Model" time="0.006">
     </testcase>
     <testcase classname="SequenceModel model Should create a new sequence Model &amp; Get modules" name="SequenceModel model Should create a new sequence Model &amp; Get modules" time="0.001">
     </testcase>
-    <testcase classname="SequenceModel model Should create a new sequence Model &amp; Get structure" name="SequenceModel model Should create a new sequence Model &amp; Get structure" time="0.002">
+    <testcase classname="SequenceModel model Should create a new sequence Model &amp; Get structure" name="SequenceModel model Should create a new sequence Model &amp; Get structure" time="0.001">
     </testcase>
-    <testcase classname="SequenceModel model Should create a new sequence Model &amp; check if module exists" name="SequenceModel model Should create a new sequence Model &amp; check if module exists" time="0.005">
+    <testcase classname="SequenceModel model Should create a new sequence Model &amp; check if module exists" name="SequenceModel model Should create a new sequence Model &amp; check if module exists" time="0.012">
     </testcase>
-    <testcase classname="SequenceModel model Should create a new sequence Model &amp; reset it" name="SequenceModel model Should create a new sequence Model &amp; reset it" time="0.002">
+    <testcase classname="SequenceModel model Should create a new sequence Model &amp; reset it" name="SequenceModel model Should create a new sequence Model &amp; reset it" time="0.023">
     </testcase>
   </testsuite>
-  <testsuite name="StructureModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-06T22:42:05" time="0.199" tests="1">
-    <testcase classname="StructureModel model Should create a new structure Model" name="StructureModel model Should create a new structure Model" time="0.008">
+  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:55" time="1.005" tests="1">
+    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:56" time="0.885" tests="1">
+    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="Process use case test" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:56" time="1.118" tests="1">
+    <testcase classname="Process use case test Should execute process and return a response dto" name="Process use case test Should execute process and return a response dto" time="0.005">
+    </testcase>
+  </testsuite>
+  <testsuite name="StructureModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:57" time="0.388" tests="1">
+    <testcase classname="StructureModel model Should create a new structure Model" name="StructureModel model Should create a new structure Model" time="0.005">
+    </testcase>
+  </testsuite>
+  <testsuite name="Notification Service unit testing " errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:55" time="1.969" tests="1">
+    <testcase classname="Notification Service unit testing  Should save configuration &amp; read It" name="Notification Service unit testing  Should save configuration &amp; read It" time="0.018">
+    </testcase>
+  </testsuite>
+  <testsuite name="ExecutionModel model" errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:45" time="13.972" tests="3">
+    <testcase classname="ExecutionModel model Should create a new execution Sequence as task Model and execute It action:ON" name="ExecutionModel model Should create a new execution Sequence as task Model and execute It action:ON" time="0.038">
+    </testcase>
+    <testcase classname="ExecutionModel model Should create a new execution Sequence as task Model and execute It action:OFF" name="ExecutionModel model Should create a new execution Sequence as task Model and execute It action:OFF" time="0.002">
+    </testcase>
+    <testcase classname="ExecutionModel model Should create a new execution Cycle as task Model and execute It action:OFF" name="ExecutionModel model Should create a new execution Cycle as task Model and execute It action:OFF" time="4.014">
+    </testcase>
+  </testsuite>
+  <testsuite name="Notification Service unit testing " errors="0" failures="0" skipped="0" timestamp="2022-07-08T13:54:45" time="14.763" tests="7">
+    <testcase classname="Notification Service unit testing  Should execute process as cycle &amp; check status IN_PROCESS/STOPPED" name="Notification Service unit testing  Should execute process as cycle &amp; check status IN_PROCESS/STOPPED" time="1.098">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should execute process as sequence &amp; check status IN_PROCESS/STOPPED" name="Notification Service unit testing  Should execute process as sequence &amp; check status IN_PROCESS/STOPPED" time="1.006">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should return all notifications check conflicted" name="Notification Service unit testing  Should return all notifications check conflicted" time="1.01">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should proccess queue mode" name="Notification Service unit testing  Should proccess queue mode" time="0.007">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should return all notifications check conflicted" name="Notification Service unit testing  Should return all notifications check conflicted" time="1.021">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should fire error invalid Error struct" name="Notification Service unit testing  Should fire error invalid Error struct" time="0.006">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should catch async error on port configuration" name="Notification Service unit testing  Should catch async error on port configuration" time="0.024">
     </testcase>
   </testsuite>
 </testsuites>

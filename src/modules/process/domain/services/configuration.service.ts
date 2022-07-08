@@ -18,6 +18,7 @@ export class ConfigurationService {
     public async getConfiguration(): Promise<StructureModel> {
         return this.structureRepository.getStructure().then((data) => {
             this.structure = data;
+            console.log('structure',this.structure);
             return data;
         });
     }

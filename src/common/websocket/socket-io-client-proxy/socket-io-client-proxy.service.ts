@@ -33,6 +33,8 @@ export class SocketIoClientProxyService extends ClientProxy {
     private async _emitMessage<T>(packet: ReadPacket<T>): Promise<T> {
         return new Promise((resolve, reject) => {
             this._client.getSocket().emit(packet.pattern, packet.data, (response) => {
+                console.log('response', response);
+
                 if (!response) return reject('err')
                 resolve(response);
             })
