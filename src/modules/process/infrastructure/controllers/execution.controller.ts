@@ -14,6 +14,6 @@ export class ExecutionController {
     public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<void> {
         const uc = new ProcessExecuteUC(this._processService);
         const input = ProcessExecuteDTO.mapToProcessModel(processExecuteDTO);
-        await uc.execute(input);
+        //await uc.execute(input);
     }
 }

@@ -13,14 +13,21 @@ export class SocketIoClientStrategy extends Server
     /* istanbul ignore next */
     public listen(callback: () => void): void {
         this.client.on('connection', () => {
+            console.log('connection');
         });
         this.client.on('error', (error) => {
+            console.log('error', error);
         });
+        this.client.on('connected', (connected) => {
+            console.log('connected', connected);
+        });
+
+
 
         this.messageHandlers.forEach((handler, pattern) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.client.on(pattern, (data: any) => {
-                handler(data, this.client);
+            this.client.on(pattern, async (data: any,callb) => {
+                callb(await handler(data, this.client));
             });
         });
 

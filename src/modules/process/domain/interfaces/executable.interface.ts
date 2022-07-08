@@ -41,5 +41,5 @@ export interface IExecutable {
     reset(): Promise<boolean>;
     getModules(): ModuleModel[];
     exists(module: ModuleModel): boolean;
-    getExecutionStructure(): { portNums: number[]; duration: number }[];
+    getExecutionStructure(duration: number): { portNums: number[]; duration: number }[];
 }

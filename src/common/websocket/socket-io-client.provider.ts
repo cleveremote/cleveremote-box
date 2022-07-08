@@ -10,7 +10,13 @@ export class SocketIoClientProvider {
   private socket: Socket;
 
   private connect() {
-    this.socket = io(this.config.get('SOCKET_SERVER'));
+    this.socket = io(this.config.get('SOCKET_SERVER'), {
+      extraHeaders: {
+        "myTestBox": "1234"
+      }
+    });
+    
+    
     return this.socket;
   }
 
@@ -18,6 +24,7 @@ export class SocketIoClientProvider {
     if (!this.socket) {
       return this.connect();
     }
+    console.log(this.socket.id);
     return this.socket;
   };
 }

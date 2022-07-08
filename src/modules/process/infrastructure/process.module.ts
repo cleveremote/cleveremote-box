@@ -22,7 +22,6 @@ import { ExecutionController } from './controllers/execution.controller';
         ProcessService,
         SocketIoClientProvider,
         SocketIoClientProxyService
-        
     ]
 })
-export class NotificationModule { }
+export class ProcessModule { }

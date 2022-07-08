@@ -14,6 +14,7 @@ export class ProcessModel {
     public function: string;
     public mode: ExecutableMode;
     public instance: Subscription;
+    public duration?: number;
 
     // eslint-disable-next-line max-lines-per-function
     public execute(): Observable<boolean> {
@@ -25,7 +26,7 @@ export class ProcessModel {
                 }));
         }
 
-        const executionLst = this.task.getExecutionStructure();
+        const executionLst = this.task.getExecutionStructure(this.duration);
         let obs: Observable<{ portNums: number[]; duration: number }> =
             ProcessModel._ofNull<{ portNums: number[]; duration: number }>()
                 .pipe(tap(() => { this.task.status = ExecutableStatus.IN_PROCCESS }));

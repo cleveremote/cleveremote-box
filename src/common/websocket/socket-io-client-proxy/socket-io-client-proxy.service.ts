@@ -41,7 +41,17 @@ export class SocketIoClientProxyService extends ClientProxy {
         });
     }
 
-    /* istanbul ignore next */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public publish(_packet: ReadPacket, _callback: (packet: WritePacket) => void): () => void { return () => console.log('empty') }
+    publish(
+        packet: ReadPacket<any>,
+        callback: (packet: WritePacket<any>) => void,
+    ): () => void {
+        console.log('message:', packet);
+
+        // In a real-world application, the "callback" function should be executed
+        // with payload sent back from the responder. Here, we'll simply simulate (5 seconds delay)
+        // that response came through by passing the same "data" as we've originally passed in.
+        setTimeout(() => callback({ response: packet.data }), 5000);
+
+        return () => console.log('teardown');
+    }
 }

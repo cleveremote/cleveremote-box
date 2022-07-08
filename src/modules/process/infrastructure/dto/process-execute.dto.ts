@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ConditionType, ExecutableAction, ExecutableMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
 import { ProcessModel } from '@process/domain/models/process.model';
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 
 export enum USER_ENS_TYPE {
@@ -35,6 +35,10 @@ export class ProcessExecuteDTO {
     @ApiProperty()
     public function: string;
 
+    @IsNumber()
+    @ApiProperty()
+    public duration: number;
+
     public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();
         process.task = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as IExecutable ;
@@ -42,6 +46,7 @@ export class ProcessExecuteDTO {
         process.function = notificationCreateDTO.function;
         process.mode = notificationCreateDTO.mode;
         process.type = notificationCreateDTO.type;
+        process.duration = notificationCreateDTO.duration;
         return process;
     }
 }

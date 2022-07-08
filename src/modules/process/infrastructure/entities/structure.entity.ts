@@ -43,6 +43,31 @@ export class StructureEntity {
             });
             struct.cycles.push(cycle);
         });
+
+
+
+
+        data.sequences.forEach(sequenceData => {
+            const sequence = new SequenceModel();
+            sequence.id = sequenceData.id;
+            sequence.status = sequenceData.status;
+            sequence.duration = sequenceData.duration;
+            sequence.modules = [];
+            sequenceData.modules.forEach(moduleData => {
+                const module = new ModuleModel();
+                module.status = moduleData.status;
+                module.portNum = moduleData.portNum;
+                module.direction = moduleData.direction;
+                module.edge = moduleData.edge;
+                //mod1.debounceTimeout: number = undefined;
+                //mod1.activeLow: boolean = false;
+                //mod1.reconfigureDirection: boolean = true;
+                module.configure();
+                sequence.modules.push(module)
+            });
+            struct.sequences.push(sequence);
+        });
+
         return struct;
     }
 
