@@ -101,7 +101,6 @@ describe('StructureModel model', () => {
 
         const structure = new StructureModel();
         structure.cycles = [cycle, cycle2];
-        structure.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4]
 
         const modules = structure.getModules();
         expect(modules).toBeDefined();

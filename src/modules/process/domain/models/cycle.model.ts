@@ -7,6 +7,9 @@ import { SequenceModel } from './sequence.model';
 
 export class CycleModel implements IExecutable {
     public id: string;
+    public name: string;
+    public style?: { bgColor: string; fontColor: string; iconColor: string };
+    public description?: string;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public sequences: SequenceModel[] = [];
 

@@ -173,7 +173,12 @@ export function CreateExecutionSequence(id: string, mode: ExecutableMode, action
     irrigationSecteur1.duration = 10; //3 secondes
     irrigationSecteur1.modules = [pump, valve1];
 
-    execution.task = irrigationSecteur1;
+    const cycle = new CycleModel();
+    cycle.id = id;
+    cycle.status = ExecutableStatus.STOPPED;
+    cycle.sequences = [irrigationSecteur1]
+
+    execution.task = cycle;
     execution.action = action;
     execution.type = ConditionType.NOW;
     execution.function = 'string';
@@ -183,7 +188,7 @@ export function CreateExecutionSequence(id: string, mode: ExecutableMode, action
 }
 
 // eslint-disable-next-line max-lines-per-function
-export function CreateExecutionSequenceWithWrongModuleConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecutionCycleWithWrongModuleConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     //declare modules ///////////////
@@ -215,7 +220,13 @@ export function CreateExecutionSequenceWithWrongModuleConfig(mode: ExecutableMod
     irrigationSecteur1.duration = 10; //3 secondes
     irrigationSecteur1.modules = [pump, valve1];
 
-    execution.task = irrigationSecteur1;
+
+    const cycle = new CycleModel();
+    cycle.id = 'falsyxxxxx';
+    cycle.status = ExecutableStatus.STOPPED;
+    cycle.sequences = [irrigationSecteur1];
+
+    execution.task = cycle;
     execution.action = action;
     execution.type = ConditionType.NOW;
     execution.function = 'string';
@@ -225,7 +236,7 @@ export function CreateExecutionSequenceWithWrongModuleConfig(mode: ExecutableMod
 }
 
 // eslint-disable-next-line max-lines-per-function
-export function CreateExecutionSequenceNotExistConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecutionCycleNotExistConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     //declare modules ///////////////
@@ -236,18 +247,12 @@ export function CreateExecutionSequenceNotExistConfig(mode: ExecutableMode, acti
     pump.edge = GPIOEdge.BOTH;
     pump.configure();
     expect(pump.instance).toBeDefined();
-    //mod1.debounceTimeout: number = undefined;
-    //mod1.activeLow: boolean = false;
-    //mod1.reconfigureDirection: boolean = true;
 
     const valve1 = new ModuleModel();
     valve1.status = ModuleStatus.OFF;
     valve1.portNum = 26;
     valve1.direction = GPIODirection.OUT;
     valve1.edge = GPIOEdge.BOTH;
-    //mod1.debounceTimeout: number = undefined;
-    //mod1.activeLow: boolean = false;
-    //mod1.reconfigureDirection: boolean = true;
     valve1.configure();
     expect(valve1.instance).toBeDefined();
 
@@ -257,7 +262,12 @@ export function CreateExecutionSequenceNotExistConfig(mode: ExecutableMode, acti
     irrigationSecteur1.duration = 10; //3 secondes
     irrigationSecteur1.modules = [pump, valve1];
 
-    execution.task = irrigationSecteur1;
+    const cycle = new CycleModel();
+    cycle.id = '11458';
+    cycle.status = ExecutableStatus.STOPPED;
+    cycle.sequences = [irrigationSecteur1]
+
+    execution.task = cycle;
     execution.action = action;
     execution.type = ConditionType.NOW;
     execution.function = 'string';
@@ -265,5 +275,4 @@ export function CreateExecutionSequenceNotExistConfig(mode: ExecutableMode, acti
 
     return execution;
 }
-
 

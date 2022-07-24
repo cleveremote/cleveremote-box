@@ -77,7 +77,7 @@ export class ProcessService {
         const struct = this.configurationService.structure;
         const taskId = execution.task.id;
 
-        const found = struct.cycles.find(x => x.id === taskId) || struct.sequences.find(x => x.id === taskId);
+        const found = struct.cycles.find(x => x.id === taskId);
         execution.task = found;
         return execution;
     }

@@ -51,7 +51,7 @@ describe('ModuleModel model', () => {
         pump.configure();
         pump.execute(1);
         expect(pump.status).toEqual(ModuleStatus.ON);
-        let value = pump.instance.readSync();
+        let value = pump.read();
         expect(value).toEqual(1);
         await new Promise((r) => setTimeout(r, 2000));
 

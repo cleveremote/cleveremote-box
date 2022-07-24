@@ -30,7 +30,6 @@ export class ProcessModel {
         let obs: Observable<{ portNums: number[]; duration: number }> =
             ProcessModel._ofNull<{ portNums: number[]; duration: number }>()
                 .pipe(tap(() => { this.task.status = ExecutableStatus.IN_PROCCESS }));
-
         executionLst.forEach((sequence, index) => {
             const o = this._createExecObs(executionLst[index - 1], sequence);
             obs = obs.pipe(mergeMap(() => o));
@@ -70,7 +69,6 @@ export class ProcessModel {
     private _switchProcess(previousPins: number[], currentPins: number[]): boolean {
         const modules = this.task.getModules();
 
-        console.log('directions', modules.map(x => x.direction));
         previousPins.forEach((previousPin) => {
             modules.find(x => x.portNum === previousPin).execute(0);
         });

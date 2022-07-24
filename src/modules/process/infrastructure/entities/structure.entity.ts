@@ -11,7 +11,6 @@ export class StructureEntity {
     public static mapToStructureModel(structureEntity: StructureEntity): StructureModel {
         const struct: StructureModel = new StructureModel();
         struct.cycles = [];
-        struct.sequences = [];
         const data = JSON.parse(structureEntity.configuration) as StructureModel;
 
         // mapping
@@ -20,7 +19,9 @@ export class StructureEntity {
             const cycle = new CycleModel();
             cycle.id = cycledData.id;
             cycle.status = ExecutableStatus.STOPPED;
-
+            cycle.name = cycledData.name;
+            cycle.description = cycledData.description;
+            cycle.style = cycledData.style;
             cycledData.sequences.forEach(sequenceData => {
                 const sequence = new SequenceModel();
                 sequence.id = sequenceData.id;
@@ -42,30 +43,6 @@ export class StructureEntity {
                 cycle.sequences.push(sequence);
             });
             struct.cycles.push(cycle);
-        });
-
-
-
-
-        data.sequences.forEach(sequenceData => {
-            const sequence = new SequenceModel();
-            sequence.id = sequenceData.id;
-            sequence.status = sequenceData.status;
-            sequence.duration = sequenceData.duration;
-            sequence.modules = [];
-            sequenceData.modules.forEach(moduleData => {
-                const module = new ModuleModel();
-                module.status = moduleData.status;
-                module.portNum = moduleData.portNum;
-                module.direction = moduleData.direction;
-                module.edge = moduleData.edge;
-                //mod1.debounceTimeout: number = undefined;
-                //mod1.activeLow: boolean = false;
-                //mod1.reconfigureDirection: boolean = true;
-                module.configure();
-                sequence.modules.push(module)
-            });
-            struct.sequences.push(sequence);
         });
 
         return struct;

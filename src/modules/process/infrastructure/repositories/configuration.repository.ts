@@ -36,10 +36,6 @@ export class ConfigurationRepository implements IStructureRepository {
         throw new Error('Method not implemented.');
     }
 
-    public async getSequences(): Promise<SequenceModel[]> {
-        throw new Error('Method not implemented.');
-    }
-
     public async getModules(): Promise<ModuleModel[]> {
         throw new Error('Method not implemented.');
     }

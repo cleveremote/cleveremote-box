@@ -21,10 +21,6 @@ export class StructureRepositorySpecMock implements IStructureRepository {
         return Promise.resolve(this._structure.cycles);
     }
 
-    public getSequences(): Promise<SequenceModel[]> {
-        return Promise.resolve(this._structure.sequences);
-    }
-
     public getModules(): Promise<ModuleModel[]> {
         const modules = this._structure.getModules();
         return Promise.resolve(modules);
@@ -34,15 +30,17 @@ export class StructureRepositorySpecMock implements IStructureRepository {
         const cycle = this._structure.cycles.find((x) => x.id === id);
         return Promise.resolve(cycle);
     }
-    public getSequence(id: string): Promise<SequenceModel> {
-        const sequence = this._structure.sequences.find((x) => x.id === id);
-        return Promise.resolve(sequence);
-    }
+    
     public getModule(portNum: number): Promise<ModuleModel> {
         const module = this._structure.getModules().find((x) => x.portNum === portNum);
         return Promise.resolve(module);
     }
     public saveStructure(structure: StructureModel): Promise<StructureModel> {
         return Promise.resolve(structure);
+    }
+
+     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     public async getSequence(_id: string): Promise<SequenceModel> {
+        throw new Error('Method not implemented.');
     }
 }

@@ -21,6 +21,19 @@ export function CreateStructure(): StructureModel {
     //mod1.activeLow: boolean = false;
     //mod1.reconfigureDirection: boolean = true;
 
+    //declare modules ///////////////
+    const pump1 = new ModuleModel();
+    pump1.status = ModuleStatus.OFF;
+    pump1.portNum = 2022;
+    pump1.direction = GPIODirection.IN;
+    pump1.edge = GPIOEdge.BOTH;
+    pump1.configure();
+    expect(pump1.instance).toBeDefined();
+    //mod1.debounceTimeout: number = undefined;
+    //mod1.activeLow: boolean = false;
+    //mod1.reconfigureDirection: boolean = true;
+
+
     const valve1 = new ModuleModel();
     valve1.status = ModuleStatus.OFF;
     valve1.portNum = 26;
@@ -102,6 +115,12 @@ export function CreateStructure(): StructureModel {
     irrigationSecteur4.duration = 10; //3 secondes
     irrigationSecteur4.modules = [pump, valve4];
 
+    const irrigationSecteur5 = new SequenceModel();
+    irrigationSecteur5.id = '13';
+    irrigationSecteur5.status = ExecutableStatus.STOPPED;
+    irrigationSecteur5.duration = 10; //3 secondes
+    irrigationSecteur5.modules = [pump1];
+
     const falsy = new SequenceModel();
     falsy.id = 'falsyxxx';
     falsy.status = ExecutableStatus.STOPPED;
@@ -118,9 +137,13 @@ export function CreateStructure(): StructureModel {
     cycle2.status = ExecutableStatus.STOPPED;
     cycle2.sequences = [irrigationSecteur3, irrigationSecteur4];
 
+    const cycle3 = new CycleModel();
+    cycle3.id = 'falsyxxxxx';
+    cycle3.status = ExecutableStatus.STOPPED;
+    cycle3.sequences = [irrigationSecteur5];
+
     const structure = new StructureModel();
-    structure.cycles = [cycle, cycle2];
-    structure.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4, falsy]
+    structure.cycles = [cycle, cycle2, cycle3];
 
     return structure;
 }

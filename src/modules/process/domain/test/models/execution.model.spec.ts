@@ -8,7 +8,7 @@ import { delay, lastValueFrom } from 'rxjs';
 
 describe('ExecutionModel model', () => {
 
-    it('Should create a new execution Sequence as task Model and execute It action:ON', () => {
+    it('Should create a new execution Cycle as task Model and execute It action:ON', () => {
         const execution = new ProcessModel();
 
         const pump = new ModuleModel();
@@ -81,7 +81,7 @@ describe('ExecutionModel model', () => {
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4];
 
         expect(execution).toBeDefined();
-        execution.task = irrigationSecteur1;
+        execution.task = cycle;
         execution.action = ExecutableAction.ON;
         execution.type = ConditionType.NOW;
         execution.function = 'string';
@@ -93,7 +93,7 @@ describe('ExecutionModel model', () => {
         });
     });
 
-    it('Should create a new execution Sequence as task Model and execute It action:OFF', () => {
+    it('Should create a new execution Cycle as task Model and execute It action:OFF', () => {
         const execution = new ProcessModel();
 
         const pump = new ModuleModel();
@@ -166,7 +166,7 @@ describe('ExecutionModel model', () => {
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4];
 
         expect(execution).toBeDefined();
-        execution.task = irrigationSecteur1;
+        execution.task = cycle;
         execution.action = ExecutableAction.OFF;
         execution.type = ConditionType.NOW;
         execution.function = 'string';

@@ -1,6 +1,3 @@
-// import { NotificationModel } from 'src/modules/task/domain/models/notification.model';
-// import { TaskService } from 'src/modules/task/domain/services/notification.service';
-
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 

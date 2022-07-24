@@ -2,20 +2,12 @@ import { IExecutable, ExecutableStatus } from "../interfaces/executable.interfac
 import { ModuleModel } from "./module.model";
 
 
-export class SequenceModel implements IExecutable {
+export class SequenceModel {
 
     public id: string;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public duration: number;
     public modules: ModuleModel[] = [];
-
-    public getModules(): ModuleModel[] {
-        return this.modules;
-    }
-
-    public exists(module: ModuleModel): boolean {
-        return !!this.modules.find(x => x.portNum === module.portNum)
-    }
 
     public async reset(): Promise<boolean> {
         this.modules.forEach(module => {
@@ -26,13 +18,5 @@ export class SequenceModel implements IExecutable {
         });
         this.status = ExecutableStatus.STOPPED;
         return true;
-    }
-
-    public getExecutionStructure(overrideDuration?: number): { portNums: number[]; duration: number; }[] {
-        const executionLst: { portNums: number[]; duration: number; }[] = [];
-        const portNums = this.modules.map((x) => x.portNum);
-        const duration = overrideDuration || this.duration;
-        executionLst.push({ portNums: portNums, duration });
-        return executionLst;
     }
 }
