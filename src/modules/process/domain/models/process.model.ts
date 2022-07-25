@@ -1,4 +1,5 @@
 import { delay, from, map, mergeMap, Observable, of, Subscription, tap } from 'rxjs';
+import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import {
     ExecutableAction,
     ExecutableMode,
@@ -31,7 +32,7 @@ export class ProcessModel {
             ProcessModel._ofNull<{ portNums: number[]; duration: number }>()
                 .pipe(tap(() => { this.task.status = ExecutableStatus.IN_PROCCESS }));
         executionLst.forEach((sequence, index) => {
-            const o = this._createExecObs(executionLst[index - 1], sequence);
+            const o = this._createExecObs(executionLst[index - 1], sequence); 
             obs = obs.pipe(mergeMap(() => o));
         });
 
@@ -50,8 +51,8 @@ export class ProcessModel {
     }
 
     private _createExecObs(
-        previousSeq: { portNums: number[]; duration: number },
-        currentSec: { portNums: number[]; duration: number }
+        previousSeq: { sequenceId: string; portNums: number[]; duration: number },
+        currentSec: { sequenceId: string; portNums: number[]; duration: number }
     ): Observable<{ portNums: number[]; duration: number }> {
         return of(previousSeq?.portNums || []).pipe(
             mergeMap((previousPins) => {
@@ -76,6 +77,15 @@ export class ProcessModel {
             modules.find(x => x.portNum === currentPin).execute(1);
         });
         return true;
+    }
+
+    private _processProgress(sequenceId: string, action: ExecutableAction, duration?: number,): any {
+        const endedAt = action === ExecutableAction.ON ? (new Date()).setMilliseconds(duration) : undefined;
+        const data =  {
+            sequenceId,
+            status: action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED,
+            endedAt
+        }
     }
 
     private static _ofNull<T>(): Observable<T> {

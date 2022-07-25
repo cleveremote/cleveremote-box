@@ -87,6 +87,14 @@
     </testcase>
     <testcase classname="SequenceModel model Should create a new sequence Model &amp; reset it" name="SequenceModel model Should create a new sequence Model &amp; reset it" time="0.006">
     </testcase>
+    <testcase classname="Notification Service unit testing  Should proccess queue mode" name="Notification Service unit testing  Should proccess queue mode" time="0.002">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should return all notifications check conflicted" name="Notification Service unit testing  Should return all notifications check conflicted" time="1.005">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should fire error invalid Error struct" name="Notification Service unit testing  Should fire error invalid Error struct" time="0.012">
+    </testcase>
+    <testcase classname="Notification Service unit testing  Should catch async error on port configuration" name="Notification Service unit testing  Should catch async error on port configuration" time="0.014">
+    </testcase>
   </testsuite>
   <testsuite name="AppController" errors="0" failures="0" skipped="0" timestamp="2022-07-24T13:12:07" time="1.468" tests="1">
     <testcase classname="AppController root should return &quot;Hello World!&quot;" name="AppController root should return &quot;Hello World!&quot;" time="0.044">

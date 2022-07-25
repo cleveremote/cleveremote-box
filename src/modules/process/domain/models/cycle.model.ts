@@ -34,13 +34,14 @@ export class CycleModel implements IExecutable {
         return true;
     }
 
-    public getExecutionStructure(overrideDuration?: number): { portNums: number[]; duration: number }[] {
-        const executionLst: { portNums: number[]; duration: number }[] = [];
+    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number }[] {
+        const executionLst: { sequenceId: string; portNums: number[]; duration: number }[] = [];
         const sequences: SequenceModel[] = this.sequences;
         sequences.forEach((sequence) => {
+            const sequenceId = sequence.id;
             const portNums = sequence.modules.map((x) => x.portNum);
             const duration = overrideDuration || sequence.duration;
-            executionLst.push({ portNums, duration });
+            executionLst.push({ sequenceId, portNums, duration });
         });
         return executionLst;
     }

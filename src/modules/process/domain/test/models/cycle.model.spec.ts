@@ -161,10 +161,10 @@ describe('CyleModel model', () => {
 
         const struct = cycle.getExecutionStructure();
         const desiredStruct = [
-            { portNums: [16, 26], duration: 10000 },
-            { portNums: [16, 19], duration: 10000 },
-            { portNums: [16, 21], duration: 10000 },
-            { portNums: [16, 20], duration: 10000 }
+            { sequenceId: '11', portNums: [16, 26], duration: 10000 },
+            { sequenceId: '12', portNums: [16, 19], duration: 10000 },
+            { sequenceId: '13', portNums: [16, 21], duration: 10000 },
+            { sequenceId: '14', portNums: [16, 20], duration: 10000 }
         ];
 
         expect(struct).toMatchObject(desiredStruct);

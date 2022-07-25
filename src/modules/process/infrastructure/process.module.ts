@@ -22,6 +22,7 @@ import { ExecutionController } from './controllers/execution.controller';
         ProcessService,
         SocketIoClientProvider,
         SocketIoClientProxyService
-    ]
+    ],
+    exports: [ProcessService]
 })
 export class ProcessModule { }

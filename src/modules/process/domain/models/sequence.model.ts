@@ -8,6 +8,9 @@ export class SequenceModel {
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public duration: number;
     public modules: ModuleModel[] = [];
+    public name: string;
+    public description?: string;
+    public startedAt?: Date;
 
     public async reset(): Promise<boolean> {
         this.modules.forEach(module => {
