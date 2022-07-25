@@ -21,10 +21,14 @@ export class ModuleModel {
         if (this.instance) {
             this.instance.unexport();
         }
-        /* istanbul ignore next */
+        /* istanbul ignore else */
         if (Gpio.accessible) {
             const gpioOptions = { debounceTimeout: this.debounceTimeout, activeLow: this.activeLow, reconfigureDirection: this.reconfigureDirection };
-            this.instance = new Gpio(this.portNum, this.direction, this.edge, gpioOptions);
+            try {
+                this.instance = new Gpio(this.portNum, this.direction, this.edge, gpioOptions);
+            } catch (error) {
+                this.instance = this._getFakeInstance();
+            }
         } else {
             this.instance = this._getFakeInstance();
         }
@@ -45,6 +49,7 @@ export class ModuleModel {
     }
 
     private _getFakeInstance(): FakeGpio {
+        /* istanbul ignore next */
         return {
             // eslint-disable-next-line @typescript-eslint/no-empty-function
             // eslint-disable-next-line @typescript-eslint/no-unused-vars

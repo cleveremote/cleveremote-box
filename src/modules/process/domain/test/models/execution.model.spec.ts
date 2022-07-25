@@ -93,7 +93,7 @@ describe('ExecutionModel model', () => {
         });
     });
 
-    it('Should create a new execution Cycle as task Model and execute It action:OFF', () => {
+    it('Should create a new execution Cycle as task Model and execute It action:OFF 1', () => {
         const execution = new ProcessModel();
 
         const pump = new ModuleModel();
@@ -178,7 +178,7 @@ describe('ExecutionModel model', () => {
         });
     });
 
-    it('Should create a new execution Cycle as task Model and execute It action:OFF', () => {
+    it('Should create a new execution Cycle as task Model and execute It action:OFF 2', () => {
         const execution = new ProcessModel();
 
         const pump = new ModuleModel();
@@ -252,7 +252,7 @@ describe('ExecutionModel model', () => {
 
         expect(execution).toBeDefined();
         execution.task = cycle;
-        execution.action = ExecutableAction.ON;
+        execution.action = ExecutableAction.OFF;
         execution.type = ConditionType.NOW;
         execution.function = 'string';
         execution.mode = ExecutableMode.NORMAL;

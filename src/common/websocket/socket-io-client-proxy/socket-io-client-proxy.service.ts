@@ -40,8 +40,8 @@ export class SocketIoClientProxyService extends ClientProxy {
             })
         });
     }
-
-    publish(
+    /* istanbul ignore next */
+    public publish(
         packet: ReadPacket<any>,
         callback: (packet: WritePacket<any>) => void,
     ): () => void {
