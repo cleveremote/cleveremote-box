@@ -50,8 +50,12 @@ export class StructureEntity {
 
     public static mapToStructureEntity(structureModel: StructureModel): StructureEntity {
         const entity = new StructureEntity();
-        entity.configuration = JSON.stringify(structureModel);
+        entity.configuration = JSON.stringify(structureModel, (key, value) => {
+            if (key == "instance") return undefined;
+            else return value;
+        });
         return entity;
     }
+
 }
 

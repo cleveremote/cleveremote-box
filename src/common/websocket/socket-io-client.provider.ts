@@ -24,7 +24,6 @@ export class SocketIoClientProvider {
     if (!this.socket) {
       return this.connect();
     }
-    console.log(this.socket.id);
     return this.socket;
   };
 }

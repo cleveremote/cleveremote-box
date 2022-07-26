@@ -4,7 +4,7 @@ import { ConfigurationService } from '@process/domain/services/configuration.ser
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { Socket } from 'socket.io-client';
-import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
+import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
 
 @Controller()
@@ -26,6 +26,9 @@ export class ConfigurationController {
     public async getConfiguration(): Promise<any> {
         const uc = new ConfigurationFetchUC(this._configurationService);
         const response = await uc.execute()
-        return JSON.stringify(response);
+        return JSON.stringify(response, (key, value) => {
+            if (key == "instance") return undefined;
+            else return value;
+        });
     }
 }

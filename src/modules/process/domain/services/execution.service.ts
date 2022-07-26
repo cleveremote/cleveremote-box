@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
 import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
-import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
+import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
     ExecutableAction,
@@ -22,6 +22,7 @@ export class ProcessService {
 
     // eslint-disable-next-line max-lines-per-function
     public async execute(execution: ProcessModel): Promise<boolean> {
+        await this.configurationService.getConfiguration();
         execution = this._initializeTask(execution);
         if (!execution.task) {
             throw new StructureInvalidError();
@@ -37,7 +38,7 @@ export class ProcessService {
                 next: (x) => { console.log('got value ' + x); },
                 error: async (err) => {
                     console.error('something wrong occurred: ' + err);
-                    await execution.reset();
+                    await this._reset(execution);
                 },
                 complete: () => {
                     const index = this.execQueue.map(x => x.task.id).indexOf(execution.task.id);
@@ -131,7 +132,7 @@ export class ProcessService {
             mergeMap((previousPins) => {
                 return of(currentSec.portNums).pipe(
                     map((currentPins) => {
-                        this._switchProcess({ id: previousSeq.sequenceId, pins: previousPins, duration: previousSeq.duration },
+                        this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
                             { id: currentSec.sequenceId, pins: currentPins, duration: currentSec.duration }, modules);
                         return currentSec;
                     })
@@ -152,17 +153,17 @@ export class ProcessService {
         currentData.pins.forEach((currentPin) => {
             modules.find(x => x.portNum === currentPin).execute(1);
         });
-        this._processProgress(currentData.id, ExecutableAction.OFF, currentData.duration);
+        this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration);
 
         return true;
     }
 
     private _processProgress(sequenceId: string, action: ExecutableAction, duration?: number): Promise<string> {
-        const endedAt = action === ExecutableAction.ON ? (new Date()).setMilliseconds(duration) : undefined;
+        const endsAt = action === ExecutableAction.ON ? (new Date()).setMilliseconds(duration) : undefined;
         const data = {
             sequenceId,
             status: action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED,
-            endedAt
+            endsAt
         }
         return this.wsService.sendMessage({ pattern: 'UPDATE_STATUS', data: JSON.stringify(data) })
         // .then(data => { console.log(data); })
@@ -178,7 +179,6 @@ export class ProcessService {
         await this.configurationService.getConfiguration();
         const modules = this.configurationService.structure.getModules();
         modules.forEach(module => {
-            console.log(module);
             module.execute(0);
         });
         return true;

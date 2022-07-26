@@ -1,22 +1,35 @@
+import { ConfigModule } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
 import { NotSwitchError } from '@process/domain/errors/not-switch.error';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
 import { ExecutableAction, ExecutableMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
+import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
+import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
 
 describe('Notification Service unit testing ', () => {
-
+    let service: SocketIoClientProxyService;
     afterEach(() => {
         jest.resetAllMocks();
+    });
+
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            imports: [ConfigModule.forRoot()],
+            providers: [SocketIoClientProxyService, SocketIoClientProvider]
+        }).compile();
+
+        service = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
     });
 
     it('Should execute process as cycle & check status IN_PROCESS/STOPPED', async () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
@@ -56,7 +69,7 @@ describe('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
 
@@ -80,7 +93,7 @@ describe('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.QUEUED, ExecutableAction.ON);
 
         //WHEN
@@ -96,7 +109,7 @@ describe('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution3 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
@@ -125,7 +138,7 @@ describe('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecutionCycleNotExistConfig(ExecutableMode.FORCE, ExecutableAction.ON);
         try {
             //WHEN
@@ -139,7 +152,6 @@ describe('Notification Service unit testing ', () => {
             expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
 
         } catch (e) {
-            console.log(('test123'));
             expect(e).toBeInstanceOf(StructureInvalidError);
         }
     });
@@ -148,7 +160,7 @@ describe('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService);
+        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecutionCycleWithWrongModuleConfig(ExecutableMode.FORCE, ExecutableAction.ON);
         try {
             //WHEN
