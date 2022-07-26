@@ -13,6 +13,16 @@ export class ConfigurationService {
     public async synchronize(configuration: StructureModel): Promise<StructureModel> {
         return this.structureRepository.saveStructure(configuration).then((data) => {
             this.structure = data;
+
+            const cycles = this.structure.cycles;
+
+            let sequences: SequenceModel[] = [];
+            cycles.forEach((cycle) => {
+                sequences = sequences.concat(cycle.sequences);
+                sequences = [...new Set([...sequences, ...cycle.sequences])];
+            });
+            this.sequences = sequences;
+
             return data;
         });
     }
@@ -24,16 +34,4 @@ export class ConfigurationService {
         });
     }
 
-    public async getSequenceById(sequenceId) {
-        const cycles = this.structure.cycles;
-
-        let sequences: SequenceModel[] = [];
-        cycles.forEach((cycle) => {
-            sequences = sequences.concat(cycle.sequences);
-            sequences = [...new Set([...sequences, ...cycle.sequences])];
-        });
-        this.sequences = sequences;
-
-        this.sequences.find()
-    }
 }

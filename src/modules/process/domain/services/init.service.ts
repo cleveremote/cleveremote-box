@@ -1,16 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
-import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
-import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
     ConditionType,
     ExecutableAction,
-    ExecutableMode,
-    ExecutableStatus,
-    IExecutable
+    ExecutableMode
 } from '../interfaces/executable.interface';
-import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureModel } from '../models/structure.model';
 import { ConfigurationService } from './configuration.service';
@@ -24,20 +17,19 @@ export class InitService {
         private processService: ProcessService
     ) { }
 
+    public getConfiguration(): Promise<StructureModel> {
+        return this.configurationService.getConfiguration();
+    }
 
     public async resetAllModules(): Promise<boolean> {
-        const processes = this.getAllCyles();
+        const processes = this._getAllCyles();
         processes.forEach(async process => {
             await this.processService.reset(process);
         });
         return true;
     }
 
-    public getConfiguration(): Promise<StructureModel> {
-        return this.configurationService.getConfiguration();
-    }
-
-    private getAllCyles(): Array<ProcessModel> {
+    private _getAllCyles(): Array<ProcessModel> {
         const cycles = this.configurationService.structure.cycles;
         const AllProcesses: Array<ProcessModel> = [];
         cycles.forEach(cycle => {

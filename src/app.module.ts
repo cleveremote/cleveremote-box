@@ -2,7 +2,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { ProcessModule } from '@process/infrastructure/process.module';
-import { lastValueFrom } from 'rxjs';
+import { lastValueFrom, map, mergeMap } from 'rxjs';
 import { AppService } from './app.service';
 @Module({
     imports: [ConfigModule.forRoot(), ProcessModule],
@@ -16,13 +16,10 @@ export class AppModule implements OnModuleInit {
     ) { }
 
     public onModuleInit(): Promise<boolean> {
-        return lastValueFrom(this.appService.resetAllModules());
-        // .pipe(
-        //     mergeMap(() => this.appService.loadCatalog()),
-        //     mergeMap(() => this.appService.loadPromotions()),
-        //     mergeMap(() => this.appService.loadShippings()),
-        //     map(() => true)
-        // )
-
+        const initializationProcess = this.appService.loadConfiguration().pipe(
+            mergeMap(() => this.appService.resetAllModules()),
+            map(() => true)
+        );
+        return lastValueFrom(initializationProcess);
     }
 }

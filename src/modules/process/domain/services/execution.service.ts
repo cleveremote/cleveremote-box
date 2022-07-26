@@ -23,7 +23,6 @@ export class ProcessService {
 
     // eslint-disable-next-line max-lines-per-function
     public async execute(execution: ProcessModel): Promise<boolean> {
-        await this.configurationService.getConfiguration();
         execution = this._initializeTask(execution);
         if (!execution.task) {
             throw new StructureInvalidError();
@@ -66,7 +65,7 @@ export class ProcessService {
             const index = this.execQueue.map(x => x.task.id).indexOf(executable.id);
             this.execQueue[index].instance.unsubscribe();
             this.execQueue.splice(index, 1);
-            await executable.reset();
+            await this.reset(execution);
         });
 
         return true;
@@ -96,11 +95,10 @@ export class ProcessService {
         return execution;
     }
 
-    ///////// rework
     // eslint-disable-next-line max-lines-per-function
     private _execute(process: ProcessModel): Observable<boolean> {
         if (process.action === ExecutableAction.OFF) {
-            return from(process.task.reset())
+            return from(this.reset(process))
                 .pipe(map((data) => {
                     process.task.status = ExecutableStatus.STOPPED;
                     return data;
@@ -121,7 +119,7 @@ export class ProcessService {
                 modules.find(x => x.portNum === previousPin).execute(0);
                 process.task.status = ExecutableStatus.STOPPED;
             });
-            this._processProgress(ExecutableType.SEQUENCE, lastPins.sequenceId, ExecutableAction.OFF, lastPins.duration);
+            this._processProgress(ExecutableType.SEQUENCE, lastPins.sequenceId, ExecutableAction.OFF);
             return true;
         }));
     }
@@ -135,7 +133,7 @@ export class ProcessService {
             mergeMap((previousPins) => {
                 return of(currentSec.portNums).pipe(
                     map((currentPins) => {
-                        this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
+                        this._switchProcess({ id: previousSeq.sequenceId, pins: previousPins, duration: previousSeq.duration },
                             { id: currentSec.sequenceId, pins: currentPins, duration: currentSec.duration }, modules);
                         return currentSec;
                     })
@@ -164,24 +162,17 @@ export class ProcessService {
     private _processProgress(type: ExecutableType, id: string, action: ExecutableAction, duration?: number): Promise<string> {
         const dateNow = new Date();
         const endedAt = action === ExecutableAction.ON ? dateNow.setMilliseconds(duration) : undefined;
-        const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED,
+        const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         const data = { type, id, status, endedAt };
 
         if (type === ExecutableType.SEQUENCE) {
-            const sequence = process.task.sequences.find((seq) => seq.id === id);
+            const sequence = this.configurationService.sequences.find(seq => seq.id === id);
             sequence.status = status;
             sequence.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: dateNow, duration } : null;
+            // save in file .
         }
 
-
         return this.wsService.sendMessage({ pattern: 'UPDATE_STATUS', data: JSON.stringify(data) });
-    }
-
-    private _setSequenceStatus(id: string, process: ProcessModel, status: ExecutableStatus) {
-        const sequence = process.task.sequences.find((seq) => seq.id === id);
-        sequence.status = status;
-        sequence.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: new Date } null;
-
     }
 
     private static _ofNull<T>(): Observable<T> {

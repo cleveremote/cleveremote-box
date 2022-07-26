@@ -5,12 +5,12 @@ import { ModuleModel } from "./module.model";
 export class SequenceModel {
 
     public id: string;
-    public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public duration: number;
-    public modules: ModuleModel[] = [];
     public name: string;
     public description?: string;
     public progression?: { startedAt: Date; duration: number };
+    public status: ExecutableStatus = ExecutableStatus.STOPPED;
+    public duration: number;
+    public modules: ModuleModel[] = [];
 
     public async reset(): Promise<boolean> {
         this.modules.forEach(module => {

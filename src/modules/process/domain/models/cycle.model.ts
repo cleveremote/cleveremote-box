@@ -11,6 +11,7 @@ export class CycleModel implements IExecutable {
     public style?: { bgColor: string; fontColor: string; iconColor: string };
     public description?: string;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
+    public progression?: { startedAt: Date; duration: number };
     public sequences: SequenceModel[] = [];
 
     public getModules(): ModuleModel[] {
