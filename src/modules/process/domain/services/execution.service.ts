@@ -7,6 +7,7 @@ import {
     ExecutableAction,
     ExecutableMode,
     ExecutableStatus,
+    ExecutableType,
     IExecutable
 } from '../interfaces/executable.interface';
 import { ModuleModel } from '../models/module.model';
@@ -38,7 +39,7 @@ export class ProcessService {
                 next: (x) => { console.log('got value ' + x); },
                 error: async (err) => {
                     console.error('something wrong occurred: ' + err);
-                    await this._reset(execution);
+                    await this.reset(execution);
                 },
                 complete: () => {
                     const index = this.execQueue.map(x => x.task.id).indexOf(execution.task.id);
@@ -49,6 +50,12 @@ export class ProcessService {
 
         this.execQueue.push(execution);
 
+        return true;
+    }
+
+    public async reset(process: ProcessModel): Promise<boolean> {
+        await process.task.reset();
+        await this._processProgress(ExecutableType.CYCLE, process.task.id, ExecutableAction.OFF);
         return true;
     }
 
@@ -114,13 +121,9 @@ export class ProcessService {
                 modules.find(x => x.portNum === previousPin).execute(0);
                 process.task.status = ExecutableStatus.STOPPED;
             });
-            this._processProgress(lastPins.sequenceId, ExecutableAction.OFF, lastPins.duration);
+            this._processProgress(ExecutableType.SEQUENCE, lastPins.sequenceId, ExecutableAction.OFF, lastPins.duration);
             return true;
         }));
-    }
-
-    private _reset(process: ProcessModel): Promise<boolean> {
-        return process.task.reset();
     }
 
     private _createExecObs(
@@ -148,26 +151,36 @@ export class ProcessService {
         previousData.pins.forEach((previousPin) => {
             modules.find(x => x.portNum === previousPin).execute(0);
         });
-        this._processProgress(previousData.id, ExecutableAction.OFF);
+        this._processProgress(ExecutableType.SEQUENCE, previousData.id, ExecutableAction.OFF);
 
         currentData.pins.forEach((currentPin) => {
             modules.find(x => x.portNum === currentPin).execute(1);
         });
-        this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration);
+        this._processProgress(ExecutableType.SEQUENCE, currentData.id, ExecutableAction.ON, currentData.duration);
 
         return true;
     }
 
-    private _processProgress(sequenceId: string, action: ExecutableAction, duration?: number): Promise<string> {
-        const endsAt = action === ExecutableAction.ON ? (new Date()).setMilliseconds(duration) : undefined;
-        const data = {
-            sequenceId,
-            status: action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED,
-            endsAt
+    private _processProgress(type: ExecutableType, id: string, action: ExecutableAction, duration?: number): Promise<string> {
+        const dateNow = new Date();
+        const endedAt = action === ExecutableAction.ON ? dateNow.setMilliseconds(duration) : undefined;
+        const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED,
+        const data = { type, id, status, endedAt };
+
+        if (type === ExecutableType.SEQUENCE) {
+            const sequence = process.task.sequences.find((seq) => seq.id === id);
+            sequence.status = status;
+            sequence.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: dateNow, duration } : null;
         }
-        return this.wsService.sendMessage({ pattern: 'UPDATE_STATUS', data: JSON.stringify(data) })
-        // .then(data => { console.log(data); })
-        // .catch(err => { console.log(err); });
+
+
+        return this.wsService.sendMessage({ pattern: 'UPDATE_STATUS', data: JSON.stringify(data) });
+    }
+
+    private _setSequenceStatus(id: string, process: ProcessModel, status: ExecutableStatus) {
+        const sequence = process.task.sequences.find((seq) => seq.id === id);
+        sequence.status = status;
+        sequence.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: new Date } null;
 
     }
 

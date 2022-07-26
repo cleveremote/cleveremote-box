@@ -7,6 +7,7 @@ import { ConfigurationService } from '@process/domain/services/configuration.ser
 import { ConfigurationController } from './controllers/configuration.controller';
 import { ConfigurationRepository } from './repositories/configuration.repository';
 import { ExecutionController } from './controllers/execution.controller';
+import { InitService } from '@process/domain/services/init.service';
 
 @Module({ 
     imports: [
@@ -21,8 +22,12 @@ import { ExecutionController } from './controllers/execution.controller';
         ConfigurationService,
         ProcessService,
         SocketIoClientProvider,
-        SocketIoClientProxyService
+        SocketIoClientProxyService,
+        InitService
     ],
-    exports: [ProcessService]
+    exports: [
+        ProcessService,
+        InitService
+    ]
 })
 export class ProcessModule { }

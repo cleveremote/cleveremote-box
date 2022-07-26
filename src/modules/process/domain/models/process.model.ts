@@ -16,4 +16,5 @@ export class ProcessModel {
     public instance: Subscription;
     public duration?: number;
 
+    
 }

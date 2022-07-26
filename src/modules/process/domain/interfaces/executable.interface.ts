@@ -1,4 +1,5 @@
 import { ModuleModel } from '../models/module.model';
+import { SequenceModel } from '../models/sequence.model';
 
 
 export enum ExecutableStatus {
@@ -38,6 +39,7 @@ export enum TASK {
 export interface IExecutable {
     id: string;
     status: ExecutableStatus;
+    sequences: SequenceModel[];
     reset(): Promise<boolean>;
     getModules(): ModuleModel[];
     exists(module: ModuleModel): boolean;

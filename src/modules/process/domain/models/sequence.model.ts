@@ -1,4 +1,4 @@
-import { IExecutable, ExecutableStatus } from "../interfaces/executable.interface";
+import { ExecutableStatus } from "../interfaces/executable.interface";
 import { ModuleModel } from "./module.model";
 
 
@@ -10,16 +10,14 @@ export class SequenceModel {
     public modules: ModuleModel[] = [];
     public name: string;
     public description?: string;
-    public startedAt?: Date;
+    public progression?: { startedAt: Date; duration: number };
 
     public async reset(): Promise<boolean> {
         this.modules.forEach(module => {
-            // test purpose only particular use case
-            if (module.portNum !== 2022) {
-                module.execute(0);
-            }
+            module.execute(0);
         });
         this.status = ExecutableStatus.STOPPED;
+        this.progression = null;
         return true;
     }
 }
