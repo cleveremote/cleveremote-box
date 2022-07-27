@@ -34,10 +34,14 @@ export class ProcessService {
         await this._processProgress(process.cycle.id, ExecutableAction.OFF);
     }
 
+    public async initialReset(process: ProcessModel): Promise<void> {
+        await process.cycle.reset();
+        await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+    }
+
     private _initializeProcess(process: ProcessModel): void {
         const struct = this.configurationService.structure;
         process.cycle = struct.cycles.find(x => x.id === process.cycle.id);
-        console.log('process.cycle', struct.cycles);
         if (!process.cycle) {
             throw new StructureInvalidError();
         }
@@ -76,10 +80,7 @@ export class ProcessService {
     private async _resetConflictedProcesses(process: ProcessModel): Promise<void> {
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
         conflictedProcesses.forEach(async (proc) => {
-            const index = this.processQueue.map(x => x.cycle.id).indexOf(proc.cycle.id);
-            this.processQueue[index].instance.unsubscribe();
-            await this.reset(this.processQueue[index]);
-            this.processQueue.splice(index, 1);
+            await this.reset(proc);
         });
     }
 
@@ -165,7 +166,7 @@ export class ProcessService {
             try {
                 modules.find(x => x.portNum === dataPin).execute(action);
             } catch (error) {
-                console.log('failed')
+                Logger.warn(error, 'execution module pornum: ' + dataPin);
             }
         });
     }

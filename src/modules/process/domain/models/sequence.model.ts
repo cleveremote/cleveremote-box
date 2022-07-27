@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { ExecutableStatus } from "../interfaces/executable.interface";
 import { ModuleModel } from "./module.model";
 
@@ -17,7 +18,7 @@ export class SequenceModel {
             try {
                 module.execute(0);
             } catch (error) {
-                console.log('stopped');
+                Logger.warn(error, 'execution sequence id: ' + this.id);
             }
         });
         this.status = ExecutableStatus.STOPPED;

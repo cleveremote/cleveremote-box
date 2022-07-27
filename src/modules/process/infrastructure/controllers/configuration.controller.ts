@@ -6,6 +6,7 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
+import { CycleSynchronizeDTO } from '../dto/synchronize.dto';
 
 @Controller()
 export class ConfigurationController {
@@ -18,6 +19,13 @@ export class ConfigurationController {
     @MessagePattern('synchronize/configuration')
     public async synchronise(@Payload() configurationSynchronizeDTO: ConfigurationSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
+        const input = ConfigurationSynchronizeDTO.mapToNotificationModel(configurationSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern('synchronize/configuration-partial')
+    public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<StructureModel> {
+        const uc = new ConfigurationPartialSynchronizeUC(this._synchronizeService);
         const input = ConfigurationSynchronizeDTO.mapToNotificationModel(configurationSynchronizeDTO);
         return uc.execute(input);
     }

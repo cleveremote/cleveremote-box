@@ -24,7 +24,7 @@ export class InitService {
     public async resetAllModules(): Promise<boolean> {
         const processes = this._getAllCyles();
         processes.forEach(async process => {
-            await this.processService.reset(process);
+            await this.processService.initialReset(process);
         });
         return true;
     }
