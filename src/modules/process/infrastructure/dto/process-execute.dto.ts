@@ -41,7 +41,7 @@ export class ProcessExecuteDTO {
 
     public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();
-        process.task = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as IExecutable ;
+        process.cycle = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as IExecutable ;
         process.action = notificationCreateDTO.action;
         process.function = notificationCreateDTO.function;
         process.mode = notificationCreateDTO.mode;

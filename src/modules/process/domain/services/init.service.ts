@@ -34,7 +34,7 @@ export class InitService {
         const AllProcesses: Array<ProcessModel> = [];
         cycles.forEach(cycle => {
             const process = new ProcessModel();
-            process.task = cycle;
+            process.cycle = cycle;
             process.action = ExecutableAction.OFF;
             process.type = ConditionType.NOW;
             process.function = 'string';

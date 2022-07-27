@@ -140,7 +140,7 @@ export function CreateStructure(): StructureModel {
     const cycle3 = new CycleModel();
     cycle3.id = 'falsyxxxxx';
     cycle3.status = ExecutableStatus.STOPPED;
-    cycle3.sequences = [irrigationSecteur5];
+    cycle3.sequences = [irrigationSecteur1, irrigationSecteur5, irrigationSecteur5];
 
     const structure = new StructureModel();
     structure.cycles = [cycle, cycle2, cycle3];

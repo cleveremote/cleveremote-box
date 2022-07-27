@@ -1,34 +1,32 @@
 import { Controller } from '@nestjs/common';
-import { Ctx, MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { StructureModel } from '@process/domain/models/structure.model';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
-import { Socket } from 'socket.io-client';
-import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
 
 @Controller()
 export class ConfigurationController {
 
     public constructor(
-        private _configurationService: ConfigurationService,
-        private readonly socketIoClientProxyService: SocketIoClientProxyService) {
+        private _configurationService: ConfigurationService) {
     }
 
     @MessagePattern('synchronize/configuration')
-    public async synchronise(@Payload() configurationSynchronizeDTO: ConfigurationSynchronizeDTO, @Ctx() client: Socket): Promise<any> {
+    public async synchronise(@Payload() configurationSynchronizeDTO: ConfigurationSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._configurationService);
         const input = ConfigurationSynchronizeDTO.mapToNotificationModel(configurationSynchronizeDTO);
         return uc.execute(input);
     }
 
     @MessagePattern('fetch/configuration')
-    public async getConfiguration(): Promise<any> {
+    public async getConfiguration(): Promise<string> {
         const uc = new ConfigurationFetchUC(this._configurationService);
         const response = await uc.execute()
         return JSON.stringify(response, (key, value) => {
-            if (key == "instance") return undefined;
-            else return value;
+            if (key === 'instance') return undefined;
+            return value;
         });
     }
 }

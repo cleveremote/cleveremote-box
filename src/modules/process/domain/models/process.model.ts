@@ -8,7 +8,7 @@ import {
 } from '../interfaces/executable.interface';
 
 export class ProcessModel {
-    public task: IExecutable;
+    public cycle: IExecutable;
     public action: ExecutableAction;
     public type: ConditionType;
     public function: string;

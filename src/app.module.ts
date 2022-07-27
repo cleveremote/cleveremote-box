@@ -1,6 +1,5 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ProcessService } from '@process/domain/services/execution.service';
 import { ProcessModule } from '@process/infrastructure/process.module';
 import { lastValueFrom, map, mergeMap } from 'rxjs';
 import { AppService } from './app.service';

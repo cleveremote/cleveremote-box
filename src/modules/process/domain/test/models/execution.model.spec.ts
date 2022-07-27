@@ -81,7 +81,7 @@ describe('ExecutionModel model', () => {
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4];
 
         expect(execution).toBeDefined();
-        execution.task = cycle;
+        execution.cycle = cycle;
         execution.action = ExecutableAction.ON;
         execution.type = ConditionType.NOW;
         execution.function = 'string';
@@ -166,7 +166,7 @@ describe('ExecutionModel model', () => {
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4];
 
         expect(execution).toBeDefined();
-        execution.task = cycle;
+        execution.cycle = cycle;
         execution.action = ExecutableAction.OFF;
         execution.type = ConditionType.NOW;
         execution.function = 'string';
@@ -251,7 +251,7 @@ describe('ExecutionModel model', () => {
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2, irrigationSecteur3, irrigationSecteur4];
 
         expect(execution).toBeDefined();
-        execution.task = cycle;
+        execution.cycle = cycle;
         execution.action = ExecutableAction.OFF;
         execution.type = ConditionType.NOW;
         execution.function = 'string';

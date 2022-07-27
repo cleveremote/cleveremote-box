@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
+import { CycleModel } from '../models/cycle.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
 
@@ -10,26 +11,15 @@ export class ConfigurationService {
     public constructor(private structureRepository: ConfigurationRepository) {
     }
 
-    public async synchronize(configuration: StructureModel): Promise<StructureModel> {
-        return this.structureRepository.saveStructure(configuration).then((data) => {
+    public async getConfiguration(): Promise<StructureModel> {
+        return this.structureRepository.getStructure().then((data) => {
             this.structure = data;
-
-            const cycles = this.structure.cycles;
-
             let sequences: SequenceModel[] = [];
-            cycles.forEach((cycle) => {
+            this.structure.cycles.forEach((cycle) => {
                 sequences = sequences.concat(cycle.sequences);
                 sequences = [...new Set([...sequences, ...cycle.sequences])];
             });
             this.sequences = sequences;
-
-            return data;
-        });
-    }
-
-    public async getConfiguration(): Promise<StructureModel> {
-        return this.structureRepository.getStructure().then((data) => {
-            this.structure = data;
             return data;
         });
     }

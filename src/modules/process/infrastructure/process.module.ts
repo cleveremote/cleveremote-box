@@ -8,6 +8,7 @@ import { ConfigurationController } from './controllers/configuration.controller'
 import { ConfigurationRepository } from './repositories/configuration.repository';
 import { ExecutionController } from './controllers/execution.controller';
 import { InitService } from '@process/domain/services/init.service';
+import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 @Module({ 
     imports: [
@@ -23,7 +24,8 @@ import { InitService } from '@process/domain/services/init.service';
         ProcessService,
         SocketIoClientProvider,
         SocketIoClientProxyService,
-        InitService
+        InitService,
+        SynchronizeService
     ],
     exports: [
         ProcessService,

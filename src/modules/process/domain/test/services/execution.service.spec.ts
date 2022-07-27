@@ -10,8 +10,9 @@ import { SocketIoClientProxyService } from '../../../../../common/websocket/sock
 import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
 
-describe('Notification Service unit testing ', () => {
-    let service: SocketIoClientProxyService;
+describe.only('Notification Service unit testing ', () => {
+    let notificationService: ProcessService;
+
     afterEach(() => {
         jest.resetAllMocks();
     });
@@ -22,82 +23,77 @@ describe('Notification Service unit testing ', () => {
             providers: [SocketIoClientProxyService, SocketIoClientProvider]
         }).compile();
 
-        service = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
-    });
-
-    it('Should execute process as cycle & check status IN_PROCESS/STOPPED', async () => {
-        //GIVEN
+        const service: SocketIoClientProxyService = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
+        await configurationService.getConfiguration();
+        notificationService = new ProcessService(configurationService, service);
+    });
+
+    it('Should execute process & check status IN_PROCESS/STOPPED', async () => {
+        //GIVEN
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
         const isSuccess = await notificationService.execute(execution);
+
         //THEN
-        expect(execution.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
+        expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
         expect(isSuccess).toBeTruthy();
 
-        //WAIT
-        await new Promise(resolve => setTimeout(resolve, 1000));
         //THEN
-        expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
     });
 
-    // it('Should execute process as sequence & check status IN_PROCESS/STOPPED', async () => {
-    //     //GIVEN
-    //     const structureRepository = new StructureRepositorySpecMock();
-    //     const configurationService = new ConfigurationService(structureRepository);
-    //     const notificationService = new ProcessService(configurationService);
-    //     const executionSequence = CreateExecutionSequence('1', ExecutableMode.FORCE, ExecutableAction.ON);
-
-    //     //WHEN
-    //     const isSuccess = await notificationService.execute(executionSequence);
-    //     //THEN
-    //     expect(executionSequence.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
-    //     expect(isSuccess).toBeTruthy();
-
-    //     //WAIT
-    //     await new Promise(resolve => setTimeout(resolve, 1000));
-    //     //THEN
-    //     expect(executionSequence.task.status).toEqual(ExecutableStatus.STOPPED);
-
-
-    // });
-
-    it('Should return all notifications check conflicted', async () => {
+    it('Should switch process ON/OFF', async () => {
         //GIVEN
-        const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
+        const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution2 = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.OFF);
+
+        //WHEN
+        const isSuccess = await notificationService.execute(execution);
+
+        //THEN
+        expect(isSuccess).toBeTruthy();
+        expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+        const isSuccess2 = await notificationService.execute(execution2);
+        expect(isSuccess2).toBeTruthy();
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        //THEN
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
+        expect(execution2.cycle.status).toEqual(ExecutableStatus.STOPPED);
+
+    });
+
+    it('Should manage conflicted processes', async () => {
+        //GIVEN
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
         const isSuccess = await notificationService.execute(execution);
         //THEN
-        expect(execution.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
+        expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
         expect(isSuccess).toBeTruthy();
 
         const isSuccess2 = await notificationService.execute(execution2);
         expect(isSuccess2).toBeTruthy();
-        expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
 
         //WAIT
         await new Promise(resolve => setTimeout(resolve, 1000));
         //THEN
-        expect(execution2.task.status).toEqual(ExecutableStatus.STOPPED);
+        expect(execution2.cycle.status).toEqual(ExecutableStatus.STOPPED);
     });
 
-    it('Should proccess queue mode', async () => {
+    it('Should execute proccess in queue mode', async () => {
         //GIVEN
-        const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.QUEUED, ExecutableAction.ON);
 
         //WHEN
-
         try {
             await notificationService.execute(execution);
         } catch (e) {
@@ -107,9 +103,6 @@ describe('Notification Service unit testing ', () => {
 
     it('Should return all notifications check conflicted', async () => {
         //GIVEN
-        const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
         const execution3 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
@@ -117,65 +110,42 @@ describe('Notification Service unit testing ', () => {
         //WHEN
         const isSuccess = await notificationService.execute(execution);
         //THEN
-        expect(execution.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
+        expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
         expect(isSuccess).toBeTruthy();
 
         const isSuccess2 = await notificationService.execute(execution2);
         expect(isSuccess2).toBeTruthy();
-        expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
 
         const isSuccess3 = await notificationService.execute(execution3);
         expect(isSuccess3).toBeTruthy();
-        expect(execution2.task.status).toEqual(ExecutableStatus.IN_PROCCESS); // because execution2 === execution3
+        expect(execution2.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS); // because execution2 === execution3
 
         //WAIT
         await new Promise(resolve => setTimeout(resolve, 1000));
         //THEN
-        expect(execution3.task.status).toEqual(ExecutableStatus.STOPPED);
+        expect(execution3.cycle.status).toEqual(ExecutableStatus.STOPPED);
     });
 
     it('Should fire error invalid Error struct', async () => {
         //GIVEN
-        const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecutionCycleNotExistConfig(ExecutableMode.FORCE, ExecutableAction.ON);
-        try {
-            //WHEN
-            const isSuccess = await notificationService.execute(execution);
-            //THEN
-            expect(execution.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
-            expect(isSuccess).toBeTruthy();
+        //WHEN
+        await notificationService.execute(execution).catch((error) => expect(error).toBeInstanceOf(StructureInvalidError));
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
-
-        } catch (e) {
-            expect(e).toBeInstanceOf(StructureInvalidError);
-        }
     });
 
-    it('Should catch async error on port configuration', async () => {
+    it('Should manage async error on port configuration', async () => {
         //GIVEN
-        const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        const notificationService = new ProcessService(configurationService,service);
         const execution = CreateExecutionCycleWithWrongModuleConfig(ExecutableMode.FORCE, ExecutableAction.ON);
-        try {
-            //WHEN
-            const isSuccess = await notificationService.execute(execution);
-            //THEN
-            expect(execution.task.status).toEqual(ExecutableStatus.IN_PROCCESS);
-            expect(isSuccess).toBeTruthy();
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        //WHEN
+        const isSuccess = await notificationService.execute(execution);
 
-            expect(execution.task.status).toEqual(ExecutableStatus.STOPPED);
-
-        } catch (e) {
-            //expect(e).toBeInstanceOf(NotSwitchError);
-        }
+        //THEN
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED)
+        expect(isSuccess).toBeTruthy();
     });
 
 });

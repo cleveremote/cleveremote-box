@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProcessService } from '@process/domain/services/execution.service';
 import { InitService } from '@process/domain/services/init.service';
-import { catchError, from, map, Observable, tap } from 'rxjs';
+import { catchError, from, map, Observable, of } from 'rxjs';
 
 @Injectable()
 export class AppService {
@@ -9,7 +8,7 @@ export class AppService {
         private readonly initService: InitService
     ) { }
 
-    public resetAllModules(): Observable<any> {
+    public resetAllModules(): Observable<boolean> {
         Logger.log('Start initialize processes...', 'initialization');
         return from(this.initService.resetAllModules()).pipe(
             map(() => {
@@ -19,13 +18,13 @@ export class AppService {
             ),
             catchError((err) => {
                 Logger.error(`! initialize processes KO ${String(err)} `);
-                return err;
+                return of(false);
             }));
     }
 
-    public loadConfiguration(): Observable<any> {
+    public loadConfiguration(): Observable<boolean> {
         Logger.log('Start loading configuration...', 'initialization');
-        return from(this.initService.resetAllModules()).pipe(
+        return from(this.initService.getConfiguration()).pipe(
             map(() => {
                 Logger.log('configuration loaded', 'initialization');
                 return true;
@@ -33,7 +32,7 @@ export class AppService {
             ),
             catchError((err) => {
                 Logger.error(`! loading configuration KO ${String(err)} `);
-                return err;
+                return of(false);
             }));
     }
 

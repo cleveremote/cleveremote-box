@@ -15,14 +15,15 @@ export class StructureEntity {
 
         // mapping
         // eslint-disable-next-line max-lines-per-function
-        data.cycles.forEach((cycledData) => {
+        data.cycles.forEach((cycleData) => {
             const cycle = new CycleModel();
-            cycle.id = cycledData.id;
+            cycle.id = cycleData.id;
             cycle.status = ExecutableStatus.STOPPED;
-            cycle.name = cycledData.name;
-            cycle.description = cycledData.description;
-            cycle.style = cycledData.style;
-            cycledData.sequences.forEach(sequenceData => {
+            cycle.name = cycleData.name;
+            cycle.description = cycleData.description;
+            cycle.style = cycleData.style;
+            cycle.maxDuration = cycleData.maxDuration;
+            cycleData.sequences.forEach(sequenceData => {
                 const sequence = new SequenceModel();
                 sequence.id = sequenceData.id;
                 sequence.status = sequenceData.status;

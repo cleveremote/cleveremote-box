@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
+import { Injectable, Logger, Next } from '@nestjs/common';
+import Module from 'module';
 import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
@@ -7,78 +7,89 @@ import {
     ExecutableAction,
     ExecutableMode,
     ExecutableStatus,
-    ExecutableType,
-    IExecutable
+    ExecutableType
 } from '../interfaces/executable.interface';
 import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
-import { StructureModel } from '../models/structure.model';
 import { ConfigurationService } from './configuration.service';
 
 @Injectable()
 export class ProcessService {
-    public execQueue: ProcessModel[] = [];
+    public processQueue: ProcessModel[] = [];
     public constructor(private configurationService: ConfigurationService,
         private wsService: SocketIoClientProxyService) { }
 
-    // eslint-disable-next-line max-lines-per-function
-    public async execute(execution: ProcessModel): Promise<boolean> {
-        execution = this._initializeTask(execution);
-        if (!execution.task) {
+    public async execute(process: ProcessModel): Promise<boolean> {
+        this._initializeProcess(process);
+        await this._manageProcessMode(process);
+        this._executeProcess(process);
+        return true;
+    }
+
+    public async reset(process: ProcessModel): Promise<void> {
+        const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
+        this.processQueue[index].instance.unsubscribe();
+        await process.cycle.reset();
+        this.processQueue.splice(index, 1);
+        await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+    }
+
+    private _initializeProcess(process: ProcessModel): void {
+        const struct = this.configurationService.structure;
+        process.cycle = struct.cycles.find(x => x.id === process.cycle.id);
+        console.log('process.cycle', struct.cycles);
+        if (!process.cycle) {
             throw new StructureInvalidError();
         }
-        if (execution.mode === ExecutableMode.FORCE) {
-            await this._resetConflictedProcesses(execution);
-        } else if (execution.mode === ExecutableMode.QUEUED) {
+    }
+
+    private async _manageProcessMode(process: ProcessModel): Promise<void> {
+        if (process.mode === ExecutableMode.FORCE) {
+            await this._resetConflictedProcesses(process);
+        } else if (process.mode === ExecutableMode.QUEUED) {
             throw new Error('Method not implemented.');
         }
+    }
 
-        execution.instance = this._execute(execution).subscribe(
+    private _executeProcess(process: ProcessModel): void {
+        process.instance = this._execute(process).subscribe(
             {
-                next: (x) => { console.log('got value ' + x); },
-                error: async (err) => {
-                    console.error('something wrong occurred: ' + err);
-                    await this.reset(execution);
+                next: async () => {
+                    await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+                },
+                error: async (_err) => {
+                    Logger.debug(_err, 'execution');
+                    await this.reset(process);
                 },
                 complete: () => {
-                    const index = this.execQueue.map(x => x.task.id).indexOf(execution.task.id);
-                    this.execQueue.splice(index, 1);
+                    const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
+                    if (index > 0) {
+                        this.processQueue[index].instance.unsubscribe()
+                        this.processQueue.splice(index, 1);
+                    }
                 }
             }
         );
-
-        this.execQueue.push(execution);
-
-        return true;
+        this.processQueue.push(process);
     }
 
-    public async reset(process: ProcessModel): Promise<boolean> {
-        await process.task.reset();
-        await this._processProgress(ExecutableType.CYCLE, process.task.id, ExecutableAction.OFF);
-        return true;
-    }
-
-    private async _resetConflictedProcesses(execution): Promise<boolean> {
-        const conflictedExecutables: IExecutable[] =
-            await this._getConflictedExecutables(execution);
-        conflictedExecutables.forEach(async (executable) => {
-            const index = this.execQueue.map(x => x.task.id).indexOf(executable.id);
-            this.execQueue[index].instance.unsubscribe();
-            this.execQueue.splice(index, 1);
-            await this.reset(execution);
+    private async _resetConflictedProcesses(process: ProcessModel): Promise<void> {
+        const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
+        conflictedProcesses.forEach(async (proc) => {
+            const index = this.processQueue.map(x => x.cycle.id).indexOf(proc.cycle.id);
+            this.processQueue[index].instance.unsubscribe();
+            await this.reset(this.processQueue[index]);
+            this.processQueue.splice(index, 1);
         });
-
-        return true;
     }
 
-    private async _getConflictedExecutables(execution: ProcessModel): Promise<IExecutable[]> {
-        const modules = execution.task.getModules();
-        const conflictedExecutable: IExecutable[] = [];
-        const tasksInProccess = this.execQueue.map(x => x.task);
+    private async _getConflictedExecutables(process: ProcessModel): Promise<ProcessModel[]> {
+        const conflictedExecutable: ProcessModel[] = [];
+        const modules = process.cycle.getModules();
         modules.forEach((module) => {
-            tasksInProccess.forEach((task) => {
-                if (task.exists(module) && !conflictedExecutable.find((x) => x.id === task.id)) {
-                    conflictedExecutable.push(task);
+            this.processQueue.forEach((proc) => {
+                if (proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id)) {
+                    conflictedExecutable.push(proc);
                 }
             })
         });
@@ -86,42 +97,34 @@ export class ProcessService {
         return conflictedExecutable;
     }
 
-    private _initializeTask(execution: ProcessModel): ProcessModel {
-        const struct = this.configurationService.structure;
-        const taskId = execution.task.id;
 
-        const found = struct.cycles.find(x => x.id === taskId);
-        execution.task = found;
-        return execution;
-    }
 
     // eslint-disable-next-line max-lines-per-function
     private _execute(process: ProcessModel): Observable<boolean> {
         if (process.action === ExecutableAction.OFF) {
-            return from(this.reset(process))
-                .pipe(map((data) => {
-                    process.task.status = ExecutableStatus.STOPPED;
-                    return data;
-                }));
+            return from(this.reset(process)).pipe(map(() => true));
         }
-        const modules = process.task.getModules();
-        const executionLst = process.task.getExecutionStructure(process.duration);
+        const modules = process.cycle.getModules();
+        const executionLst = process.cycle.getExecutionStructure(process.duration);
+
         let obs: Observable<{ sequenceId: string; portNums: number[]; duration: number }> =
             ProcessService._ofNull<{ sequenceId: string; portNums: number[]; duration: number }>()
-                .pipe(tap(() => { process.task.status = ExecutableStatus.IN_PROCCESS }));
+                .pipe(tap(() => { process.cycle.status = ExecutableStatus.IN_PROCCESS }));
+
         executionLst.forEach((sequence, index) => {
-            const o = this._createExecObs(executionLst[index - 1], sequence, modules);
-            obs = obs.pipe(mergeMap(() => o));
+            const chainObs = this._createExecObs(executionLst[index - 1], sequence, modules);
+            obs = obs.pipe(mergeMap(() => chainObs));
         });
 
-        return obs.pipe(map((lastPins) => {
-            lastPins.portNums.forEach((previousPin) => {
-                modules.find(x => x.portNum === previousPin).execute(0);
-                process.task.status = ExecutableStatus.STOPPED;
-            });
-            this._processProgress(ExecutableType.SEQUENCE, lastPins.sequenceId, ExecutableAction.OFF);
-            return true;
-        }));
+        return obs.pipe(
+            mergeMap((lastPins) => {
+                lastPins.portNums.forEach((previousPin) => {
+                    modules.find(x => x.portNum === previousPin).execute(0);
+                });
+                return from(this._processProgress(lastPins.sequenceId, ExecutableAction.OFF));
+            }),
+            map(() => true)
+        );
     }
 
     private _createExecObs(
@@ -133,7 +136,7 @@ export class ProcessService {
             mergeMap((previousPins) => {
                 return of(currentSec.portNums).pipe(
                     map((currentPins) => {
-                        this._switchProcess({ id: previousSeq.sequenceId, pins: previousPins, duration: previousSeq.duration },
+                        this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
                             { id: currentSec.sequenceId, pins: currentPins, duration: currentSec.duration }, modules);
                         return currentSec;
                     })
@@ -143,32 +146,48 @@ export class ProcessService {
         );
     }
 
-    private _switchProcess(previousData: { id: string, pins: number[], duration: number },
-        currentData: { id: string, pins: number[], duration: number }, modules: ModuleModel[]): boolean {
+    private async _switchProcess(previousData: { id: string, pins: number[], duration: number },
+        currentData: { id: string, pins: number[], duration: number }, modules: ModuleModel[]): Promise<boolean> {
 
-        previousData.pins.forEach((previousPin) => {
-            modules.find(x => x.portNum === previousPin).execute(0);
-        });
-        this._processProgress(ExecutableType.SEQUENCE, previousData.id, ExecutableAction.OFF);
+        if (previousData.id) {
+            this._switchModule(previousData.pins, modules, 0);
+            await this._processProgress(previousData.id, ExecutableAction.OFF);
+        }
 
-        currentData.pins.forEach((currentPin) => {
-            modules.find(x => x.portNum === currentPin).execute(1);
-        });
-        this._processProgress(ExecutableType.SEQUENCE, currentData.id, ExecutableAction.ON, currentData.duration);
+        this._switchModule(currentData.pins, modules, 1);
+        await this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration);
 
         return true;
     }
 
-    private _processProgress(type: ExecutableType, id: string, action: ExecutableAction, duration?: number): Promise<string> {
+    private _switchModule(dataPins: number[], modules: ModuleModel[], action: number) {
+        dataPins.forEach((dataPin) => {
+            try {
+                modules.find(x => x.portNum === dataPin).execute(action);
+            } catch (error) {
+                console.log('failed')
+            }
+        });
+    }
+
+    // eslint-disable-next-line complexity
+    private _processProgress(id: string, action: ExecutableAction, duration?: number): Promise<string> {
+        const seqFound = this.configurationService.sequences.find(seq => seq.id === id);
+        const cycFound = this.configurationService.structure.cycles.find(cyc => cyc.id === id);
+        if (((seqFound && cycFound) || (!seqFound && !cycFound))) {
+            throw new StructureInvalidError();
+        }
+        const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const dateNow = new Date();
         const endedAt = action === ExecutableAction.ON ? dateNow.setMilliseconds(duration) : undefined;
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         const data = { type, id, status, endedAt };
-
         if (type === ExecutableType.SEQUENCE) {
-            const sequence = this.configurationService.sequences.find(seq => seq.id === id);
-            sequence.status = status;
-            sequence.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: dateNow, duration } : null;
+            seqFound.status = status;
+            seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt: dateNow, duration } : null;
+            // save in file .
+        } else {
+            cycFound.status = status;
             // save in file .
         }
 
@@ -179,16 +198,4 @@ export class ProcessService {
         return of(null as T);
     }
 
-    public async resetAllModules(): Promise<boolean> {
-        await this.configurationService.getConfiguration();
-        const modules = this.configurationService.structure.getModules();
-        modules.forEach(module => {
-            module.execute(0);
-        });
-        return true;
-    }
-
-    public getConfiguration(): Promise<StructureModel> {
-        return this.configurationService.getConfiguration();
-    }
 }

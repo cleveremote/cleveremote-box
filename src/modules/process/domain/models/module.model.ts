@@ -21,7 +21,7 @@ export class ModuleModel {
         if (this.instance) {
             this.instance.unexport();
         }
-        /* istanbul ignore else */
+        /* istanbul ignore next */
         if (Gpio.accessible) {
             const gpioOptions = { debounceTimeout: this.debounceTimeout, activeLow: this.activeLow, reconfigureDirection: this.reconfigureDirection };
             try {
