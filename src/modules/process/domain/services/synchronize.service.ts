@@ -34,8 +34,10 @@ export class SynchronizeService {
         });
     }
 
-    public sychronizePartial(cycleData: SynchronizeCycleModel): void {
+    public async sychronizePartial(cycleData: SynchronizeCycleModel): Promise<CycleModel> {
         this._syncCycle(this.configurationService.structure, cycleData);
+        await this.synchronize(this.configurationService.structure);
+        return this.configurationService.structure.cycles.find(x => x.id === cycleData.id);
     }
 
     private _syncCycle(structure: StructureModel, data: SynchronizeCycleModel): void {

@@ -1,9 +1,11 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
+import { ConfigurationPartialSynchronizeUC } from '@process/use-cases/configuration-partial-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
 import { CycleSynchronizeDTO } from '../dto/synchronize.dto';
@@ -24,9 +26,9 @@ export class ConfigurationController {
     }
 
     @MessagePattern('synchronize/configuration-partial')
-    public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<StructureModel> {
+    public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<CycleModel> {
         const uc = new ConfigurationPartialSynchronizeUC(this._synchronizeService);
-        const input = ConfigurationSynchronizeDTO.mapToNotificationModel(configurationSynchronizeDTO);
+        const input = CycleSynchronizeDTO.mapToCycleModel(cycleSynchronizeDTO);
         return uc.execute(input);
     }
 
