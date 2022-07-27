@@ -1,5 +1,6 @@
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**
  * # Synchronisation et enregitrement de la nouvelle structure cycle/sequence
@@ -10,9 +11,9 @@ import { ConfigurationService } from '@process/domain/services/configuration.ser
  *
 */
 export class ConfigurationSynchronizeUC {
-    public constructor(private configurationService: ConfigurationService) { }
+    public constructor(private synchronizeService: SynchronizeService) { }
 
     public execute(structure: StructureModel): Promise<StructureModel> {
-        return this.configurationService.synchronize(structure);
+        return this.synchronizeService.synchronize(structure);
     }
 }
