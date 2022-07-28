@@ -40,6 +40,22 @@ export function CreateExecutionCycleWithWrongModuleConfig(mode: ExecutableMode, 
     return execution;
 }
 
+export function CreateExecutionCycleWithFalsySequence(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+    const execution = new ProcessModel();
+
+    const cycle = new CycleModel();
+    cycle.id = 'with_falsy_sequence';
+    cycle.status = ExecutableStatus.STOPPED;
+
+    execution.cycle = cycle;
+    execution.action = action;
+    execution.type = ConditionType.NOW;
+    execution.function = 'string';
+    execution.mode = mode;
+
+    return execution;
+}
+
 // eslint-disable-next-line max-lines-per-function
 export function CreateExecutionCycleNotExistConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();

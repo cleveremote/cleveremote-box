@@ -1,15 +1,9 @@
 /* eslint-disable max-lines-per-function */
-import { ApiProperty } from '@nestjs/swagger';
-import { SynchronizeAction, SynchronizeType } from '@process/domain/interfaces/synchronize.interface';
-import { CycleModel } from '@process/domain/models/cycle.model';
-import { ModuleModel } from '@process/domain/models/module.model';
-import { SequenceModel } from '@process/domain/models/sequence.model';
+
 import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsNotEmpty, isNumber, IsNumber, IsString } from 'class-validator';
-import { StructureEntity } from '../entities/structure.entity';
-
-export class Sequence {
+import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+export class SequenceSync {
     @IsString()
     @IsNotEmpty()
     public id: string;
@@ -22,15 +16,6 @@ export class Sequence {
     @IsArray()
     @Type(() => String)
     public modules: string[];
-}
-export class SequenceSync {
-    @Type(() => Sequence)
-    @IsNotEmpty()
-    public sequence?: Sequence;
-
-    @IsEnum(SynchronizeAction)
-    @IsNotEmpty()
-    public action: SynchronizeAction
 }
 
 export class Style {
@@ -71,24 +56,23 @@ export class CycleSynchronizeDTO {
         cycle.name = cycleSynchronizeDTO.name;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
+        cycle.maxDuration = cycleSynchronizeDTO.maxDuration;
         cycle.sequences = [];
         cycleSynchronizeDTO.sequences.forEach(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();
-            const splittedSequenceId = sequenceSync.sequence.id.split('_');
+            const splittedSequenceId = sequenceSync.id.split('_');
             sequence.shouldDelete = splittedSequenceId.length > 1 && splittedSequenceId[0] === 'deleted';
             sequence.id = splittedSequenceId[1] || splittedSequenceId[0];
             if (!sequence.shouldDelete) {
-                sequence.name = sequenceSync.sequence.name;
-                sequence.description = sequenceSync.sequence.description;
-                sequence.duration = sequenceSync.sequence.duration;
+                sequence.name = sequenceSync.name;
+                sequence.description = sequenceSync.description;
+                sequence.duration = sequenceSync.duration;
                 sequence.modules = [];
-                sequenceSync.sequence.modules.forEach((moduleId) => {
+                sequenceSync.modules.forEach((moduleId) => {
                     const module = new SynchronizeModuleModel();
                     const splittedModuleId = moduleId.split('_');
                     module.shouldDelete = splittedModuleId.length > 1 && splittedModuleId[0] === 'deleted';
-                    if (!module.shouldDelete) {
-                        module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
-                    }
+                    module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
                     sequence.modules.push(module);
                 })
             }

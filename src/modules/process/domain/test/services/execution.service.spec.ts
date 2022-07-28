@@ -7,10 +7,10 @@ import { ConfigurationService } from '@process/domain/services/configuration.ser
 import { ProcessService } from '@process/domain/services/execution.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
+import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithFalsySequence, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
 
-describe.only('Notification Service unit testing ', () => {
+describe('Notification Service unit testing ', () => {
     let notificationService: ProcessService;
 
     afterEach(() => {

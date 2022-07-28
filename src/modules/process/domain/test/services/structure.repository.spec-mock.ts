@@ -9,8 +9,8 @@ export class StructureRepositorySpecMock implements IStructureRepository {
 
     private _structure: StructureModel;
 
-    public constructor() {
-        this._structure = CreateStructure();
+    public constructor(falsyType?: number) {
+        this._structure = CreateStructure(falsyType);
     }
 
     public getStructure(): Promise<StructureModel> {
@@ -30,7 +30,7 @@ export class StructureRepositorySpecMock implements IStructureRepository {
         const cycle = this._structure.cycles.find((x) => x.id === id);
         return Promise.resolve(cycle);
     }
-    
+
     public getModule(portNum: number): Promise<ModuleModel> {
         const module = this._structure.getModules().find((x) => x.portNum === portNum);
         return Promise.resolve(module);
@@ -39,8 +39,8 @@ export class StructureRepositorySpecMock implements IStructureRepository {
         return Promise.resolve(structure);
     }
 
-     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-     public async getSequence(_id: string): Promise<SequenceModel> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    public async getSequence(_id: string): Promise<SequenceModel> {
         throw new Error('Method not implemented.');
     }
 }

@@ -1,10 +1,8 @@
 import { Injectable, Logger, Next } from '@nestjs/common';
-import Module from 'module';
 import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
-    ConditionType,
     ExecutableAction,
     ExecutableMode,
     ExecutableStatus,
@@ -23,6 +21,7 @@ export class ProcessService {
     public async execute(process: ProcessModel): Promise<boolean> {
         this._initializeProcess(process);
         await this._manageProcessMode(process);
+        process.cycle.status = ExecutableStatus.IN_PROCCESS;
         this._executeProcess(process);
         return true;
     }
@@ -35,7 +34,21 @@ export class ProcessService {
         return this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
     }
 
-    public async initialReset(process: ProcessModel): Promise<void> {
+    public async resetAllModules(): Promise<boolean> {
+        const processes = this.configurationService.getAllCyles();
+       
+
+        for (const key in processes) {
+            if (Object.prototype.hasOwnProperty.call(processes, key)) {
+                const process = processes[key];
+                await this._initialReset(process);
+            }
+        }
+
+        return true;
+    }
+
+    private async _initialReset(process: ProcessModel): Promise<void> {
         await process.cycle.reset();
         await this._processProgress(process.cycle.id, ExecutableAction.OFF);
     }
@@ -57,6 +70,7 @@ export class ProcessService {
     }
 
     private _executeProcess(process: ProcessModel): void {
+        this._processProgress(process.cycle.id, ExecutableAction.ON).then(() => true);
         process.instance = this._execute(process).subscribe(
             {
                 next: async () => {
@@ -91,8 +105,6 @@ export class ProcessService {
 
         return conflictedExecutable;
     }
-
-
 
     // eslint-disable-next-line max-lines-per-function
     private _execute(process: ProcessModel): Observable<boolean> {
@@ -150,12 +162,10 @@ export class ProcessService {
         }
 
         this._switchModule(currentData.pins, modules, 1);
-        this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration).then(() => true);
-
-        return true;
+        return this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration).then(() => true);
     }
 
-    private _switchModule(dataPins: number[], modules: ModuleModel[], action: number) {
+    private _switchModule(dataPins: number[], modules: ModuleModel[], action: number): void {
         dataPins.forEach((dataPin) => {
             try {
                 modules.find(x => x.portNum === dataPin).execute(action);
@@ -169,12 +179,9 @@ export class ProcessService {
     private _processProgress(id: string, action: ExecutableAction, duration?: number): Promise<string> {
         const seqFound = this.configurationService.sequences.find(seq => seq.id === id);
         const cycFound = this.configurationService.structure.cycles.find(cyc => cyc.id === id);
-        if (((seqFound && cycFound) || (!seqFound && !cycFound))) {
-            throw new StructureInvalidError();
-        }
         const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const dateNow = new Date();
-        const endedAt = action === ExecutableAction.ON ? dateNow.setMilliseconds(duration) : undefined;
+        const endedAt = action === ExecutableAction.ON && duration ? dateNow.setMilliseconds(duration) : undefined;
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         const data = { type, id, status, endedAt };
         if (type === ExecutableType.SEQUENCE) {
@@ -191,14 +198,6 @@ export class ProcessService {
 
     private static _ofNull<T>(): Observable<T> {
         return of(null as T);
-    }
-
-    public async resetAllModules(): Promise<boolean> {
-        const processes = this.configurationService.getAllCyles();
-        processes.forEach(async process => {
-            await this.initialReset(process);
-        });
-        return true;
     }
 
 }

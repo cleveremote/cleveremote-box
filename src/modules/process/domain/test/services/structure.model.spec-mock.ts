@@ -6,7 +6,7 @@ import { SequenceModel } from '@process/domain/models/sequence.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 
 // eslint-disable-next-line max-lines-per-function
-export function CreateStructure(): StructureModel {
+export function CreateStructure(isFalsy: number = 0): StructureModel {
 
 
     //declare modules ///////////////
@@ -121,11 +121,11 @@ export function CreateStructure(): StructureModel {
     irrigationSecteur5.duration = 10; //3 secondes
     irrigationSecteur5.modules = [pump1];
 
-    const falsy = new SequenceModel();
-    falsy.id = 'falsyxxx';
-    falsy.status = ExecutableStatus.STOPPED;
-    falsy.duration = 10; //3 secondes
-    falsy.modules = [pump, falsyModule];
+    const falsySequence = new SequenceModel();
+    falsySequence.id = null;
+    falsySequence.status = null;
+    falsySequence.duration = 10; //3 secondes
+    falsySequence.modules = [pump, falsyModule];
 
     const cycle = new CycleModel();
     cycle.id = '1';
@@ -142,8 +142,25 @@ export function CreateStructure(): StructureModel {
     cycle3.status = ExecutableStatus.STOPPED;
     cycle3.sequences = [irrigationSecteur1, irrigationSecteur5, irrigationSecteur5];
 
+    const cycle4 = new CycleModel();
+    cycle4.id = 'with_falsy_sequence';
+    cycle4.status = ExecutableStatus.STOPPED;
+    cycle4.sequences = [falsySequence];
+
+    const falsyInit = new CycleModel();
+    falsyInit.id = null;
+    falsyInit.status = ExecutableStatus.STOPPED;
+    falsyInit.sequences = [null];
+
     const structure = new StructureModel();
-    structure.cycles = [cycle, cycle2, cycle3];
+    if (isFalsy === 1) {
+        structure.cycles = [cycle, cycle2, cycle3, null];
+    } else if (isFalsy === 2) {
+        structure.cycles = [falsyInit];
+    } else {
+        structure.cycles = [cycle, cycle2, cycle3, cycle4];
+    }
+
 
     return structure;
 }

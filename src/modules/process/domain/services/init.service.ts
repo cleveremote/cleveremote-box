@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
     ConditionType,
     ExecutableAction,
@@ -11,18 +11,43 @@ import { ProcessService } from './execution.service';
 
 @Injectable()
 export class InitService {
-    public execQueue: ProcessModel[] = [];
     public constructor(
         private configurationService: ConfigurationService,
         private processService: ProcessService
     ) { }
 
-    public getConfiguration(): Promise<StructureModel> {
-        return this.configurationService.getConfiguration();
+    public initialize(): Promise<boolean> {
+        return this._loadConfiguration()
+            .then((_res: boolean) => _res ? this._resetAllModules() : false);
     }
 
-    public resetAllModules(): Promise<boolean> {
-        return this.processService.resetAllModules();
+
+    private _resetAllModules(): Promise<boolean> {
+
+        Logger.log('Start initialize processes...', 'initialization');
+        return this.processService.resetAllModules()
+            .then(() => {
+                Logger.log('processes initialized', 'initialization');
+                return true;
+            })
+            .catch((error) => {
+                Logger.error(`! initialize processes KO ${String(error)} `);
+                return false;
+            });
+    }
+
+    private _loadConfiguration(): Promise<boolean> {
+
+        Logger.log('Start loading configuration...', 'initialization');
+        return this.configurationService.getConfiguration()
+            .then(() => {
+                Logger.log('configuration loaded', 'initialization');
+                return true;
+            })
+            .catch((error) => {
+                Logger.error(`! loading configuration KO ${String(error)} `);
+                return false;
+            });
     }
 
 

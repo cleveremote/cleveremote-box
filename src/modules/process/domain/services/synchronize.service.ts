@@ -50,6 +50,7 @@ export class SynchronizeService {
             cycleToUpdate.name = data.name;
             cycleToUpdate.style = data.style;
             cycleToUpdate.description = data.description;
+            cycleToUpdate.maxDuration = data.maxDuration;
             data.sequences.forEach((seqData) => {
                 this._syncSequence(cycleToUpdate, seqData);
             })
@@ -60,9 +61,12 @@ export class SynchronizeService {
             newCycle.style = data.style;
             newCycle.description = data.description;
             newCycle.maxDuration = data.maxDuration;
+            newCycle.status = ExecutableStatus.STOPPED;
+            newCycle.progression = null;
             data.sequences.forEach((seqData) => {
                 this._syncSequence(newCycle, seqData);
-            })
+            });
+            structure.cycles.push(newCycle);
         }
     }
 
