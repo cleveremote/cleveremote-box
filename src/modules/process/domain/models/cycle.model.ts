@@ -29,20 +29,9 @@ export class CycleModel implements IExecutable {
     }
 
     public async reset(): Promise<boolean> {
-        // this.sequences.forEach(async (sequence) => {
-        //     await sequence.reset();
-        // });
         for (const sequence of this.sequences) {
             await sequence.reset();
-            console.log('reset', sequence.id);
         }
-        // for (const key in this.sequences) {
-        //     if (Object.prototype.hasOwnProperty.call(this.sequences, key)) {
-        //         const sequence = this.sequences[key];
-        //         await sequence.reset();
-        //     }
-        // }
-         console.log('finished',this.id);
         this.status = ExecutableStatus.STOPPED;
         return true;
     }

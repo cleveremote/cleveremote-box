@@ -87,9 +87,12 @@ export class ProcessService {
 
     private async _resetConflictedProcesses(process: ProcessModel): Promise<void> {
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
-        conflictedProcesses.forEach(async (proc) => {
+        // conflictedProcesses.forEach(async (proc) => {
+        //     await this.reset(proc);
+        // });
+        for (const proc of conflictedProcesses) {
             await this.reset(proc);
-        });
+        }
     }
 
     private async _getConflictedExecutables(process: ProcessModel): Promise<ProcessModel[]> {
