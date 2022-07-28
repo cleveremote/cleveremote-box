@@ -28,6 +28,7 @@ describe.only('Notification Service unit testing ', () => {
         const configurationService = new ConfigurationService(structureRepository);
         await configurationService.getConfiguration();
         notificationService = new ProcessService(configurationService, service);
+        await notificationService.resetAllModules();
     });
 
     it('Should execute process & check status IN_PROCESS/STOPPED', async () => {

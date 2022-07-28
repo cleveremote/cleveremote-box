@@ -21,26 +21,9 @@ export class InitService {
         return this.configurationService.getConfiguration();
     }
 
-    public async resetAllModules(): Promise<boolean> {
-        const processes = this._getAllCyles();
-        processes.forEach(async process => {
-            await this.processService.initialReset(process);
-        });
-        return true;
+    public resetAllModules(): Promise<boolean> {
+        return this.processService.resetAllModules();
     }
 
-    private _getAllCyles(): Array<ProcessModel> {
-        const cycles = this.configurationService.structure.cycles;
-        const AllProcesses: Array<ProcessModel> = [];
-        cycles.forEach(cycle => {
-            const process = new ProcessModel();
-            process.cycle = cycle;
-            process.action = ExecutableAction.OFF;
-            process.type = ConditionType.NOW;
-            process.function = 'string';
-            process.mode = ExecutableMode.NORMAL;
-            AllProcesses.push(process);
-        });
-        return AllProcesses;
-    }
+
 }

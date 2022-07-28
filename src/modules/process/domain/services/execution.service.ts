@@ -4,6 +4,7 @@ import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
+    ConditionType,
     ExecutableAction,
     ExecutableMode,
     ExecutableStatus,
@@ -26,12 +27,12 @@ export class ProcessService {
         return true;
     }
 
-    public async reset(process: ProcessModel): Promise<void> {
+    public async reset(process: ProcessModel): Promise<boolean> {
         const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
         this.processQueue[index].instance.unsubscribe();
         await process.cycle.reset();
         this.processQueue.splice(index, 1);
-        await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+        return this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
     }
 
     public async initialReset(process: ProcessModel): Promise<void> {
@@ -64,13 +65,6 @@ export class ProcessService {
                 error: async (_err) => {
                     Logger.debug(_err, 'execution');
                     await this.reset(process);
-                },
-                complete: () => {
-                    const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
-                    if (index > 0) {
-                        this.processQueue[index].instance.unsubscribe()
-                        this.processQueue.splice(index, 1);
-                    }
                 }
             }
         );
@@ -103,7 +97,7 @@ export class ProcessService {
     // eslint-disable-next-line max-lines-per-function
     private _execute(process: ProcessModel): Observable<boolean> {
         if (process.action === ExecutableAction.OFF) {
-            return from(this.reset(process)).pipe(map(() => true));
+            return from(this.reset(process));
         }
         const modules = process.cycle.getModules();
         const executionLst = process.cycle.getExecutionStructure(process.duration);
@@ -152,11 +146,11 @@ export class ProcessService {
 
         if (previousData.id) {
             this._switchModule(previousData.pins, modules, 0);
-            await this._processProgress(previousData.id, ExecutableAction.OFF);
+            this._processProgress(previousData.id, ExecutableAction.OFF).then(() => true);
         }
 
         this._switchModule(currentData.pins, modules, 1);
-        await this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration);
+        this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration).then(() => true);
 
         return true;
     }
@@ -197,6 +191,14 @@ export class ProcessService {
 
     private static _ofNull<T>(): Observable<T> {
         return of(null as T);
+    }
+
+    public async resetAllModules(): Promise<boolean> {
+        const processes = this.configurationService.getAllCyles();
+        processes.forEach(async process => {
+            await this.initialReset(process);
+        });
+        return true;
     }
 
 }
