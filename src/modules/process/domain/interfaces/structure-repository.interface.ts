@@ -1,6 +1,5 @@
 import { CycleModel } from '../models/cycle.model';
 import { ModuleModel } from '../models/module.model';
-import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
 
 export interface IStructureRepository {

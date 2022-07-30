@@ -1,20 +1,27 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
 import { Injectable } from '@nestjs/common';
+import { ProcessModule } from '@process/infrastructure/process.module';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
-import { ExecutableStatus } from '../interfaces/executable.interface';
+import { ConditionType, ExecutableAction, ExecutableMode, ExecutableStatus } from '../interfaces/executable.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.interface';
 import { CycleModel } from '../models/cycle.model';
 import { ModuleModel } from '../models/module.model';
+import { ProcessModel } from '../models/process.model';
+import { ScheduleModel } from '../models/schedule.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
-import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeSequenceModel } from '../models/synchronize.model';
+import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel } from '../models/synchronize.model';
 import { ConfigurationService } from './configuration.service';
+import { ProcessService } from './execution.service';
+import { ScheduleService } from './schedule.service';
 
 @Injectable()
 export class SynchronizeService {
     public constructor(private structureRepository: ConfigurationRepository,
-        private configurationService: ConfigurationService) {
+        private configurationService: ConfigurationService,
+        private processService: ProcessService,
+        private scheduleService: ScheduleService) {
     }
 
     public async synchronize(configuration: StructureModel): Promise<StructureModel> {
@@ -38,6 +45,48 @@ export class SynchronizeService {
         this._syncCycle(this.configurationService.structure, cycleData);
         await this.synchronize(this.configurationService.structure);
         return this.configurationService.structure.cycles.find(x => x.id === cycleData.id);
+    }
+
+    public async sychronizeSchedule(scheduleData: SynchronizeScheduleModel): Promise<CycleModel> {
+        this._syncSchedule(this.configurationService.structure, scheduleData);
+        await this.synchronize(this.configurationService.structure);
+        return this.configurationService.structure.cycles.find(x => x.id === scheduleData.cycleId);
+    }
+
+    private _syncSchedule(structure: StructureModel, data: SynchronizeScheduleModel): Promise<void> {
+        const parentCycle = structure.cycles.find((cycle) => cycle.id === data.cycleId);
+        console.log('parentCycle',parentCycle);
+        const scheduleToUpdate = parentCycle.schedules.find((sch) => sch.id === data.id);
+        if (scheduleToUpdate && data.shouldDelete) {
+            const index = parentCycle.schedules.findIndex(cy => cy.id === data.id);
+            this.scheduleService.deleteCronJob(data.id);
+            parentCycle.schedules.splice(index, 1);
+        } else if (scheduleToUpdate) {
+            scheduleToUpdate.name = data.name;
+            scheduleToUpdate.description = data.description;
+            scheduleToUpdate.cron = data.cron;
+            this.scheduleService.deleteCronJob(data.id);
+            return this._initializeProcess(parentCycle, scheduleToUpdate);
+        } else {
+            const scheduleModel = new ScheduleModel();
+            scheduleModel.id = data.id;
+            scheduleModel.name = data.id;
+            scheduleModel.description = data.id;
+            scheduleModel.cron = data.cron;
+            parentCycle.schedules.push(scheduleModel);
+            return this._initializeProcess(parentCycle, scheduleModel);
+        }
+    }
+
+    private async _initializeProcess(cycle: CycleModel, schedule: ScheduleModel): Promise<void> {
+        const processModel = new ProcessModel();
+        processModel.cycle = cycle;
+        processModel.action = ExecutableAction.ON;
+        processModel.type = ConditionType.NOW;
+        processModel.function = 'string';
+        processModel.mode = ExecutableMode.SCHEDULED;
+        processModel.schedule = schedule;
+        await this.processService.execute(processModel);
     }
 
     private _syncCycle(structure: StructureModel, data: SynchronizeCycleModel): void {
@@ -106,10 +155,6 @@ export class SynchronizeService {
             sequenceToUpdate.modules.splice(index, 1);
             return;
         } else if (moduleToUpdate) {
-            // moduleToUpdate.id = data.id;
-            // moduleToUpdate.name = data.name;
-            // moduleToUpdate.description = data.description;
-            // moduleToUpdate.duration = data.duratio
             return;
         }
         const newModule = new ModuleModel();

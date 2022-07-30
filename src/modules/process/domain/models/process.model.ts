@@ -1,11 +1,11 @@
-import { delay, from, map, mergeMap, Observable, of, Subscription, tap } from 'rxjs';
+import { Subscription } from 'rxjs';
 import {
     ExecutableAction,
     ExecutableMode,
     ConditionType,
-    IExecutable,
-    ExecutableStatus
+    IExecutable
 } from '../interfaces/executable.interface';
+import { ScheduleModel } from './schedule.model';
 
 export class ProcessModel {
     public cycle: IExecutable;
@@ -15,6 +15,5 @@ export class ProcessModel {
     public mode: ExecutableMode;
     public instance: Subscription;
     public duration?: number;
-
-    
+    public schedule: ScheduleModel;
 }

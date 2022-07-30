@@ -7,8 +7,9 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ConfigurationPartialSynchronizeUC } from '@process/use-cases/configuration-partial-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
+import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
-import { CycleSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, ScheduleSynchronizeDTO } from '../dto/synchronize.dto';
 
 @Controller()
 export class ConfigurationController {
@@ -29,6 +30,13 @@ export class ConfigurationController {
     public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<CycleModel> {
         const uc = new ConfigurationPartialSynchronizeUC(this._synchronizeService);
         const input = CycleSynchronizeDTO.mapToCycleModel(cycleSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern('synchronize/schedule')
+    public async synchroniseSchedule(@Payload() scheduleSynchronizeDTO: ScheduleSynchronizeDTO): Promise<CycleModel> {
+        const uc = new ScheduleSynchronizeUC(this._synchronizeService);
+        const input = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSynchronizeDTO);
         return uc.execute(input);
     }
 

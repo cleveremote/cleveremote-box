@@ -4,26 +4,26 @@ import { Socket, io } from 'socket.io-client';
 
 @Injectable()
 export class SocketIoClientProvider {
-  @Inject(ConfigService)
-  private readonly config: ConfigService;
+    @Inject(ConfigService)
+    private readonly _config: ConfigService;
 
-  private socket: Socket;
+    private _socket: Socket;
 
-  private connect() {
-    this.socket = io(this.config.get('SOCKET_SERVER'), {
-      extraHeaders: {
-        "myTestBox": "1234"
-      }
-    });
-    
-    
-    return this.socket;
-  }
+    private _connect(): Socket {
+        this._socket = io(this._config.get('SOCKET_SERVER'), {
+            extraHeaders: {
+                myTestBox: '1234'
+            }
+        });
 
-  getSocket = () => {
-    if (!this.socket) {
-      return this.connect();
+
+        return this._socket;
     }
-    return this.socket;
-  };
+
+    public getSocket = (): Socket => {
+        if (!this._socket) {
+            return this._connect();
+        }
+        return this._socket;
+    };
 }

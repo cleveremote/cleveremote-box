@@ -1,10 +1,4 @@
-import { ConditionType, ExecutableAction, ExecutableMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
-import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
-import { CycleModel } from '@process/domain/models/cycle.model';
-import { ProcessModel } from '@process/domain/models/process.model';
-import { ModuleModel } from '@process/domain/models/module.model';
-import { SequenceModel } from '@process/domain/models/sequence.model';
-import { CycleSynchronizeDTO, SequenceSync } from '@process/infrastructure/dto/synchronize.dto';
+import { CronSync, CycleSynchronizeDTO, ScheduleSynchronizeDTO, SequenceSync } from '@process/infrastructure/dto/synchronize.dto';
 
 // eslint-disable-next-line max-lines-per-function
 export function CreateSynchronizePartialDto(): CycleSynchronizeDTO {
@@ -80,6 +74,47 @@ export function CreateDelSeqAndDelModuleDto(): CycleSynchronizeDTO {
     cycleSynchronizeDTO.sequences = [irrigationSecteur1, irrigationSecteur2];
 
     return cycleSynchronizeDTO;
+}
+
+export function CreateNewScheduleDto(update: boolean = false): ScheduleSynchronizeDTO {
+
+    const scheduleSynchronizeDTO: ScheduleSynchronizeDTO = new ScheduleSynchronizeDTO();
+    scheduleSynchronizeDTO.id = 'schedule1';
+    scheduleSynchronizeDTO.cycleId = '1';
+    scheduleSynchronizeDTO.name = update ? 'name-schedule1122_updated' : 'name-schedule1';
+    scheduleSynchronizeDTO.description = 'descritption schedule1';
+    scheduleSynchronizeDTO.cron = new CronSync();
+    const dateNow = new Date();
+    dateNow.setMilliseconds(dateNow.getMilliseconds() + (update ? 5000 : 2000))
+    scheduleSynchronizeDTO.cron.date = dateNow;
+    scheduleSynchronizeDTO.cron.pattern = null;
+    //{ date: (new Date()).setSeconds(2), pattern:'2 * * * * * * *' };
+
+    return scheduleSynchronizeDTO;
+}
+
+export function CreateNewScheduleDtowithPattern(): ScheduleSynchronizeDTO {
+
+    const scheduleSynchronizeDTO: ScheduleSynchronizeDTO = new ScheduleSynchronizeDTO();
+    scheduleSynchronizeDTO.id = 'schedule1';
+    scheduleSynchronizeDTO.cycleId = '1';
+    scheduleSynchronizeDTO.name = 'name-schedule1';
+    scheduleSynchronizeDTO.description = 'descritption schedule1';
+    scheduleSynchronizeDTO.cron = new CronSync();
+    scheduleSynchronizeDTO.cron.pattern = '2 * * * * *';
+
+    return scheduleSynchronizeDTO;
+}
+
+
+export function CreateScheduleDeleteDto(): ScheduleSynchronizeDTO {
+
+    const scheduleSynchronizeDTO: ScheduleSynchronizeDTO = new ScheduleSynchronizeDTO();
+    scheduleSynchronizeDTO.id = 'deleted_schedule1';
+    scheduleSynchronizeDTO.cycleId = '1';
+
+
+    return scheduleSynchronizeDTO;
 }
 
 

@@ -1,10 +1,24 @@
+import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { ProcessService } from '@process/domain/services/execution.service';
+import { ScheduleService } from '@process/domain/services/schedule.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationSynchronizeDTO } from '@process/infrastructure/dto/configuration-synchronize.dto';
-import { CycleSynchronizeDTO } from '@process/infrastructure/dto/synchronize.dto';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
+import { CycleSynchronizeDTO, ScheduleSynchronizeDTO } from '@process/infrastructure/dto/synchronize.dto';
+import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
+import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
-import { CreateDelSeqAndDelModuleDto, CreateSynchronizePartialDeleteDto, CreateSynchronizePartialDto, CreateSynchronizePartialUpdateDto } from './synchronize.dto.spec-mock';
+import {
+    CreateDelSeqAndDelModuleDto,
+    CreateNewScheduleDto,
+    CreateNewScheduleDtowithPattern,
+    CreateScheduleDeleteDto,
+    CreateSynchronizePartialDeleteDto,
+    CreateSynchronizePartialDto,
+    CreateSynchronizePartialUpdateDto
+} from './synchronize.dto.spec-mock';
 
 
 describe('Synchronize Service unit testing ', () => {
@@ -15,10 +29,23 @@ describe('Synchronize Service unit testing ', () => {
     });
 
     beforeEach(async () => {
+
+        const module: TestingModule = await Test.createTestingModule({
+            imports: [
+                ConfigModule.forRoot(),
+                ScheduleModule.forRoot()],
+            providers: [SocketIoClientProxyService, SocketIoClientProvider]
+        }).compile();
+
+        const schedulerRegistry: SchedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
+        const service: SocketIoClientProxyService = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
+        const scheduleService = new ScheduleService(schedulerRegistry);
+
         const structureRepository = new StructureRepositorySpecMock();
         configurationService = new ConfigurationService(structureRepository);
+        const processService = new ProcessService(configurationService, service, scheduleService);
         await configurationService.getConfiguration();
-        synchronizeService = new SynchronizeService(structureRepository, configurationService);
+        synchronizeService = new SynchronizeService(structureRepository, configurationService, processService, scheduleService);
     });
 
     it('Should save configuration', async () => {
@@ -58,7 +85,7 @@ describe('Synchronize Service unit testing ', () => {
         const configModel = await synchronizeService.sychronizePartial(configurationModel);
 
         //THEN
-       expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
     });
 
     it('Should delete cycle ', async () => {
@@ -68,7 +95,7 @@ describe('Synchronize Service unit testing ', () => {
         const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
 
         //WHEN
-        const configModel = await synchronizeService.sychronizePartial(configurationModel);
+        await synchronizeService.sychronizePartial(configurationModel);
 
         //THEN
         expect(configurationService.structure.cycles.find(x => x.id === '1')).not.toBeDefined();
@@ -82,11 +109,84 @@ describe('Synchronize Service unit testing ', () => {
         const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
 
         //WHEN
-        const configModel = await synchronizeService.sychronizePartial(configurationModel);
+        await synchronizeService.sychronizePartial(configurationModel);
 
         //THEN
         expect(configurationService.sequences.find(x => x.id === '12')).not.toBeDefined();
         const module = configurationService.sequences.find(x => x.id === '11').modules.find(x => x.portNum === 26);
         expect(module).not.toBeDefined();
     });
+
+    it('Should save new schedule', async () => {
+
+        //GIVEN
+        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
+        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+
+        //WHEN
+        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        //THEN
+        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+    });
+
+
+    it('Should delete schedule ', async () => {
+
+        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
+        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+
+        //WHEN
+        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+
+        //THEN
+        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+
+        //GIVEN
+        const scheduledtodelete: ScheduleSynchronizeDTO = CreateScheduleDeleteDto();
+        const scheduleSyncModeldelete = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledtodelete);
+
+        //WHEN
+        await synchronizeService.sychronizeSchedule(scheduleSyncModeldelete);
+
+        //THEN
+        expect(configurationService.structure.cycles.find(x => x.id === '1').schedules[0]).not.toBeDefined();
+    });
+
+    it('Should update schedule ', async () => {
+
+        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
+        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+
+        //WHEN
+        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+
+        //THEN
+        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+
+        //GIVEN
+        const scheduledtodelete: ScheduleSynchronizeDTO = CreateNewScheduleDto(true);
+        const scheduleSyncModeldelete = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledtodelete);
+
+        //WHEN
+        await synchronizeService.sychronizeSchedule(scheduleSyncModeldelete);
+
+        //THEN
+        expect(configurationService.structure.cycles.find(x => x.id === '1').schedules[0].name).toEqual('name-schedule1122_updated');
+    });
+
+    it('Should save new schedule', async () => {
+
+        //GIVEN
+        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDtowithPattern();
+        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+
+        //WHEN
+        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        //THEN
+        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+    });
+    
+
 });

@@ -1,8 +1,8 @@
 /* eslint-disable max-lines-per-function */
 
-import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
+import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
 import { Type } from 'class-transformer';
-import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsDate, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 export class SequenceSync {
     @IsString()
     @IsNotEmpty()
@@ -84,3 +84,41 @@ export class CycleSynchronizeDTO {
 
 }
 
+export class CronSync {
+    @IsDate()
+    public date: Date;
+    @IsString()
+    public pattern: string;
+}
+export class ScheduleSynchronizeDTO {
+    @IsNotEmpty()
+    public id: string;
+    @IsString()
+    public name?: string;
+    @IsString()
+    public description: string;
+    @IsString()
+    public cycleId: string;
+    @Type(() => CronSync)
+    public cron: CronSync;
+
+
+    public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): SynchronizeScheduleModel {
+        const scheduleModel = new SynchronizeScheduleModel();
+
+        const splittedScheduleId = scheduleSynchronizeDTO.id.split('_');
+        scheduleModel.shouldDelete = splittedScheduleId.length > 1 && splittedScheduleId[0] === 'deleted';
+        scheduleModel.id = splittedScheduleId[1] || splittedScheduleId[0];
+        scheduleModel.cycleId = scheduleSynchronizeDTO.cycleId;
+        if (scheduleModel.shouldDelete) {
+            return scheduleModel;
+        }
+
+        scheduleModel.name = scheduleSynchronizeDTO.name;
+        scheduleModel.description = scheduleSynchronizeDTO.description;
+        scheduleModel.cron = new CronSync();
+        scheduleModel.cron.date = scheduleSynchronizeDTO.cron.date;
+        scheduleModel.cron.pattern = scheduleSynchronizeDTO.cron.pattern;
+        return scheduleModel;
+    }
+}

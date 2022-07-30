@@ -26,7 +26,7 @@ export class SocketIoClientStrategy extends Server
 
         this.messageHandlers.forEach((handler, pattern) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.client.on(pattern, async (data: any,callb) => {
+            this.client.on(pattern, async (data: any, callb) => {
                 callb(await handler(data, this.client));
             });
         });

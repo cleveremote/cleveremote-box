@@ -1,4 +1,4 @@
-import { Injectable, Logger, Next } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
@@ -10,42 +10,43 @@ import {
 } from '../interfaces/executable.interface';
 import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
+import { ScheduleModel } from '../models/schedule.model';
 import { ConfigurationService } from './configuration.service';
+import { ScheduleService } from './schedule.service';
 
 @Injectable()
 export class ProcessService {
     public processQueue: ProcessModel[] = [];
-    public constructor(private configurationService: ConfigurationService,
-        private wsService: SocketIoClientProxyService) { }
+    public constructor(
+        private configurationService: ConfigurationService,
+        private wsService: SocketIoClientProxyService,
+        private scheduleService: ScheduleService
+    ) { }
 
-    public async execute(process: ProcessModel): Promise<boolean> {
+    public async execute(process: ProcessModel): Promise<void> {
         this._initializeProcess(process);
-        await this._manageProcessMode(process);
-        process.cycle.status = ExecutableStatus.IN_PROCCESS;
-        this._executeProcess(process);
-        return true;
+        return this._manageProcessMode(process);
     }
 
-    public async reset(process: ProcessModel): Promise<boolean> {
+    public async reset(process: ProcessModel): Promise<void> {
         const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
-        this.processQueue[index].instance.unsubscribe();
-        await process.cycle.reset();
-        this.processQueue.splice(index, 1);
-        return this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
+        if (index > -1) {
+            this.processQueue[index].instance.unsubscribe();
+            await process.cycle.reset();
+            this.processQueue.splice(index, 1);
+            await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
+        }
+
     }
 
-    public async resetAllModules(): Promise<boolean> {
+    public async resetAllModules(): Promise<void> {
         const processes = this.configurationService.getAllCyles();
-       
-
         for (const key in processes) {
             if (Object.prototype.hasOwnProperty.call(processes, key)) {
                 const process = processes[key];
                 await this._initialReset(process);
             }
         }
-
-        return true;
     }
 
     private async _initialReset(process: ProcessModel): Promise<void> {
@@ -64,13 +65,32 @@ export class ProcessService {
     private async _manageProcessMode(process: ProcessModel): Promise<void> {
         if (process.mode === ExecutableMode.FORCE) {
             await this._resetConflictedProcesses(process);
-        } else if (process.mode === ExecutableMode.QUEUED) {
+            this._executeProcess(process);
+        }
+        if (process.mode === ExecutableMode.QUEUED) {
             throw new Error('Method not implemented.');
         }
+        if (process.mode === ExecutableMode.SCHEDULED) {
+            this._manageSchedule(process);
+        }
+
+    }
+
+    private _manageSchedule(process: ProcessModel): void {
+        const scheduleModel = new ScheduleModel();
+        const schedule = process.schedule;
+        scheduleModel.id = schedule.id;
+        scheduleModel.name = schedule.name;
+        scheduleModel.description = schedule.description;
+        scheduleModel.methode = (): void => {
+            this._executeProcess(process);
+        };
+        scheduleModel.cron = schedule.cron;
+        this.scheduleService.createSchedule(scheduleModel);
     }
 
     private _executeProcess(process: ProcessModel): void {
-        this._processProgress(process.cycle.id, ExecutableAction.ON).then(() => true);
+
         process.instance = this._execute(process).subscribe(
             {
                 next: async () => {
@@ -82,14 +102,10 @@ export class ProcessService {
                 }
             }
         );
-        this.processQueue.push(process);
     }
 
     private async _resetConflictedProcesses(process: ProcessModel): Promise<void> {
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
-        // conflictedProcesses.forEach(async (proc) => {
-        //     await this.reset(proc);
-        // });
         for (const proc of conflictedProcesses) {
             await this.reset(proc);
         }
@@ -110,7 +126,7 @@ export class ProcessService {
     }
 
     // eslint-disable-next-line max-lines-per-function
-    private _execute(process: ProcessModel): Observable<boolean> {
+    private _execute(process: ProcessModel): Observable<void> {
         if (process.action === ExecutableAction.OFF) {
             return from(this.reset(process));
         }
@@ -119,7 +135,12 @@ export class ProcessService {
 
         let obs: Observable<{ sequenceId: string; portNums: number[]; duration: number }> =
             ProcessService._ofNull<{ sequenceId: string; portNums: number[]; duration: number }>()
-                .pipe(tap(() => { process.cycle.status = ExecutableStatus.IN_PROCCESS }));
+                .pipe(tap(async () => {
+                    process.cycle.status = ExecutableStatus.IN_PROCCESS;
+                    this.processQueue.push(process);
+                    await this._processProgress(process.cycle.id, ExecutableAction.ON);
+
+                }));
 
         executionLst.forEach((sequence, index) => {
             const chainObs = this._createExecObs(executionLst[index - 1], sequence, modules);
@@ -131,9 +152,8 @@ export class ProcessService {
                 lastPins.portNums.forEach((previousPin) => {
                     modules.find(x => x.portNum === previousPin).execute(0);
                 });
-                return from(this._processProgress(lastPins.sequenceId, ExecutableAction.OFF));
-            }),
-            map(() => true)
+                return from(this._processProgress(lastPins.sequenceId, ExecutableAction.OFF)).pipe(mergeMap(() => of(null)));
+            })
         );
     }
 
@@ -156,8 +176,8 @@ export class ProcessService {
         );
     }
 
-    private async _switchProcess(previousData: { id: string, pins: number[], duration: number },
-        currentData: { id: string, pins: number[], duration: number }, modules: ModuleModel[]): Promise<boolean> {
+    private async _switchProcess(previousData: { id: string; pins: number[]; duration: number },
+        currentData: { id: string; pins: number[]; duration: number }, modules: ModuleModel[]): Promise<boolean> {
 
         if (previousData.id) {
             this._switchModule(previousData.pins, modules, 0);
@@ -184,7 +204,7 @@ export class ProcessService {
         const cycFound = this.configurationService.structure.cycles.find(cyc => cyc.id === id);
         const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const dateNow = new Date();
-        const endedAt = action === ExecutableAction.ON && duration ? dateNow.setMilliseconds(duration) : undefined;
+        const endedAt = action === ExecutableAction.ON && duration ? dateNow.setMilliseconds(dateNow.getMilliseconds() + duration) : undefined;
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         const data = { type, id, status, endedAt };
         if (type === ExecutableType.SEQUENCE) {

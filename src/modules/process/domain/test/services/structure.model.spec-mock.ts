@@ -2,6 +2,7 @@ import { ExecutableStatus } from '@process/domain/interfaces/executable.interfac
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ModuleModel } from '@process/domain/models/module.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 
@@ -127,10 +128,18 @@ export function CreateStructure(isFalsy: number = 0): StructureModel {
     falsySequence.duration = 10; //3 secondes
     falsySequence.modules = [pump, falsyModule];
 
+    const schedule = new ScheduleModel();
+    schedule.id = '1';
+    schedule.cycleId = '1';
+    schedule.name = 'schedule';
+    schedule.description = 'schedule';
+    schedule.cron = { pattern: '2 * * * * *' };
+
     const cycle = new CycleModel();
     cycle.id = '1';
     cycle.status = ExecutableStatus.STOPPED;
     cycle.sequences = [irrigationSecteur1, irrigationSecteur2];
+    //cycle.schedules = [schedule];
 
     const cycle2 = new CycleModel();
     cycle2.id = '2';

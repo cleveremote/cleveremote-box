@@ -1,5 +1,6 @@
 import { CycleModel } from './cycle.model';
 import { ModuleModel } from './module.model';
+import { ScheduleModel } from './schedule.model';
 import { SequenceModel } from './sequence.model';
 
 export class SynchronizeModuleModel extends ModuleModel {
@@ -13,5 +14,9 @@ export class SynchronizeSequenceModel extends SequenceModel {
 
 export class SynchronizeCycleModel extends CycleModel {
     public sequences: SynchronizeSequenceModel[] = [];
+    public shouldDelete: boolean;
+}
+
+export class SynchronizeScheduleModel extends ScheduleModel {
     public shouldDelete: boolean;
 }

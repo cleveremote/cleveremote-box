@@ -13,7 +13,7 @@ export class AppModule implements OnModuleInit {
         private readonly initService: InitService
     ) { }
 
-    public onModuleInit(): Promise<boolean> {
+    public onModuleInit(): Promise<void> {
         return this.initService.initialize();
     }
 }

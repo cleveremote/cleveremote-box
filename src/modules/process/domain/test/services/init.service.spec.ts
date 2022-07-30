@@ -7,22 +7,30 @@ import { InitService } from '@process/domain/services/init.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
+import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
+import { ScheduleService } from '@process/domain/services/schedule.service';
 
 describe.only('Notification Service unit testing ', () => {
     let configurationService: ConfigurationService;
     let processService: ProcessService;
     let initService: InitService;
     let service: SocketIoClientProxyService;
+    let scheduleService: ScheduleService;
     afterEach(() => {
         jest.resetAllMocks();
     });
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
-            imports: [ConfigModule.forRoot()],
+            imports: [
+                ConfigModule.forRoot(),
+                ScheduleModule.forRoot()
+            ],
             providers: [SocketIoClientProxyService, SocketIoClientProvider]
         }).compile();
 
+        const schedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
+        scheduleService = new ScheduleService(schedulerRegistry);
         service = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
 
     });
@@ -32,14 +40,13 @@ describe.only('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock();
         configurationService = new ConfigurationService(structureRepository);
-        processService = new ProcessService(configurationService, service);
+        processService = new ProcessService(configurationService, service, scheduleService);
         initService = new InitService(configurationService, processService);
 
         //WHEN
-        const isSuccess = await initService.initialize();
+        await initService.initialize();
 
         //THEN
-        expect(isSuccess).toBeTruthy();
         expect(configurationService.structure).toBeDefined();
         configurationService.structure.cycles.forEach((cycle) => {
             expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
@@ -52,7 +59,7 @@ describe.only('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock(1);
         configurationService = new ConfigurationService(structureRepository);
-        processService = new ProcessService(configurationService, service);
+        processService = new ProcessService(configurationService, service, scheduleService);
         initService = new InitService(configurationService, processService);
 
         //WHEN
@@ -68,7 +75,7 @@ describe.only('Notification Service unit testing ', () => {
         //GIVEN
         const structureRepository = new StructureRepositorySpecMock(2);
         configurationService = new ConfigurationService(structureRepository);
-        processService = new ProcessService(configurationService, service);
+        processService = new ProcessService(configurationService, service, scheduleService);
         initService = new InitService(configurationService, processService);
 
         //WHEN

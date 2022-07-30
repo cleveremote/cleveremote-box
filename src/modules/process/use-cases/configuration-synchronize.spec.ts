@@ -1,6 +1,5 @@
 import { MockClass } from '@framework/utils/test.utils';
 import { StructureModel } from '@process/domain/models/structure.model';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationSynchronizeUC } from './configuration-synchronize.uc';
 

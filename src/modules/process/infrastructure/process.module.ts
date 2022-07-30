@@ -9,10 +9,12 @@ import { ConfigurationRepository } from './repositories/configuration.repository
 import { ExecutionController } from './controllers/execution.controller';
 import { InitService } from '@process/domain/services/init.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
-
-@Module({ 
+import { ScheduleModule } from '@nestjs/schedule';
+import { ScheduleService } from '@process/domain/services/schedule.service';
+@Module({
     imports: [
-        ConfigModule.forRoot()
+        ConfigModule.forRoot(),
+        ScheduleModule.forRoot()
     ],
     controllers: [
         ConfigurationController,
@@ -25,7 +27,8 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
         SocketIoClientProvider,
         SocketIoClientProxyService,
         InitService,
-        SynchronizeService
+        SynchronizeService,
+        ScheduleService
     ],
     exports: [
         ProcessService,

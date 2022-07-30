@@ -1,8 +1,9 @@
 import {
     ExecutableStatus,
-    IExecutable,
+    IExecutable
 } from '../interfaces/executable.interface';
 import { ModuleModel } from './module.model';
+import { ScheduleModel } from './schedule.model';
 import { SequenceModel } from './sequence.model';
 
 export class CycleModel implements IExecutable {
@@ -14,6 +15,7 @@ export class CycleModel implements IExecutable {
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public progression?: { startedAt: Date; duration: number };
     public sequences: SequenceModel[] = [];
+    public schedules: ScheduleModel[] = [];
 
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];
@@ -28,12 +30,11 @@ export class CycleModel implements IExecutable {
         return !!this.getModules().find(x => x.portNum === module.portNum);
     }
 
-    public async reset(): Promise<boolean> {
+    public async reset(): Promise<void> {
         for (const sequence of this.sequences) {
             await sequence.reset();
         }
         this.status = ExecutableStatus.STOPPED;
-        return true;
     }
 
     public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number }[] {

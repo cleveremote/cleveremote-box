@@ -41,9 +41,9 @@ export class SocketIoClientProxyService extends ClientProxy {
         });
     }
     /* istanbul ignore next */
-    public publish(
-        packet: ReadPacket<any>,
-        callback: (packet: WritePacket<any>) => void,
+    public publish<T>(
+        packet: ReadPacket<T>,
+        callback: (packet: WritePacket<T>) => void
     ): () => void {
         console.log('message:', packet);
 

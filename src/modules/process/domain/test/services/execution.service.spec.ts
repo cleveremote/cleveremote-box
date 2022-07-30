@@ -1,14 +1,15 @@
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotSwitchError } from '@process/domain/errors/not-switch.error';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
 import { ExecutableAction, ExecutableMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithFalsySequence, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
+import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
+import { ScheduleService } from '@process/domain/services/schedule.service';
+import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 
 describe('Notification Service unit testing ', () => {
     let notificationService: ProcessService;
@@ -19,15 +20,20 @@ describe('Notification Service unit testing ', () => {
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
-            imports: [ConfigModule.forRoot()],
+            imports: [
+                ConfigModule.forRoot(),
+                ScheduleModule.forRoot()],
             providers: [SocketIoClientProxyService, SocketIoClientProvider]
         }).compile();
 
         const service: SocketIoClientProxyService = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
+        const schedulerRegistry: SchedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
+
+        const scheduleService = new ScheduleService(schedulerRegistry);
         const structureRepository = new StructureRepositorySpecMock();
         const configurationService = new ConfigurationService(structureRepository);
         await configurationService.getConfiguration();
-        notificationService = new ProcessService(configurationService, service);
+        notificationService = new ProcessService(configurationService, service, scheduleService);
         await notificationService.resetAllModules();
     });
 
@@ -36,11 +42,10 @@ describe('Notification Service unit testing ', () => {
         const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
-        const isSuccess = await notificationService.execute(execution);
+        await notificationService.execute(execution);
 
         //THEN
         expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-        expect(isSuccess).toBeTruthy();
 
         //THEN
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -53,14 +58,12 @@ describe('Notification Service unit testing ', () => {
         const execution2 = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.OFF);
 
         //WHEN
-        const isSuccess = await notificationService.execute(execution);
+        await notificationService.execute(execution);
 
         //THEN
-        expect(isSuccess).toBeTruthy();
         expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-        const isSuccess2 = await notificationService.execute(execution2);
-        expect(isSuccess2).toBeTruthy();
+        await notificationService.execute(execution2);
 
         await new Promise(resolve => setTimeout(resolve, 1000));
         //THEN
@@ -75,13 +78,11 @@ describe('Notification Service unit testing ', () => {
         const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
-        const isSuccess = await notificationService.execute(execution);
+        await notificationService.execute(execution);
         //THEN
         expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-        expect(isSuccess).toBeTruthy();
 
-        const isSuccess2 = await notificationService.execute(execution2);
-        expect(isSuccess2).toBeTruthy();
+        await notificationService.execute(execution2);
         expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
 
         //WAIT
@@ -109,17 +110,14 @@ describe('Notification Service unit testing ', () => {
         const execution3 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
-        const isSuccess = await notificationService.execute(execution);
+        await notificationService.execute(execution);
         //THEN
         expect(execution.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-        expect(isSuccess).toBeTruthy();
 
-        const isSuccess2 = await notificationService.execute(execution2);
-        expect(isSuccess2).toBeTruthy();
+        await notificationService.execute(execution2);
         expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
 
-        const isSuccess3 = await notificationService.execute(execution3);
-        expect(isSuccess3).toBeTruthy();
+        await notificationService.execute(execution3);
         expect(execution2.cycle.status).toEqual(ExecutableStatus.IN_PROCCESS); // because execution2 === execution3
 
         //WAIT
@@ -141,12 +139,11 @@ describe('Notification Service unit testing ', () => {
         const execution = CreateExecutionCycleWithWrongModuleConfig(ExecutableMode.FORCE, ExecutableAction.ON);
 
         //WHEN
-        const isSuccess = await notificationService.execute(execution);
+        await notificationService.execute(execution);
 
         //THEN
         await new Promise(resolve => setTimeout(resolve, 1000));
-        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED)
-        expect(isSuccess).toBeTruthy();
+        expect(execution.cycle.status).toEqual(ExecutableStatus.STOPPED);
     });
 
 });

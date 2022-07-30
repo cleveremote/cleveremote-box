@@ -35,7 +35,7 @@ export class ModuleModel {
     }
 
     public execute(action: number): void {
-       if (this.instance.direction() === GPIODirection.OUT) {
+        if (this.instance.direction() === GPIODirection.OUT) {
             this.instance.writeSync(action as BinaryValue);
             this.status = action === 1 ? ModuleStatus.ON : ModuleStatus.OFF;
         }

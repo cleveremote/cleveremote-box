@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
 import { ConditionType, ExecutableAction, ExecutableMode } from '../interfaces/executable.interface';
-import { CycleModel } from '../models/cycle.model';
 import { ProcessModel } from '../models/process.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';

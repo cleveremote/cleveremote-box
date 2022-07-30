@@ -15,7 +15,8 @@ export enum ExecutableAction {
 export enum ExecutableMode {
     NORMAL = 'NORMAL',
     FORCE = 'FORCE',
-    QUEUED = 'QUEUED'
+    QUEUED = 'QUEUED',
+    SCHEDULED = 'SCHEDULED'
 }
 
 export enum ConditionType {
@@ -40,7 +41,7 @@ export interface IExecutable {
     id: string;
     status: ExecutableStatus;
     sequences: SequenceModel[];
-    reset(): Promise<boolean>;
+    reset(): Promise<void>;
     getModules(): ModuleModel[];
     exists(module: ModuleModel): boolean;
     getExecutionStructure(duration: number): { sequenceId: string; portNums: number[]; duration: number }[];

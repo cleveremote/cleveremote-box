@@ -9,8 +9,8 @@ describe('Process use case test', () => {
         const processService = MockClass(ProcessService);
         jest.spyOn(processService, 'execute')
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            .mockImplementation((_process: ProcessModel): Promise<boolean> =>
-                Promise.resolve().then(() => true));
+            .mockImplementation((_process: ProcessModel): Promise<void> =>
+                Promise.resolve());
         const processModel = new ProcessModel();
 
         // WHEN
@@ -22,5 +22,5 @@ describe('Process use case test', () => {
         expect(processService.execute).toBeTruthy();
         expect(processService.execute).toHaveBeenCalledTimes(1);
     });
-    
+
 });

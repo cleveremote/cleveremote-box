@@ -1,5 +1,4 @@
 import { StructureModel } from '@process/domain/models/structure.model';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**

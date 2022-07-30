@@ -1,11 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-    ConditionType,
-    ExecutableAction,
-    ExecutableMode
-} from '../interfaces/executable.interface';
-import { ProcessModel } from '../models/process.model';
-import { StructureModel } from '../models/structure.model';
 import { ConfigurationService } from './configuration.service';
 import { ProcessService } from './execution.service';
 
@@ -16,39 +9,31 @@ export class InitService {
         private processService: ProcessService
     ) { }
 
-    public initialize(): Promise<boolean> {
+    public initialize(): Promise<void> {
         return this._loadConfiguration()
-            .then((_res: boolean) => _res ? this._resetAllModules() : false);
+            .then(() => this._resetAllModules())
+            .catch((error) => {
+                Logger.error(`! initialization failed ${String(error)} `, 'initialization');
+            })
     }
 
 
-    private _resetAllModules(): Promise<boolean> {
+    private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes...', 'initialization');
         return this.processService.resetAllModules()
             .then(() => {
                 Logger.log('processes initialized', 'initialization');
-                return true;
             })
-            .catch((error) => {
-                Logger.error(`! initialize processes KO ${String(error)} `);
-                return false;
-            });
     }
 
-    private _loadConfiguration(): Promise<boolean> {
+    private _loadConfiguration(): Promise<void> {
 
         Logger.log('Start loading configuration...', 'initialization');
         return this.configurationService.getConfiguration()
             .then(() => {
                 Logger.log('configuration loaded', 'initialization');
-                return true;
-            })
-            .catch((error) => {
-                Logger.error(`! loading configuration KO ${String(error)} `);
-                return false;
             });
     }
-
 
 }

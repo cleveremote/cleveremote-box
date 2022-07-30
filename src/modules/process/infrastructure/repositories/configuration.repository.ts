@@ -11,9 +11,6 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class ConfigurationRepository implements IStructureRepository {
 
-    public constructor() {
-    }
-
     public async getStructure(): Promise<StructureModel> {
         const structureEntity = new StructureEntity();
         structureEntity.configuration = await fs.readFile('./box.cfg', { encoding: 'utf8' });

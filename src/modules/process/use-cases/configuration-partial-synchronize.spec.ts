@@ -1,11 +1,7 @@
 import { MockClass } from '@framework/utils/test.utils';
-import { StructureModel } from '@process/domain/models/structure.model';
 import { SynchronizeCycleModel } from '@process/domain/models/synchronize.model';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationPartialSynchronizeUC } from './configuration-partial-synchronize.uc';
-import { ConfigurationSynchronizeUC } from './configuration-synchronize.uc';
-
 describe('Process use case test', () => {
     it('Should execute partial sync and return a response dto', async () => {
         // GIVEN
