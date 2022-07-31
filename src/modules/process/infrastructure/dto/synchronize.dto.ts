@@ -98,6 +98,7 @@ export class ScheduleSynchronizeDTO {
     @IsString()
     public description: string;
     @IsString()
+    @IsNotEmpty()
     public cycleId: string;
     @Type(() => CronSync)
     public cron: CronSync;

@@ -82,7 +82,8 @@ export class ProcessService {
         scheduleModel.id = schedule.id;
         scheduleModel.name = schedule.name;
         scheduleModel.description = schedule.description;
-        scheduleModel.methode = (): void => {
+        scheduleModel.methode = async (): Promise<void> => {
+            await this._resetConflictedProcesses(process);
             this._executeProcess(process);
         };
         scheduleModel.cron = schedule.cron;
@@ -94,7 +95,7 @@ export class ProcessService {
         process.instance = this._execute(process).subscribe(
             {
                 next: async () => {
-                    await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+                    await this.reset(process);
                 },
                 error: async (_err) => {
                     Logger.debug(_err, 'execution');
@@ -216,7 +217,7 @@ export class ProcessService {
             // save in file .
         }
 
-        return this.wsService.sendMessage({ pattern: 'UPDATE_STATUS', data: JSON.stringify(data) });
+        return this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) });
     }
 
     private static _ofNull<T>(): Observable<T> {

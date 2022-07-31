@@ -19,28 +19,29 @@ export class ConfigurationController {
         private _synchronizeService: SynchronizeService) {
     }
 
-    @MessagePattern('synchronize/configuration')
+    @MessagePattern('box/synchronize/configuration')
     public async synchronise(@Payload() configurationSynchronizeDTO: ConfigurationSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
         const input = ConfigurationSynchronizeDTO.mapToNotificationModel(configurationSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('synchronize/configuration-partial')
+    @MessagePattern('box/synchronize/configuration-partial')
     public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<CycleModel> {
         const uc = new ConfigurationPartialSynchronizeUC(this._synchronizeService);
         const input = CycleSynchronizeDTO.mapToCycleModel(cycleSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('synchronize/schedule')
+    @MessagePattern('box/synchronize/schedule')
     public async synchroniseSchedule(@Payload() scheduleSynchronizeDTO: ScheduleSynchronizeDTO): Promise<CycleModel> {
+        console.log('scheduleSynchronizeDTO',scheduleSynchronizeDTO);
         const uc = new ScheduleSynchronizeUC(this._synchronizeService);
         const input = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('fetch/configuration')
+    @MessagePattern('box/fetch/configuration')
     public async getConfiguration(): Promise<string> {
         const uc = new ConfigurationFetchUC(this._configurationService);
         const response = await uc.execute()
