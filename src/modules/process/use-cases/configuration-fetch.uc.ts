@@ -13,6 +13,6 @@ export class ConfigurationFetchUC {
     public constructor(private configurationService: ConfigurationService) { }
 
     public execute(): Promise<StructureModel> {
-        return this.configurationService.getConfiguration();
+        return this.configurationService.getConfigurationWithStatus();
     }
 }

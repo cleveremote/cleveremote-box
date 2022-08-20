@@ -95,37 +95,37 @@ export function CreateStructure(isFalsy: number = 0): StructureModel {
     const irrigationSecteur1 = new SequenceModel();
     irrigationSecteur1.id = '11';
     irrigationSecteur1.status = ExecutableStatus.STOPPED;
-    irrigationSecteur1.duration = 10; //3 secondes
+    irrigationSecteur1.maxDuration = 10; //3 secondes
     irrigationSecteur1.modules = [pump, valve1];
 
     const irrigationSecteur2 = new SequenceModel();
     irrigationSecteur2.id = '12';
     irrigationSecteur2.status = ExecutableStatus.STOPPED;
-    irrigationSecteur2.duration = 10; //3 secondes
+    irrigationSecteur2.maxDuration = 10; //3 secondes
     irrigationSecteur2.modules = [pump, valve2];
 
     const irrigationSecteur3 = new SequenceModel();
     irrigationSecteur3.id = '13';
     irrigationSecteur3.status = ExecutableStatus.STOPPED;
-    irrigationSecteur3.duration = 10; //3 secondes
+    irrigationSecteur3.maxDuration = 10; //3 secondes
     irrigationSecteur3.modules = [pump, valve3];
 
     const irrigationSecteur4 = new SequenceModel();
     irrigationSecteur4.id = '13';
     irrigationSecteur4.status = ExecutableStatus.STOPPED;
-    irrigationSecteur4.duration = 10; //3 secondes
+    irrigationSecteur4.maxDuration = 10; //3 secondes
     irrigationSecteur4.modules = [pump, valve4];
 
     const irrigationSecteur5 = new SequenceModel();
     irrigationSecteur5.id = '13';
     irrigationSecteur5.status = ExecutableStatus.STOPPED;
-    irrigationSecteur5.duration = 10; //3 secondes
+    irrigationSecteur5.maxDuration = 10; //3 secondes
     irrigationSecteur5.modules = [pump1];
 
     const falsySequence = new SequenceModel();
     falsySequence.id = null;
     falsySequence.status = null;
-    falsySequence.duration = 10; //3 secondes
+    falsySequence.maxDuration = 10; //3 secondes
     falsySequence.modules = [pump, falsyModule];
 
     const schedule = new ScheduleModel();

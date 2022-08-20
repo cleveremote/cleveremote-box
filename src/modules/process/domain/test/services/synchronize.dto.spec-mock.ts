@@ -8,7 +8,7 @@ export function CreateSynchronizePartialDto(): CycleSynchronizeDTO {
     irrigationSecteur1.id = 'partial11';
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
-    irrigationSecteur1.duration = 10000; //3 secondes
+    irrigationSecteur1.maxDuration = 10000; //3 secondes
     irrigationSecteur1.modules = ['16', '26'];
 
     const cycleSynchronizeDTO: CycleSynchronizeDTO = new CycleSynchronizeDTO();
@@ -16,7 +16,6 @@ export function CreateSynchronizePartialDto(): CycleSynchronizeDTO {
     cycleSynchronizeDTO.name = 'irragation secteur 1';
     cycleSynchronizeDTO.description = 'descritption irragation secteur 1';
     cycleSynchronizeDTO.style = { bgColor: 'bgColor', fontColor: 'fontColor', iconColor: 'iconColor' };
-    cycleSynchronizeDTO.maxDuration = 10000;
     cycleSynchronizeDTO.sequences = [irrigationSecteur1];
 
     return cycleSynchronizeDTO;
@@ -29,7 +28,7 @@ export function CreateSynchronizePartialUpdateDto(): CycleSynchronizeDTO {
     irrigationSecteur1.id = '11';
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
-    irrigationSecteur1.duration = 10000; //3 secondes
+    irrigationSecteur1.maxDuration = 10000; //3 secondes
     irrigationSecteur1.modules = ['16', '26'];
 
     const cycleSynchronizeDTO: CycleSynchronizeDTO = new CycleSynchronizeDTO();
@@ -37,7 +36,6 @@ export function CreateSynchronizePartialUpdateDto(): CycleSynchronizeDTO {
     cycleSynchronizeDTO.name = 'irragation secteur 1';
     cycleSynchronizeDTO.description = 'descritption irragation secteur 1';
     cycleSynchronizeDTO.style = { bgColor: 'bgColor', fontColor: 'fontColor', iconColor: 'iconColor' };
-    cycleSynchronizeDTO.maxDuration = 10000;
     cycleSynchronizeDTO.sequences = [irrigationSecteur1];
 
     return cycleSynchronizeDTO;
@@ -59,7 +57,7 @@ export function CreateDelSeqAndDelModuleDto(): CycleSynchronizeDTO {
     irrigationSecteur1.id = '11';
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
-    irrigationSecteur1.duration = 10000; //3 secondes
+    irrigationSecteur1.maxDuration = 10000; //3 secondes
     irrigationSecteur1.modules = ['16', 'deleted_26'];
 
     const irrigationSecteur2: SequenceSync = new SequenceSync();
@@ -70,7 +68,6 @@ export function CreateDelSeqAndDelModuleDto(): CycleSynchronizeDTO {
     cycleSynchronizeDTO.name = 'irragation secteur 1';
     cycleSynchronizeDTO.description = 'descritption irragation secteur 1';
     cycleSynchronizeDTO.style = { bgColor: 'bgColor', fontColor: 'fontColor', iconColor: 'iconColor' };
-    cycleSynchronizeDTO.maxDuration = 10000;
     cycleSynchronizeDTO.sequences = [irrigationSecteur1, irrigationSecteur2];
 
     return cycleSynchronizeDTO;

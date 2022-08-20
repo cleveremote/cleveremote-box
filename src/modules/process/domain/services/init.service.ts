@@ -11,7 +11,9 @@ export class InitService {
 
     public initialize(): Promise<void> {
         return this._loadConfiguration()
-            .then(() => this._resetAllModules())
+            // .then(() => this._resetAllModules())
+            // .then(() => this._testAllModules())
+            
             .catch((error) => {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
@@ -22,6 +24,15 @@ export class InitService {
 
         Logger.log('Start initialize processes...', 'initialization');
         return this.processService.resetAllModules()
+            .then(() => {
+                Logger.log('processes initialized', 'initialization');
+            })
+    }
+
+    private _testAllModules(): Promise<void> {
+
+        Logger.log('Start initialize processes...', 'initialization');
+        return this.processService.tesAllModules()
             .then(() => {
                 Logger.log('processes initialized', 'initialization');
             })

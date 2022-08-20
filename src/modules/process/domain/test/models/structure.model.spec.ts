@@ -68,25 +68,25 @@ describe('StructureModel model', () => {
         const irrigationSecteur1 = new SequenceModel();
         irrigationSecteur1.id = '11';
         irrigationSecteur1.status = ExecutableStatus.STOPPED;
-        irrigationSecteur1.duration = 10; //3 secondes
+        irrigationSecteur1.maxDuration = 10; //3 secondes
         irrigationSecteur1.modules = [pump, valve1];
 
         const irrigationSecteur2 = new SequenceModel();
         irrigationSecteur2.id = '12';
         irrigationSecteur2.status = ExecutableStatus.STOPPED;
-        irrigationSecteur2.duration = 10; //3 secondes
+        irrigationSecteur2.maxDuration = 10; //3 secondes
         irrigationSecteur2.modules = [pump, valve2];
 
         const irrigationSecteur3 = new SequenceModel();
         irrigationSecteur3.id = '13';
         irrigationSecteur3.status = ExecutableStatus.STOPPED;
-        irrigationSecteur3.duration = 10; //3 secondes
+        irrigationSecteur3.maxDuration = 10; //3 secondes
         irrigationSecteur3.modules = [pump, valve3];
 
         const irrigationSecteur4 = new SequenceModel();
         irrigationSecteur4.id = '13';
         irrigationSecteur4.status = ExecutableStatus.STOPPED;
-        irrigationSecteur4.duration = 10; //3 secondes
+        irrigationSecteur4.maxDuration = 10; //3 secondes
         irrigationSecteur4.modules = [pump, valve4];
 
         const cycle = new CycleModel();

@@ -1,4 +1,4 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
@@ -18,7 +18,7 @@ export class ConfigurationController {
         private _configurationService: ConfigurationService,
         private _synchronizeService: SynchronizeService) {
     }
-
+    @UsePipes(ValidationPipe)
     @MessagePattern('box/synchronize/configuration')
     public async synchronise(@Payload() configurationSynchronizeDTO: ConfigurationSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ConditionType, ExecutableAction, ExecutableMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
+import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
 import { ProcessModel } from '@process/domain/models/process.model';
 import { IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
@@ -21,15 +21,15 @@ export class ProcessExecuteDTO {
     @ApiProperty()
     public action: ExecutableAction;
 
-    @IsEnum(ConditionType)
+    @IsEnum(ProcessType)
     @IsNotEmpty()
     @ApiProperty()
-    public type: ConditionType;
+    public type: ProcessType;
 
-    @IsEnum(ExecutableMode)
+    @IsEnum(ProcessMode)
     @IsNotEmpty()
     @ApiProperty()
-    public mode: ExecutableMode;
+    public mode: ProcessMode;
 
     @IsString()
     @ApiProperty()

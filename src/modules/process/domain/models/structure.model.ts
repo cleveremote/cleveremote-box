@@ -1,5 +1,6 @@
 import { CycleModel } from './cycle.model';
 import { ModuleModel } from './module.model';
+import { SequenceModel } from './sequence.model';
 export class StructureModel {
     public cycles: CycleModel[] = [];
 
@@ -12,5 +13,14 @@ export class StructureModel {
             });
         });
         return modules;
+    }
+
+    public getSequences(): SequenceModel[] {
+        let sequences: SequenceModel[] = [];
+        this.cycles.forEach((cycle) => {
+            sequences = sequences.concat(cycle.sequences);
+            sequences = [...new Set([...sequences, ...cycle.sequences])];
+        });
+        return sequences;
     }
 }

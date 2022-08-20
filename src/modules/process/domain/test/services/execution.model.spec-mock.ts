@@ -1,8 +1,8 @@
-import { ConditionType, ExecutableAction, ExecutableMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
+import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ProcessModel } from '@process/domain/models/process.model';
 
-export function CreateExecution(id: string, mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecution(id: string, mode: ProcessMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
@@ -11,14 +11,30 @@ export function CreateExecution(id: string, mode: ExecutableMode, action: Execut
 
     execution.cycle = cycle;
     execution.action = action;
-    execution.type = ConditionType.NOW;
+    execution.type = ProcessType.FORCE;
     execution.function = 'string';
     execution.mode = mode;
 
     return execution;
 }
 
-export function CreateExecutionCycleWithWrongModuleConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecutionQueued(id: string, mode: ProcessMode, action: ExecutableAction): ProcessModel {
+    const execution = new ProcessModel();
+
+    const cycle = new CycleModel();
+    cycle.id = id;
+    cycle.status = ExecutableStatus.STOPPED;
+
+    execution.cycle = cycle;
+    execution.action = action;
+    execution.type = ProcessType.QUEUED;
+    execution.function = 'string';
+    execution.mode = mode;
+
+    return execution;
+}
+
+export function CreateExecutionCycleWithWrongModuleConfig(mode: ProcessMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
@@ -27,14 +43,14 @@ export function CreateExecutionCycleWithWrongModuleConfig(mode: ExecutableMode, 
 
     execution.cycle = cycle;
     execution.action = action;
-    execution.type = ConditionType.NOW;
+    execution.type = ProcessType.FORCE;
     execution.function = 'string';
     execution.mode = mode;
 
     return execution;
 }
 
-export function CreateExecutionCycleWithFalsySequence(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecutionCycleWithFalsySequence(mode: ProcessMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
@@ -43,14 +59,14 @@ export function CreateExecutionCycleWithFalsySequence(mode: ExecutableMode, acti
 
     execution.cycle = cycle;
     execution.action = action;
-    execution.type = ConditionType.NOW;
+    execution.type = ProcessType.FORCE;
     execution.function = 'string';
     execution.mode = mode;
 
     return execution;
 }
 
-export function CreateExecutionCycleNotExistConfig(mode: ExecutableMode, action: ExecutableAction): ProcessModel {
+export function CreateExecutionCycleNotExistConfig(mode: ProcessMode, action: ExecutableAction): ProcessModel {
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
@@ -59,7 +75,7 @@ export function CreateExecutionCycleNotExistConfig(mode: ExecutableMode, action:
 
     execution.cycle = cycle;
     execution.action = action;
-    execution.type = ConditionType.NOW;
+    execution.type = ProcessType.FORCE;
     execution.function = 'string';
     execution.mode = mode;
 

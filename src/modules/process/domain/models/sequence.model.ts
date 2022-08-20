@@ -10,7 +10,7 @@ export class SequenceModel {
     public description: string;
     public progression: { startedAt: Date; duration: number };
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public duration: number;
+    public maxDuration: number;
     public modules: ModuleModel[] = [];
 
     public async reset(): Promise<void> {

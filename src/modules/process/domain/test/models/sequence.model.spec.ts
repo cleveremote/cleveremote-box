@@ -24,7 +24,7 @@ describe('SequenceModel model', () => {
         const irrigationSecteur1 = new SequenceModel();
         irrigationSecteur1.id = '11';
         irrigationSecteur1.status = ExecutableStatus.STOPPED;
-        irrigationSecteur1.duration = 3000; //3 secondes
+        irrigationSecteur1.maxDuration = 3000; //3 secondes
         irrigationSecteur1.modules = [pump, valve1];
 
         expect(irrigationSecteur1).toBeDefined();
@@ -55,7 +55,7 @@ describe('SequenceModel model', () => {
         const irrigationSecteur1 = new SequenceModel();
         irrigationSecteur1.id = '11';
         irrigationSecteur1.status = ExecutableStatus.STOPPED;
-        irrigationSecteur1.duration = 3000; //3 secondes
+        irrigationSecteur1.maxDuration = 3000; //3 secondes
         irrigationSecteur1.modules = [pump, valve1];
 
         await irrigationSecteur1.reset();

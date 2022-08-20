@@ -1,8 +1,9 @@
 /* eslint-disable max-lines-per-function */
 
+import { ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
 import { Type } from 'class-transformer';
-import { IsArray, IsDate, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsDate, IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 export class SequenceSync {
     @IsString()
     @IsNotEmpty()
@@ -12,7 +13,7 @@ export class SequenceSync {
     @IsString()
     public description: string;
     @IsNumber()
-    public duration: number;
+    public maxDuration: number;
     @IsArray()
     @Type(() => String)
     public modules: string[];
@@ -27,8 +28,15 @@ export class Style {
     public iconColor: string
 }
 
+export class ModePriority {
+    @IsEnum(ProcessMode)
+    public mode: ProcessMode;
+    @IsNumber()
+    public priority: number;
+}
+
 export class CycleSynchronizeDTO {
-    @IsNotEmpty()
+    @IsString()
     public id: string;
     @IsString()
     public name?: string;
@@ -36,8 +44,9 @@ export class CycleSynchronizeDTO {
     public description: string;
     @Type(() => Style)
     public style?: Style;
-    @IsNumber()
-    public maxDuration: number;
+    @IsArray()
+    @Type(() => ModePriority)
+    public modePriority: ModePriority[];
 
     @IsArray()
     @Type(() => SequenceSync)
@@ -56,7 +65,19 @@ export class CycleSynchronizeDTO {
         cycle.name = cycleSynchronizeDTO.name;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
-        cycle.maxDuration = cycleSynchronizeDTO.maxDuration;
+        cycle.modePriority = [];
+        if (cycleSynchronizeDTO.modePriority) {
+            cycleSynchronizeDTO.modePriority?.forEach(priority => { //nya remove optional
+                const priorityModel = { mode: priority.mode, priority: priority.priority };
+                cycle.modePriority.push(priorityModel);
+            });
+        } else {
+            cycle.modePriority.push({ mode: ProcessMode.MANUAL, priority: 0 });
+            cycle.modePriority.push({ mode: ProcessMode.SCHEDULED, priority: 1 });
+            cycle.modePriority.push({ mode: ProcessMode.TRIGGER, priority: 2 });
+        }
+
+
         cycle.sequences = [];
         cycleSynchronizeDTO.sequences.forEach(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();
@@ -66,12 +87,13 @@ export class CycleSynchronizeDTO {
             if (!sequence.shouldDelete) {
                 sequence.name = sequenceSync.name;
                 sequence.description = sequenceSync.description;
-                sequence.duration = sequenceSync.duration;
+                sequence.maxDuration = sequenceSync.maxDuration;
                 sequence.modules = [];
                 sequenceSync.modules.forEach((moduleId) => {
                     const module = new SynchronizeModuleModel();
                     const splittedModuleId = moduleId.split('_');
                     module.shouldDelete = splittedModuleId.length > 1 && splittedModuleId[0] === 'deleted';
+                    module.id = splittedModuleId[1] || splittedModuleId[0];
                     module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
                     sequence.modules.push(module);
                 })

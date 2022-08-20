@@ -4,7 +4,8 @@ import { SequenceModel } from '../models/sequence.model';
 
 export enum ExecutableStatus {
     IN_PROCCESS = 'IN_PROCCESS',
-    STOPPED = 'STOPPED'
+    STOPPED = 'STOPPED',
+    WAITTING_CONFIRMATION = 'WAITTING_CONFIRMATION'
 }
 
 export enum ExecutableAction {
@@ -12,18 +13,19 @@ export enum ExecutableAction {
     OFF = 'OFF'
 }
 
-export enum ExecutableMode {
-    NORMAL = 'NORMAL',
-    FORCE = 'FORCE',
-    QUEUED = 'QUEUED',
-    SCHEDULED = 'SCHEDULED'
+export enum ProcessMode {
+    SCHEDULED = 'SCHEDULED',
+    MANUAL = 'MANUAL',
+    TRIGGER = 'TRIGGER'
 }
 
-export enum ConditionType {
-    NOW = 'NOW',
-    DATE = 'DATE',
-    SENSOR = 'SENSOR',
-    RECURSIVE = 'RECURSIVE'
+export enum ProcessType {
+    //
+    INIT = 'INIT',
+    FORCE = 'FORCE',
+    QUEUED = 'QUEUED',
+    CONFIRMATION = 'CONFIRMATION',
+    IGNORE = 'IGNORE'
 }
 
 export enum ExecutableType {
@@ -39,8 +41,10 @@ export enum TASK {
 
 export interface IExecutable {
     id: string;
+    name: string;
     status: ExecutableStatus;
     sequences: SequenceModel[];
+    modePriority: { mode: ProcessMode; priority: number }[];
     reset(): Promise<void>;
     getModules(): ModuleModel[];
     exists(module: ModuleModel): boolean;

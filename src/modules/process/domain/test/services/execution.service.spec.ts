@@ -1,12 +1,12 @@
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
-import { ExecutableAction, ExecutableMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
+import { ExecutableAction, ProcessMode, ExecutableStatus, ProcessType } from '@process/domain/interfaces/executable.interface';
 import { ConfigurationService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig } from './execution.model.spec-mock';
+import { CreateExecution, CreateExecutionCycleNotExistConfig, CreateExecutionCycleWithWrongModuleConfig, CreateExecutionQueued } from './execution.model.spec-mock';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
@@ -39,7 +39,7 @@ describe('Notification Service unit testing ', () => {
 
     it('Should execute process & check status IN_PROCESS/STOPPED', async () => {
         //GIVEN
-        const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution = CreateExecution('1', ProcessMode.MANUAL, ExecutableAction.ON);
 
         //WHEN
         await notificationService.execute(execution);
@@ -54,8 +54,8 @@ describe('Notification Service unit testing ', () => {
 
     it('Should switch process ON/OFF', async () => {
         //GIVEN
-        const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
-        const execution2 = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.OFF);
+        const execution = CreateExecution('1', ProcessMode.MANUAL, ExecutableAction.ON);
+        const execution2 = CreateExecution('1', ProcessMode.MANUAL, ExecutableAction.OFF);
 
         //WHEN
         await notificationService.execute(execution);
@@ -74,8 +74,8 @@ describe('Notification Service unit testing ', () => {
 
     it('Should manage conflicted processes', async () => {
         //GIVEN
-        const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
-        const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution = CreateExecution('1', ProcessMode.MANUAL, ExecutableAction.ON);
+        const execution2 = CreateExecution('2', ProcessMode.MANUAL, ExecutableAction.ON);
 
         //WHEN
         await notificationService.execute(execution);
@@ -93,7 +93,7 @@ describe('Notification Service unit testing ', () => {
 
     it('Should execute proccess in queue mode', async () => {
         //GIVEN
-        const execution = CreateExecution('1', ExecutableMode.QUEUED, ExecutableAction.ON);
+        const execution = CreateExecutionQueued('1', ProcessMode.MANUAL, ExecutableAction.ON);
 
         //WHEN
         try {
@@ -105,9 +105,9 @@ describe('Notification Service unit testing ', () => {
 
     it('Should return all notifications check conflicted', async () => {
         //GIVEN
-        const execution = CreateExecution('1', ExecutableMode.FORCE, ExecutableAction.ON);
-        const execution2 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
-        const execution3 = CreateExecution('2', ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution = CreateExecution('1', ProcessMode.MANUAL, ExecutableAction.ON);
+        const execution2 = CreateExecution('2', ProcessMode.MANUAL, ExecutableAction.ON);
+        const execution3 = CreateExecution('2', ProcessMode.MANUAL, ExecutableAction.ON);
 
         //WHEN
         await notificationService.execute(execution);
@@ -128,7 +128,7 @@ describe('Notification Service unit testing ', () => {
 
     it('Should fire error invalid Error struct', async () => {
         //GIVEN
-        const execution = CreateExecutionCycleNotExistConfig(ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution = CreateExecutionCycleNotExistConfig(ProcessMode.MANUAL, ExecutableAction.ON);
         //WHEN
         await notificationService.execute(execution).catch((error) => expect(error).toBeInstanceOf(StructureInvalidError));
 
@@ -136,7 +136,7 @@ describe('Notification Service unit testing ', () => {
 
     it('Should manage async error on port configuration', async () => {
         //GIVEN
-        const execution = CreateExecutionCycleWithWrongModuleConfig(ExecutableMode.FORCE, ExecutableAction.ON);
+        const execution = CreateExecutionCycleWithWrongModuleConfig(ProcessMode.MANUAL, ExecutableAction.ON);
 
         //WHEN
         await notificationService.execute(execution);

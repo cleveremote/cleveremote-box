@@ -29,6 +29,31 @@ export class ConfigurationRepository implements IStructureRepository {
         throw new StructureInvalidError();
     }
 
+    public async insertProcessStatus(data: string): Promise<void> {
+        await fs.writeFile('./processesStatus.data', data + '\r\n', { encoding: 'utf8', flag: 'a+' });
+    }
+
+    public async deleteProcessStatus(id: string): Promise<void> {
+        const data = await fs.readFile('./processesStatus.data', { encoding: 'utf8' });
+        const lines = data.split('\r\n');
+        const index = lines.findIndex(x => x.indexOf(id) > -1);
+        lines.splice(index, 1);
+        const newData = lines.join('\r\n');
+        await fs.writeFile('./processesStatus.data', newData, { encoding: 'utf8' });
+    }
+
+    public async getProcessesStatus(): Promise<any[]> {
+        const data = await fs.readFile('./processesStatus.data', { encoding: 'utf8', flag: 'a+' });
+        const lines = data.split('\r\n');
+        const processStatus = []
+        lines.forEach(line => {
+            !!line && processStatus.push(JSON.parse(line))
+        });
+
+        return processStatus
+    }
+
+
     public async getCycles(): Promise<CycleModel[]> {
         throw new Error('Method not implemented.');
     }

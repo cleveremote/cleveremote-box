@@ -22,12 +22,18 @@ export class StructureEntity {
             cycle.name = cycleData.name;
             cycle.description = cycleData.description;
             cycle.style = cycleData.style;
-            cycle.maxDuration = cycleData.maxDuration;
+            cycle.modePriority = [];
+            cycleData.modePriority.forEach((mode, priority) => {
+                console.log('priority', mode);
+                cycle.modePriority.push(mode);
+            })
+
             cycleData.sequences.forEach(sequenceData => {
                 const sequence = new SequenceModel();
                 sequence.id = sequenceData.id;
+                sequence.name = sequenceData.name;
                 sequence.status = sequenceData.status;
-                sequence.duration = sequenceData.duration;
+                sequence.maxDuration = sequenceData.maxDuration;
                 sequence.modules = [];
                 sequenceData.modules.forEach(moduleData => {
                     const module = new ModuleModel();
