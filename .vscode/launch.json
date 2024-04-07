@@ -9,7 +9,7 @@
             "request": "attach",
             "name": "Attach sales-api",
             "address": "127.0.0.1",
-            "port": 5100,
+            "port": 5200,
             "remoteRoot": "${workspaceRoot}/dist",
             "localRoot":"${workspaceRoot}/dist",
             "outFiles":["${workspaceRoot}/dist/**/*.js"],

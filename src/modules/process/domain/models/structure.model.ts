@@ -1,8 +1,10 @@
 import { CycleModel } from './cycle.model';
 import { ModuleModel } from './module.model';
+import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
 export class StructureModel {
     public cycles: CycleModel[] = [];
+    public sensors: SensorModel[] = [];
 
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];

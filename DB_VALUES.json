@@ -1,0 +1,71 @@
+{
+    "sensors": [
+        {
+            "id": "sensor-moisture-1",
+            "value": 46,
+            "type": "SENSOR"
+        },
+        {
+            "id": "sensor-moisture-2",
+            "value": 78,
+            "type": "SENSOR"
+        },
+        {
+            "id": "sensor-moisture-3",
+            "value": 24,
+            "type": "SENSOR"
+        },
+        {
+            "id": "sensor-moisture-4",
+            "value": 94,
+            "type": "SENSOR"
+        },
+        {
+            "id": "sensor-moisture-5",
+            "value": 40,
+            "type": "SENSOR"
+        }
+    ],
+    "cycles": [
+        {
+            "type": "CYCLE",
+            "id": "cycle12345",
+            "status": "IN_PROCCESS",
+            "startedAt": "2024-04-07T13:38:27.587Z",
+            "duration": 60000
+        }
+    ],
+    "sequences": [
+        {
+            "type": "SEQUENCE",
+            "id": "sequence1",
+            "status": "IN_PROCCESS",
+            "startedAt": "2024-04-07T13:38:27.588Z",
+            "duration": 10000
+        },
+        {
+            "type": "SEQUENCE",
+            "id": "sequence2",
+            "status": "STOPPED",
+            "startedAt": "2024-04-07T13:38:27.566Z"
+        },
+        {
+            "type": "SEQUENCE",
+            "id": "sequence3",
+            "status": "STOPPED",
+            "startedAt": "2024-04-07T13:38:27.570Z"
+        },
+        {
+            "type": "SEQUENCE",
+            "id": "sequence4",
+            "status": "STOPPED",
+            "startedAt": "2024-04-07T13:38:27.575Z"
+        },
+        {
+            "type": "SEQUENCE",
+            "id": "sequence5",
+            "status": "STOPPED",
+            "startedAt": "2024-04-07T13:38:27.579Z"
+        }
+    ]
+}

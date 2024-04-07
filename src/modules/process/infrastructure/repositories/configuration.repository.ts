@@ -1,4 +1,4 @@
-import { IStructureRepository } from '@process/domain/interfaces/structure-repository.interface';
+import { IExecutableState, ISensorValue, IStructureRepository, IValueResponse } from '@process/domain/interfaces/structure-repository.interface';
 import { CycleModel } from '../../domain/models/cycle.model';
 import { ModuleModel } from '../../domain/models/module.model';
 import { SequenceModel } from '../../domain/models/sequence.model';
@@ -7,9 +7,38 @@ import * as fs from 'fs/promises';
 import { StructureEntity } from '../entities/structure.entity';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
 import { Injectable } from '@nestjs/common';
+import { DbService } from '../db/db.service';
+import { ExecutableStatus, ReadableElementType } from '@process/domain/interfaces/executable.interface';
 
 @Injectable()
 export class ConfigurationRepository implements IStructureRepository {
+
+    public constructor(private dbService: DbService) { }
+
+    public async setValues<T>(data: ISensorValue | IExecutableState): Promise<IValueResponse[]> {
+
+        const nodeName = this._mappingTypeToDBType(data.type);
+        const index = await this.dbService.DB_VALUES.getIndex(`/${nodeName}`, data.id);
+        const pos = index === -1 ? '[]' : `[${index}]`;
+        await this.dbService.DB_VALUES.push(`/${nodeName}${pos}`, data);
+        const result = await this.dbService.DB_VALUES.getData(`/${nodeName}`);
+        if (result) {
+            return result.map((res: { id: string; value: number; status: ExecutableStatus, type: ReadableElementType }) =>
+                ({ id: res.id, value: res.status || res.value , type: res.type }))
+        }
+        return [];
+    }
+
+    private _mappingTypeToDBType(type: string): string {
+        switch (type) {
+            case 'CYCLE':
+                return 'cycles';
+            case 'SEQUENCE':
+                return 'sequences'
+            case 'SENSOR':
+                return 'sensors'
+        }
+    }
 
     public async getStructure(): Promise<StructureModel> {
         const structureEntity = new StructureEntity();
@@ -29,30 +58,13 @@ export class ConfigurationRepository implements IStructureRepository {
         throw new StructureInvalidError();
     }
 
-    public async insertProcessStatus(data: string): Promise<void> {
-        await fs.writeFile('./processesStatus.data', data + '\r\n', { encoding: 'utf8', flag: 'a+' });
+    public async insertProcessStatus(data: any): Promise<any[]> {
+        return await this.setValues(data);
     }
 
-    public async deleteProcessStatus(id: string): Promise<void> {
-        const data = await fs.readFile('./processesStatus.data', { encoding: 'utf8' });
-        const lines = data.split('\r\n');
-        const index = lines.findIndex(x => x.indexOf(id) > -1);
-        lines.splice(index, 1);
-        const newData = lines.join('\r\n');
-        await fs.writeFile('./processesStatus.data', newData, { encoding: 'utf8' });
+    public async getProcessesStatus(type: string = '/'): Promise<any> {
+        return await this.dbService.DB_VALUES.getData(type);
     }
-
-    public async getProcessesStatus(): Promise<any[]> {
-        const data = await fs.readFile('./processesStatus.data', { encoding: 'utf8', flag: 'a+' });
-        const lines = data.split('\r\n');
-        const processStatus = []
-        lines.forEach(line => {
-            !!line && processStatus.push(JSON.parse(line))
-        });
-
-        return processStatus
-    }
-
 
     public async getCycles(): Promise<CycleModel[]> {
         throw new Error('Method not implemented.');

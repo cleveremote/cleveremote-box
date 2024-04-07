@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
+import { CycleModel } from '@process/domain/models/cycle.model';
 import { ProcessModel } from '@process/domain/models/process.model';
 import { IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
@@ -41,9 +42,8 @@ export class ProcessExecuteDTO {
 
     public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();
-        process.cycle = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as IExecutable ;
+        process.cycle = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as CycleModel ;
         process.action = notificationCreateDTO.action;
-        process.function = notificationCreateDTO.function;
         process.mode = notificationCreateDTO.mode;
         process.type = notificationCreateDTO.type;
         process.duration = notificationCreateDTO.duration;

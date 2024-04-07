@@ -6,6 +6,7 @@ import {
 import { ModuleModel } from './module.model';
 import { ScheduleModel } from './schedule.model';
 import { SequenceModel } from './sequence.model';
+import { TriggerModel } from './trigger.model';
 
 export class CycleModel implements IExecutable {
     public id: string;
@@ -17,6 +18,7 @@ export class CycleModel implements IExecutable {
     public progression?: { startedAt: Date; duration: number };
     public sequences: SequenceModel[] = [];
     public schedules: ScheduleModel[] = [];
+    public triggers: TriggerModel[] = [];
 
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];

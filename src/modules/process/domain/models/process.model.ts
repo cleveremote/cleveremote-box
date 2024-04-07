@@ -6,13 +6,13 @@ import {
     IExecutable
 } from '../interfaces/executable.interface';
 import { ScheduleModel } from './schedule.model';
+import { CycleModel } from './cycle.model';
 
 export class ProcessModel {
     public id: string;
-    public cycle: IExecutable;
+    public cycle: CycleModel; //on run ?
     public action: ExecutableAction;
     public type: ProcessType;
-    public function: string;
     public mode: ProcessMode;
     public instance: Subscription;
     public duration?: number;

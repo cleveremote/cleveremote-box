@@ -1,3 +1,4 @@
+import { BehaviorSubject } from 'rxjs';
 import { ModuleModel } from '../models/module.model';
 import { SequenceModel } from '../models/sequence.model';
 
@@ -21,17 +22,24 @@ export enum ProcessMode {
 
 export enum ProcessType {
     //
-    INIT = 'INIT',
-    FORCE = 'FORCE',
-    QUEUED = 'QUEUED',
+    INIT = 'INIT', // declenchement initial 
+    FORCE = 'FORCE', // deduction par rapport au priorite ou par confirmation
+    QUEUED = 'QUEUED', // par confirmation
     CONFIRMATION = 'CONFIRMATION',
-    IGNORE = 'IGNORE'
+    IGNORE = 'IGNORE', //par confirmation
+    SKIP = 'SKIP' // concerne les sequences ...
 }
 
 export enum ExecutableType {
     CYCLE = 'CYCLE',
     SEQUENCE = 'SEQUENCE'
 }
+
+export enum ReadableType  {
+    SENSOR = 'SENSOR'
+}
+
+export type ReadableElementType = ReadableType | ExecutableType;
 
 export enum TASK {
     DATE = 'DATE',

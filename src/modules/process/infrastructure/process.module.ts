@@ -11,6 +11,9 @@ import { InitService } from '@process/domain/services/init.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduleService } from '@process/domain/services/schedule.service';
+import { TriggerService } from '@process/domain/services/trigger.service';
+import { SensorService } from '@process/domain/services/sensor.service';
+import { DbService } from './db/db.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -21,6 +24,7 @@ import { ScheduleService } from '@process/domain/services/schedule.service';
         ExecutionController
     ],
     providers: [
+        DbService,
         ConfigurationRepository,
         ConfigurationService,
         ProcessService,
@@ -28,7 +32,9 @@ import { ScheduleService } from '@process/domain/services/schedule.service';
         SocketIoClientProxyService,
         InitService,
         SynchronizeService,
-        ScheduleService
+        ScheduleService,
+        TriggerService,
+        SensorService
     ],
     exports: [
         ProcessService,

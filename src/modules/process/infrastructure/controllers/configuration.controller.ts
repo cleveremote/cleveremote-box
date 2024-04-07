@@ -9,7 +9,10 @@ import { ConfigurationPartialSynchronizeUC } from '@process/use-cases/configurat
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
 import { ConfigurationSynchronizeDTO } from '../dto/configuration-synchronize.dto';
-import { CycleSynchronizeDTO, ScheduleSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, TriggerSynchronizeDTO } from '../dto/synchronize.dto';
+import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
+import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
+import { SensorModel } from '@process/domain/models/sensor.model';
 
 @Controller()
 export class ConfigurationController {
@@ -38,6 +41,22 @@ export class ConfigurationController {
         console.log('scheduleSynchronizeDTO',scheduleSynchronizeDTO);
         const uc = new ScheduleSynchronizeUC(this._synchronizeService);
         const input = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern('box/synchronize/trigger')
+    public async synchroniseTrigger(@Payload() triggerSynchronizeDTO: TriggerSynchronizeDTO): Promise<CycleModel> {
+        console.log('triggerSynchronizeDTO',triggerSynchronizeDTO);
+        const uc = new TriggerSynchronizeUC(this._synchronizeService);
+        const input = TriggerSynchronizeDTO.mapToTriggerModel(triggerSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern('box/synchronize/sensor')
+    public async synchroniseSensor(@Payload() sensorSynchronizeDTO: SensorSynchronizeDTO): Promise<SensorModel> {
+        console.log('sensorSynchronizeDTO',sensorSynchronizeDTO);
+        const uc = new SensorSynchronizeUC(this._synchronizeService);
+        const input = SensorSynchronizeDTO.mapToSensorModel(sensorSynchronizeDTO);
         return uc.execute(input);
     }
 

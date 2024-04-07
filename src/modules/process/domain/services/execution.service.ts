@@ -2,7 +2,7 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
-import { delay, from, map, mergeMap, Observable, of, tap } from 'rxjs';
+import { delayWhen, from, map, mergeMap, Observable, of, Subject, Subscription, takeLast, takeUntil, tap, timer } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
@@ -12,22 +12,24 @@ import {
     ExecutableType,
     ProcessType
 } from '../interfaces/executable.interface';
-import { CycleModel } from '../models/cycle.model';
 import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
-import { ScheduleModel } from '../models/schedule.model';
 import { ConfigurationService } from './configuration.service';
-import { ScheduleService } from './schedule.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { ScheduleModel } from '../models/schedule.model';
 
 @Injectable()
 export class ProcessService {
-    public processQueue: ProcessModel[] = [];
+    public processList: ProcessModel[] = [];
+    public queuedSequences = [];
     public constructor(
+        private schedulerRegistry: SchedulerRegistry,
         private configurationService: ConfigurationService,
         private wsService: SocketIoClientProxyService,
-        private scheduleService: ScheduleService,
         private configurationRepository: ConfigurationRepository
-    ) { }
+    ) {
+
+    }
 
     public async execute(process: ProcessModel): Promise<void> {
         this._initializeProcess(process);
@@ -35,11 +37,16 @@ export class ProcessService {
     }
 
     public async reset(process: ProcessModel): Promise<void> {
-        const index = this.processQueue.map(x => x.cycle.id).indexOf(process.cycle.id);
+        const index = this.processList.map(x => x.cycle.id).indexOf(process.cycle.id);
+        this._clearQueuedSequences(process);
         if (index > -1) {
-            this.processQueue[index].instance?.unsubscribe();
+            this.processList[index].instance?.unsubscribe();
             await process.cycle.reset();
-            this.processQueue.splice(index, 1);
+            this.processList.splice(index, 1);
+            for (const sequence of process.cycle.sequences) {
+                await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
+            }
+
             await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
         }
 
@@ -55,7 +62,7 @@ export class ProcessService {
         }
     }
 
-    public async tesAllModules(): Promise<void> {
+    public async testAllModules(): Promise<void> {
         const processes = this.configurationService.getAllCyles();
         for (const key in processes) {
             if (Object.prototype.hasOwnProperty.call(processes, key)) {
@@ -66,23 +73,19 @@ export class ProcessService {
         }
     }
 
-    public initSchedule(process: ProcessModel): void {
-        const scheduleModel = new ScheduleModel();
-        const schedule = process.schedule;
-        scheduleModel.id = schedule.id;
-        scheduleModel.name = schedule.name;
-        scheduleModel.description = schedule.description;
-        scheduleModel.methode = async (): Promise<void> => {
-            this.execute(process);
-        };
-        scheduleModel.cron = schedule.cron;
-        this.scheduleService.createSchedule(scheduleModel);
+    private _clearQueuedSequences(process: ProcessModel): void {
+        process.cycle.sequences.forEach(sequence => {
+            const index = this.queuedSequences.findIndex(x => x.sequenceId === sequence.id);
+            if (index >= 0) {
+                this.queuedSequences.splice(index, 1);
+            }
+        });
     }
 
     private _removeIgnoredProcess(process: ProcessModel): void {
-        const index = this.processQueue.map(x => x.id).indexOf(process.id);
+        const index = this.processList.map(x => x.id).indexOf(process.id);
         if (index > -1) {
-            this.processQueue.splice(index, 1);
+            this.processList.splice(index, 1);
         }
     }
 
@@ -93,14 +96,22 @@ export class ProcessService {
 
     private _initializeProcess(process: ProcessModel): void {
         const struct = this.configurationService.structure;
-        process.cycle = struct.cycles.find(x => x.id === process.cycle.id);
-        if (!process.cycle) {
+        const currentCycle = struct.cycles.find(x => x.id === process.cycle.id);
+        if (!currentCycle && process.type === ProcessType.SKIP) {
+            //skip concerne les sequences ... donc pas de cycle existant
+            process.id = process.cycle.id;
+        } else if (currentCycle) {
+            process.cycle = currentCycle;
+        } else {
             throw new StructureInvalidError();
         }
     }
 
     private async _manageProcessType(process: ProcessModel): Promise<void> {
-        if (process.type === ProcessType.FORCE) {
+        if (process.type === ProcessType.SKIP) {
+            const sequenceSkipFlag = this.queuedSequences.find(x => x.sequenceId === process.id);
+            sequenceSkipFlag.flag.next(null);
+        } else if (process.type === ProcessType.FORCE) {
             await this._resetConflictedProcesses(process);
             this._executeProcess(process);
         } else if (process.type === ProcessType.QUEUED) {
@@ -126,7 +137,7 @@ export class ProcessService {
                 report.push({ id: proc.id, type: process.type, cause: 'conflicted with cycle : ' + proc.cycle.name });
             } else {
                 process.type = ProcessType.CONFIRMATION;
-                this.processQueue.push(process);
+                this.processList.push(process);
                 report.push({ id: proc.id, type: process.type, cause: 'conflicted with cycle : ' + proc.cycle.name });
                 break;
             }
@@ -166,7 +177,7 @@ export class ProcessService {
         const conflictedExecutable: ProcessModel[] = [];
         const modules = process.cycle.getModules();
         modules.forEach((module) => {
-            this.processQueue.forEach((proc) => {
+            this.processList.forEach((proc) => {
                 if (proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id)) {
                     conflictedExecutable.push(proc);
                 }
@@ -188,9 +199,8 @@ export class ProcessService {
             ProcessService._ofNull<{ sequenceId: string; portNums: number[]; duration: number }>()
                 .pipe(tap(async () => {
                     process.cycle.status = ExecutableStatus.IN_PROCCESS;
-                    this.processQueue.push(process);
+                    this.processList.push(process);
                     await this._processProgress(process.cycle.id, ExecutableAction.ON);
-
                 }));
 
         executionLst.forEach((sequence, index) => {
@@ -199,31 +209,45 @@ export class ProcessService {
         });
 
         return obs.pipe(
-            mergeMap((lastPins) => {
-                lastPins.portNums.forEach((previousPin) => {
+            mergeMap((previousSeq) => {
+                previousSeq.portNums.forEach((previousPin) => {
                     modules.find(x => x.portNum === previousPin).execute(0);
                 });
-                return from(this._processProgress(lastPins.sequenceId, ExecutableAction.OFF)).pipe(mergeMap(() => of(null)));
+                const index = this.queuedSequences.findIndex(x => x.sequenceId === previousSeq?.sequenceId);
+                if (index >= 0) {
+                    this.queuedSequences.splice(index, 1);
+                }
+                return from(this._processProgress(previousSeq.sequenceId, ExecutableAction.OFF)).pipe(mergeMap(() => of(null)));
             })
         );
     }
 
     private _createExecObs(
         previousSeq: { sequenceId: string; portNums: number[]; duration: number },
-        currentSec: { sequenceId: string; portNums: number[]; duration: number },
+        currentSeq: { sequenceId: string; portNums: number[]; duration: number },
         modules: ModuleModel[]
     ): Observable<{ sequenceId: string; portNums: number[]; duration: number }> {
+        const ref = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         return of(previousSeq?.portNums || []).pipe(
             mergeMap((previousPins) => {
-                return of(currentSec.portNums).pipe(
+                return of(currentSeq.portNums).pipe(
                     map((currentPins) => {
+                        const index = this.queuedSequences.findIndex(x => x.sequenceId === previousSeq?.sequenceId);
+                        if (index >= 0) {
+                            this.queuedSequences.splice(index, 1);
+                        }
+                        this.queuedSequences.push(ref);
                         this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
-                            { id: currentSec.sequenceId, pins: currentPins, duration: currentSec.duration }, modules);
-                        return currentSec;
+                            { id: currentSeq.sequenceId, pins: currentPins, duration: currentSeq.duration }, modules);
+
+                        setTimeout(() => {
+                            ref.flag.next(null);
+                        }, currentSeq.duration);
+                        return currentSeq;
                     })
                 );
             }),
-            delay(currentSec.duration)
+            delayWhen(() => ref.flag)
         );
     }
 
@@ -268,11 +292,19 @@ export class ProcessService {
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
             data = { type, id, status, startedAt, duration: cycleDuration };
         }
-        const dataToSave = JSON.stringify(data);
-        // eslint-disable-next-line max-len
 
-        const pro = action === ExecutableAction.ON ? this.configurationRepository.insertProcessStatus(dataToSave) : this.configurationRepository.deleteProcessStatus(data.id);
-       return pro.then(() =>
+        const pro = this.configurationRepository.insertProcessStatus(data);
+
+        if (cycFound) {
+            const st = this.configurationService.deviceListeners.find(x => x.deviceId === cycFound.id);
+            if (st) {
+                st.subject.next(data);
+            }
+
+        }
+
+        return pro.then(() =>
+            //test if connected ... to not hang nya
             this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) })
         );
     }
@@ -286,4 +318,20 @@ export class ProcessService {
         return of(null as T);
     }
 
+    private _getConflictedSchedules(): ScheduleModel[] {
+        const jobs = this.schedulerRegistry.getCronJobs();
+        jobs.forEach((value, id) => {
+            let next;
+            try {
+                next = value.nextDate().toJSDate();
+            } catch (e) {
+                // les job  deja execute ou qui ne seront plus execute sont là
+                next = 'error: next fire date is in the past!';
+            }
+            //this.logger.log(`job: ${id} -> next: ${next}`);
+        });
+        return [];
+    }
+
 }
+

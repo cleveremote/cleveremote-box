@@ -12,7 +12,6 @@ export function CreateExecution(id: string, mode: ProcessMode, action: Executabl
     execution.cycle = cycle;
     execution.action = action;
     execution.type = ProcessType.FORCE;
-    execution.function = 'string';
     execution.mode = mode;
 
     return execution;
@@ -28,7 +27,6 @@ export function CreateExecutionQueued(id: string, mode: ProcessMode, action: Exe
     execution.cycle = cycle;
     execution.action = action;
     execution.type = ProcessType.QUEUED;
-    execution.function = 'string';
     execution.mode = mode;
 
     return execution;
@@ -44,7 +42,6 @@ export function CreateExecutionCycleWithWrongModuleConfig(mode: ProcessMode, act
     execution.cycle = cycle;
     execution.action = action;
     execution.type = ProcessType.FORCE;
-    execution.function = 'string';
     execution.mode = mode;
 
     return execution;
@@ -60,7 +57,6 @@ export function CreateExecutionCycleWithFalsySequence(mode: ProcessMode, action:
     execution.cycle = cycle;
     execution.action = action;
     execution.type = ProcessType.FORCE;
-    execution.function = 'string';
     execution.mode = mode;
 
     return execution;
@@ -76,7 +72,6 @@ export function CreateExecutionCycleNotExistConfig(mode: ProcessMode, action: Ex
     execution.cycle = cycle;
     execution.action = action;
     execution.type = ProcessType.FORCE;
-    execution.function = 'string';
     execution.mode = mode;
 
     return execution;

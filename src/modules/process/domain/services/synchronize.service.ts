@@ -1,31 +1,36 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
 import { Injectable } from '@nestjs/common';
-import { ProcessModule } from '@process/infrastructure/process.module';
 import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
-import * as path from 'path'
-import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus } from '../interfaces/executable.interface';
+import { ExecutableStatus } from '../interfaces/executable.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.interface';
 import { CycleModel } from '../models/cycle.model';
 import { ModuleModel } from '../models/module.model';
-import { ProcessModel } from '../models/process.model';
 import { ScheduleModel } from '../models/schedule.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
-import { SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel } from '../models/synchronize.model';
+import {
+    SynchronizeCycleModel,
+    SynchronizeModuleModel,
+    SynchronizeScheduleModel,
+    SynchronizeSensorModel,
+    SynchronizeSequenceModel, SynchronizeTriggerModel
+} from '../models/synchronize.model';
 import { ConfigurationService } from './configuration.service';
-import { ProcessService } from './execution.service';
 import { ScheduleService } from './schedule.service';
 import * as admin from 'firebase-admin';
+import { TriggerModel } from '../models/trigger.model';
+import { TriggerService } from './trigger.service';
+import { strict } from 'assert';
+import { SensorModel } from '../models/sensor.model';
 
 @Injectable()
 export class SynchronizeService {
     public constructor(private structureRepository: ConfigurationRepository,
         private configurationService: ConfigurationService,
-        private processService: ProcessService,
-        private scheduleService: ScheduleService) {
-        this._testNotification();
-    }
+        private scheduleService: ScheduleService,
+        private triggerService: TriggerService
+    ) { }
 
     public async synchronize(configuration: StructureModel): Promise<StructureModel> {
         console.log('configuration', configuration);
@@ -34,7 +39,7 @@ export class SynchronizeService {
                 title: 'test title',
                 body: 'this is test body'
             },
-            token: 'eV0cIRO5S_adMS84og3RyF:APA91bEtnOM_Wn5X-pJNhb-FXI6EQAtbX8CvuBcXIe8UQNnAzeKCFcWtY9EYy0DyANEqTSka6lj-sL54--YU1x2jFPL1LF6CYfFzXSYFsMBGitcQXTmvo3xznEJjLUCb0RqxpzZNbnbu'
+            token: 'c7yPELY5Rra0sHw6Fpq1Kn:APA91bFLtT1CSjQrt-boVHapdlZapc585f0Sll0fwNQAew7s1Sa8SNadYTkqvYjfpCkkgtgkerytnCmnzdQ9zdVJjQIcd8awiL6wDZykoXDNfkqrafEGT2kEUOH001u1TvZ-B-oRLZpM'
         };
 
         admin.messaging().send(message).then((response) => {
@@ -70,6 +75,18 @@ export class SynchronizeService {
         return this.configurationService.structure.cycles.find(x => x.id === scheduleData.cycleId);
     }
 
+    public async sychronizeTrigger(triggerData: SynchronizeTriggerModel): Promise<CycleModel> {
+        this._syncTrigger(this.configurationService.structure, triggerData);
+        await this.synchronize(this.configurationService.structure);
+        return this.configurationService.structure.cycles.find(x => x.id === triggerData.cycleId);
+    }
+
+    public async sychronizeSensor(sensorData: SynchronizeSensorModel): Promise<SensorModel> {
+        this._syncSensor(this.configurationService.structure, sensorData);
+        await this.synchronize(this.configurationService.structure);
+        return this.configurationService.structure.sensors.find(x => x.id === sensorData.id);
+    }
+
     private _syncSchedule(structure: StructureModel, data: SynchronizeScheduleModel): Promise<void> {
         const parentCycle = structure.cycles.find((cycle) => cycle.id === data.cycleId);
         console.log('parentCycle', parentCycle);
@@ -79,31 +96,88 @@ export class SynchronizeService {
             this.scheduleService.deleteCronJob(data.id);
             parentCycle.schedules.splice(index, 1);
         } else if (scheduleToUpdate) {
+            scheduleToUpdate.cycleId = data.cycleId;
             scheduleToUpdate.name = data.name;
             scheduleToUpdate.description = data.description;
             scheduleToUpdate.cron = data.cron;
+            scheduleToUpdate.isPaused = data.isPaused;
             this.scheduleService.deleteCronJob(data.id);
-            return this._initializeProcess(parentCycle, scheduleToUpdate);
+            return this._initializeSchedule(scheduleToUpdate);
         } else {
             const scheduleModel = new ScheduleModel();
+            scheduleModel.cycleId = data.cycleId;
             scheduleModel.id = data.id;
-            scheduleModel.name = data.id;
-            scheduleModel.description = data.id;
+            scheduleModel.name = data.name;
+            scheduleModel.description = data.description;
             scheduleModel.cron = data.cron;
+            scheduleModel.isPaused = data.isPaused;
             parentCycle.schedules.push(scheduleModel);
-            return this._initializeProcess(parentCycle, scheduleModel);
+            return this._initializeSchedule(scheduleModel);
         }
     }
 
-    private async _initializeProcess(cycle: CycleModel, schedule: ScheduleModel): Promise<void> {
-        const processModel = new ProcessModel();
-        processModel.cycle = cycle;
-        processModel.action = ExecutableAction.ON;
-        processModel.type = ProcessType.FORCE;
-        processModel.function = 'string';
-        processModel.mode = ProcessMode.SCHEDULED;
-        processModel.schedule = schedule;
-        await this.processService.initSchedule(processModel);
+
+
+    private _syncSensor(structure: StructureModel, data: SynchronizeSensorModel): void {
+        const sensorToUpdate = structure.sensors.find((sensor) => sensor.id === data.id);
+        if (sensorToUpdate && data.shouldDelete) {
+            const index = structure.sensors.findIndex(cy => cy.id === data.id);
+            structure.sensors.splice(index, 1);
+        } else if (sensorToUpdate) {
+            sensorToUpdate.name = data.name;
+            sensorToUpdate.description = data.description;
+            sensorToUpdate.unit = data.unit;
+            sensorToUpdate.type = data.type;
+        } else {
+            const sensorModel = new SensorModel();
+            sensorModel.name = data.name;
+            sensorModel.description = data.description;
+            sensorModel.unit = data.unit;
+            sensorModel.type = data.type;
+            structure.sensors.push(sensorModel);
+        }
+    }
+
+    private _syncTrigger(structure: StructureModel, data: SynchronizeTriggerModel): Promise<void> {
+        const parentCycle = structure.cycles.find((cycle) => cycle.id === data.cycleId);
+        console.log('parentCycle', parentCycle);
+        const triggerToUpdate = parentCycle.triggers.find((sch) => sch.id === data.id);
+        if (triggerToUpdate && data.shouldDelete) {
+            const index = parentCycle.triggers.findIndex(cy => cy.id === data.id);
+            //this.triggerService.deleteCronJob(data.id);
+            parentCycle.triggers.splice(index, 1);
+        } else if (triggerToUpdate) {
+            triggerToUpdate.cycleId = data.cycleId;
+            triggerToUpdate.name = data.name;
+            triggerToUpdate.description = data.description;
+            triggerToUpdate.trigger = data.trigger;
+            triggerToUpdate.isPaused = data.isPaused;
+            triggerToUpdate.delay = data.delay;
+            triggerToUpdate.conditions = data.conditions;
+            triggerToUpdate.action = data.action;
+            return this._initializeTrigger(triggerToUpdate);
+        } else {
+            const triggerModel = new TriggerModel();
+            triggerModel.cycleId = data.cycleId;
+            triggerModel.id = data.id;
+            triggerModel.name = data.name;
+            triggerModel.description = data.description;
+            triggerModel.trigger = data.trigger;
+            triggerModel.isPaused = data.isPaused;
+            triggerModel.delay = data.delay;
+            triggerModel.conditions = data.conditions;
+            triggerModel.action = data.action;
+            parentCycle.triggers.push(triggerModel);
+            return this._initializeTrigger(triggerModel);
+        }
+    }
+
+    private async _initializeSchedule(schedule: ScheduleModel): Promise<void> {
+        await this.scheduleService.initSchedule(schedule);
+    }
+
+    private async _initializeTrigger(trigger: TriggerModel): Promise<void> {
+        await this.triggerService.initTrigger(trigger.id);
     }
 
     private _syncCycle(structure: StructureModel, data: SynchronizeCycleModel): void {
@@ -195,7 +269,7 @@ export class SynchronizeService {
 
 
 
-        var serviceAccount = require('/Users/nya-perso/cleveremote/cleveremote-box/src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
+        const serviceAccount = require('/Users/nya-perso/cleveremote/cleveremote-box/src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
 
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
