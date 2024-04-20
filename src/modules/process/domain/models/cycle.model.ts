@@ -34,7 +34,7 @@ export class CycleModel implements IExecutable {
     }
 
     public async reset(): Promise<void> {
-        for (const sequence of this.sequences) {
+        for (const sequence of this.sequences) {0
             await sequence.reset();
         }
         this.status = ExecutableStatus.STOPPED;

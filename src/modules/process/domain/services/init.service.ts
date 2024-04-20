@@ -1,19 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigurationService } from './configuration.service';
+import { StructureService } from './configuration.service';
 import { ProcessService } from './execution.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
 import { DbService } from '@process/infrastructure/db/db.service';
-import { forEach } from 'mathjs';
-import { BehaviorSubject } from 'rxjs';
-import { IExecutableState } from '../interfaces/structure-repository.interface';
 
 @Injectable()
 export class InitService {
     public constructor(
-        private configurationService: ConfigurationService,
+        private configurationService: StructureService,
         private dbService: DbService,
         private processService: ProcessService,
         private scheduleService: ScheduleService,
@@ -22,14 +18,12 @@ export class InitService {
     ) { }
 
     public initialize(): Promise<void> {
-        return this._loadConfiguration()
-            .then(() => this.dbService.initialize())
-            .then(() => this._resetAllModules())
-            //.then(() => this._testAllModules())
-            .then(() => this.scheduleService.restartAllSchedules())
-            .then(() => this.sensorService.initialize())
+        return this.dbService.initialize()
+            .then(() => this._loadConfiguration())
             .then(() => this.triggerService.initilize())
-
+            .then(() => this.sensorService.initialize()) // temps for test purpose
+            .then(() => this._resetAllModules())
+            .then(() => this.scheduleService.restartAllSchedules())
             .catch((error) => {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
@@ -56,12 +50,8 @@ export class InitService {
     private _loadConfiguration(): Promise<void> {
 
         Logger.log('Start loading configuration...', 'initialization');
-        return this.configurationService.getConfiguration()
+        return this.configurationService.getStructure()
             .then(() => {
-                this.configurationService.structure.cycles.forEach(cycle => {
-                    this.configurationService.deviceListeners.push({ subject: new BehaviorSubject<IExecutableState>(null), deviceId: cycle.id });
-                });
-
                 Logger.log('configuration loaded', 'initialization');
             });
     }

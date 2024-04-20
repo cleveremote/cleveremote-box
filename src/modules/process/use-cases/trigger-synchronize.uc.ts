@@ -1,5 +1,6 @@
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { SynchronizeScheduleModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
+import { TriggerModel } from '@process/domain/models/trigger.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**
@@ -13,7 +14,7 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 export class TriggerSynchronizeUC {
     public constructor(private synchronizeService: SynchronizeService) { }
 
-    public execute(synchronizeTriggerModel: SynchronizeTriggerModel): Promise<CycleModel> {
-        return this.synchronizeService.sychronizeTrigger(synchronizeTriggerModel);
+    public execute(synchronizeTriggerModel: TriggerModel): Promise<TriggerModel> {
+        return this.synchronizeService.synchronizeTrigger(synchronizeTriggerModel);
     }
 }

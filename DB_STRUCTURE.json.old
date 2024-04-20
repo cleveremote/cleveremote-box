@@ -1,0 +1,207 @@
+{
+    "cycles": [
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "21",
+                            "portNum": 21,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both",
+                            "instance": {}
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "sequence1",
+                    "name": "Secteur 1",
+                    "maxDuration": 10000,
+                    "progression": {
+                        "startedAt": "2024-04-08T02:09:18.829Z"
+                    }
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "20",
+                            "portNum": 20,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both",
+                            "instance": {}
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "sequence2",
+                    "name": "Secteur 2",
+                    "maxDuration": 20000,
+                    "progression": {
+                        "startedAt": "2024-04-08T02:09:18.838Z"
+                    }
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "26",
+                            "portNum": 26,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both",
+                            "instance": {}
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "sequence3",
+                    "name": "Secteur 3",
+                    "maxDuration": 10000,
+                    "progression": {
+                        "startedAt": "2024-04-08T02:09:18.843Z"
+                    }
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "16",
+                            "portNum": 16,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both",
+                            "instance": {}
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "sequence4",
+                    "name": "Secteur 4",
+                    "maxDuration": 10000,
+                    "progression": {
+                        "startedAt": "2024-04-08T02:09:18.848Z"
+                    }
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "19",
+                            "portNum": 19,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both",
+                            "instance": {}
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "sequence5",
+                    "name": "Secteur 5",
+                    "maxDuration": 10000,
+                    "progression": {
+                        "startedAt": "2024-04-08T02:09:18.853Z"
+                    }
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "cycle12345",
+            "name": "Irrigation ferme 123",
+            "style": {
+                "bgColor": "pink.200",
+                "fontColor": "pink.500",
+                "iconColor": {
+                    "icon": "#f472b6",
+                    "base": "pink.500"
+                }
+            },
+            "description": "new description 1",
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "SCHEDULED",
+                    "priority": 1
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 2
+                }
+            ],
+            "progression": {
+                "duration": 60000,
+                "startedAt": "2024-04-08T02:09:18.857Z"
+            }
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "shouldDelete": false,
+                            "id": "20",
+                            "portNum": 20,
+                            "status": "OFF",
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "shouldDelete": false,
+                    "id": "new0.8296066727801762",
+                    "name": "Seq1",
+                    "maxDuration": 10000
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.7021545310008243",
+            "name": "new cycle",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "description": "new description",
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        }
+    ],
+    "sensors": []
+}

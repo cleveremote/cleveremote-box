@@ -1,11 +1,11 @@
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { StructureService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
-import { ConfigurationSynchronizeDTO } from '@process/infrastructure/dto/configuration-synchronize.dto';
+import { StructureSynchronizeDTO } from '@process/infrastructure/dto/configuration-synchronize.dto';
 import { CycleSynchronizeDTO, ScheduleSynchronizeDTO } from '@process/infrastructure/dto/synchronize.dto';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
@@ -23,7 +23,7 @@ import {
 
 describe('Synchronize Service unit testing ', () => {
     let synchronizeService: SynchronizeService;
-    let configurationService: ConfigurationService;
+    let configurationService: StructureService;
     afterEach(() => {
         jest.resetAllMocks();
     });
@@ -42,18 +42,18 @@ describe('Synchronize Service unit testing ', () => {
         const scheduleService = new ScheduleService(schedulerRegistry);
 
         const structureRepository = new StructureRepositorySpecMock();
-        configurationService = new ConfigurationService(structureRepository);
+        configurationService = new StructureService(structureRepository);
         const processService = new ProcessService(configurationService, service, scheduleService);
-        await configurationService.getConfiguration();
+        await configurationService.getStructure();
         synchronizeService = new SynchronizeService(structureRepository, configurationService, processService, scheduleService);
     });
 
     it('Should save configuration', async () => {
         //GIVEN
-        const dto = new ConfigurationSynchronizeDTO();
+        const dto = new StructureSynchronizeDTO();
         // eslint-disable-next-line max-len
         dto.configuration = '{"cycles":[{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":26,"direction":"out","edge":"both","instance":{}}],"id":"11","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":19,"direction":"out","edge":"both","instance":{}}],"id":"12","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":21,"direction":"out","edge":"both","instance":{}}],"id":"13","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}}],"id":"14","duration":10}],"id":"1"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":26,"direction":"out","edge":"both","instance":{}}],"id":"21","duration":10}],"id":"2"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":19,"direction":"out","edge":"both","instance":{}}],"id":"31","duration":10}],"id":"3"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":21,"direction":"out","edge":"both","instance":{}}],"id":"41","duration":10}],"id":"4"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}}],"id":"51","duration":10}],"id":"5"}]}'
-        const configurationModel = ConfigurationSynchronizeDTO.mapToNotificationModel(dto);
+        const configurationModel = StructureSynchronizeDTO.mapToStructureModel(dto);
 
         //WHEN
         const configModel = await synchronizeService.synchronize(configurationModel);

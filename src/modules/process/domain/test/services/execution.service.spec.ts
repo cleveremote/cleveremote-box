@@ -2,7 +2,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
 import { ExecutableAction, ProcessMode, ExecutableStatus, ProcessType } from '@process/domain/interfaces/executable.interface';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { StructureService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
 import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
@@ -31,8 +31,8 @@ describe('Notification Service unit testing ', () => {
 
         const scheduleService = new ScheduleService(schedulerRegistry);
         const structureRepository = new StructureRepositorySpecMock();
-        const configurationService = new ConfigurationService(structureRepository);
-        await configurationService.getConfiguration();
+        const configurationService = new StructureService(structureRepository);
+        await configurationService.getStructure();
         notificationService = new ProcessService(configurationService, service, scheduleService);
         await notificationService.resetAllModules();
     });

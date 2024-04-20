@@ -1,5 +1,4 @@
 import { CycleModel } from '@process/domain/models/cycle.model';
-import { SynchronizeCycleModel } from '@process/domain/models/synchronize.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**
@@ -10,10 +9,10 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
  * @include ConfigurationService.synchronize
  *
 */
-export class ConfigurationPartialSynchronizeUC {
+export class CycleSynchronizeUC {
     public constructor(private synchronizeService: SynchronizeService) { }
 
-    public execute(synchronizeCycleModel: SynchronizeCycleModel): Promise<CycleModel> {
-        return this.synchronizeService.sychronizePartial(synchronizeCycleModel);
+    public execute(synchronizeCycleModel: CycleModel): Promise<CycleModel> {
+        return this.synchronizeService.synchronizeCycle(synchronizeCycleModel);
     }
 }

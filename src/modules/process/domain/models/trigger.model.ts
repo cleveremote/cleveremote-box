@@ -14,4 +14,6 @@ export class TriggerModel {
     public lastTriggeredAt: Date;
     public isPaused: boolean;
     public action: ExecutableAction;
+    public isCheckInProgress: boolean;
+    public shouldDelete: boolean;
 }

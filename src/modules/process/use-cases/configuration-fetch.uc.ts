@@ -1,5 +1,5 @@
 import { StructureModel } from '@process/domain/models/structure.model';
-import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { StructureService } from '@process/domain/services/configuration.service';
 
 /**
  * # Synchronisation et enregitrement de la nouvelle structure cycle/sequence
@@ -10,7 +10,7 @@ import { ConfigurationService } from '@process/domain/services/configuration.ser
  *
 */
 export class ConfigurationFetchUC {
-    public constructor(private configurationService: ConfigurationService) { }
+    public constructor(private configurationService: StructureService) { }
 
     public execute(): Promise<StructureModel> {
         return this.configurationService.getConfigurationWithStatus();

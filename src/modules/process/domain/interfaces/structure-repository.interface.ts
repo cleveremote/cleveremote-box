@@ -1,7 +1,7 @@
 import { CycleModel } from '../models/cycle.model';
 import { ModuleModel } from '../models/module.model';
 import { StructureModel } from '../models/structure.model';
-import { ExecutableStatus, ExecutableType, ReadableElementType } from './executable.interface';
+//import { ExecutableStatus, ReadableElementType } from './executable.interface';
 
 export interface IStructureRepository {
     getStructure(): Promise<StructureModel>;
@@ -12,25 +12,29 @@ export interface IStructureRepository {
     saveStructure(structure: StructureModel): Promise<StructureModel>;
 }
 
-export interface ISensorValue {
-    id: string;
-    type: ReadableElementType;
-    value: number;
+export interface IRepository<T> {
+    create(entity: T): Promise<T>;
+    update(entity: T): Promise<T>;
+    delete(id: string, parentId?: string): Promise<boolean>;
+    get(id?: string, parentId?: string): Promise<T | T[]>;
+    shouldDelete(id: string, parentId?: string): string;
 }
 
-export interface IExecutableState {
-    id: string;
-    type: ReadableElementType;
-    status: ExecutableStatus;
-    startedAt: Date;
-    duration: number;
+export interface ISensorValueold {
+    // id: string;
+    // type: ReadableElementType;
+    // value: number;
 }
 
-export interface IValueResponse {
-    id: string;
-    type: ReadableElementType;
-    value: number | ExecutableStatus;
+export interface IExecutableStateold {
+    // id: string;
+    // type: ReadableElementType;
+    // status: ExecutableStatus;
+    // startedAt: Date;
+    // duration: number;
 }
+
+
 
 
 

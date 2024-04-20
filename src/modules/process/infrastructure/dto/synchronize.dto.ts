@@ -4,9 +4,15 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ExecutableAction, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
-import { SynchronizeConditionModel, SynchronizeCycleModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSensorModel, SynchronizeSequenceModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
+import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
+import { CycleModel } from '@process/domain/models/cycle.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
+import { SensorModel } from '@process/domain/models/sensor.model';
+import { StructureModel } from '@process/domain/models/structure.model';
+import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
+import { TriggerModel } from '@process/domain/models/trigger.model';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDate, IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsDate, IsDefined, IsEnum, IsNotEmpty, IsNumber, IsString, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 export class SequenceSync {
     @IsString()
     @IsNotEmpty()
@@ -20,6 +26,9 @@ export class SequenceSync {
     @IsArray()
     @Type(() => String)
     public modules: string[];
+    @IsArray()
+    @Type(() => ConditionSync)
+    public conditions?: ConditionSync[];
 }
 
 export class Style {
@@ -55,16 +64,9 @@ export class CycleSynchronizeDTO {
     @Type(() => SequenceSync)
     public sequences?: SequenceSync[];
 
-    public static mapToCycleModel(cycleSynchronizeDTO: CycleSynchronizeDTO): SynchronizeCycleModel {
-        const cycle = new SynchronizeCycleModel();
-
-        const splittedCycleId = cycleSynchronizeDTO.id.split('_');
-        cycle.shouldDelete = splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted';
-        cycle.id = splittedCycleId[1] || splittedCycleId[0];
-        if (cycle.shouldDelete) {
-            return cycle;
-        }
-
+    public static mapToCycleModel(cycleSynchronizeDTO: CycleSynchronizeDTO): CycleModel {
+        const cycle = new CycleModel();
+        cycle.id = cycleSynchronizeDTO.id;
         cycle.name = cycleSynchronizeDTO.name;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
@@ -87,21 +89,49 @@ export class CycleSynchronizeDTO {
             const splittedSequenceId = sequenceSync.id.split('_');
             sequence.shouldDelete = splittedSequenceId.length > 1 && splittedSequenceId[0] === 'deleted';
             sequence.id = splittedSequenceId[1] || splittedSequenceId[0];
+            //no need to save deleted...
             if (!sequence.shouldDelete) {
                 sequence.name = sequenceSync.name;
                 sequence.description = sequenceSync.description;
                 sequence.maxDuration = sequenceSync.maxDuration;
                 sequence.modules = [];
-                sequenceSync.modules.forEach((moduleId) => {
+                sequenceSync.modules?.forEach((moduleId) => {
                     const module = new SynchronizeModuleModel();
                     const splittedModuleId = moduleId.split('_');
                     module.shouldDelete = splittedModuleId.length > 1 && splittedModuleId[0] === 'deleted';
-                    module.id = splittedModuleId[1] || splittedModuleId[0];
-                    module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
-                    sequence.modules.push(module);
-                })
+                    //no need to save deleted...
+                    if (!module.shouldDelete) {
+                        module.id = splittedModuleId[1] || splittedModuleId[0];
+                        module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
+                        module.status = ModuleStatus.OFF;
+                        module.direction = GPIODirection.OUT;
+                        module.edge = GPIOEdge.BOTH;
+                        delete module.instance;
+                        sequence.modules.push(module);
+                    }
+                });
+                sequence.conditions = [];
+                if (sequenceSync.conditions?.length > 0) {
+                    sequenceSync.conditions.forEach(conditionSync => {
+                        const condition = new SynchronizeConditionModel();
+                        const splittedConditionId = conditionSync.id.split('_');
+                        condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
+                        condition.id = splittedConditionId[1] || splittedConditionId[0];
+                        condition.parentId = sequenceSync.id;
+                        condition.name = conditionSync.name;
+                        condition.description = conditionSync.name;
+                        condition.deviceId = conditionSync.deviceId;
+                        condition.operator = conditionSync.operator;
+                        condition.value = conditionSync.value;
+                        sequence.conditions.push(condition);
+                    });
+                }
+
+               
+
+                cycle.sequences.push(sequence);
             }
-            cycle.sequences.push(sequence);
+
         });
 
         return cycle;
@@ -113,8 +143,6 @@ export class SunBehavior {
     @IsNotEmpty()
     @ApiProperty()
     public sunState: SunState;
-    @IsBoolean()
-    public isBefore: boolean;
     @IsNumber()
     public time: number;
 }
@@ -129,7 +157,7 @@ export class CronSync {
     public after: number;
 }
 
-export class triggerSync {
+export class TriggerSync {
     @IsNumber()
     public timeAfter: number; //imemdiat if 0
     @Type(() => SunBehavior)
@@ -152,32 +180,35 @@ export class ScheduleSynchronizeDTO {
     public isPaused: boolean
 
 
-    public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): SynchronizeScheduleModel {
-        const scheduleModel = new SynchronizeScheduleModel();
-
-        const splittedScheduleId = scheduleSynchronizeDTO.id.split('_');
-        scheduleModel.shouldDelete = splittedScheduleId.length > 1 && splittedScheduleId[0] === 'deleted';
-        scheduleModel.id = splittedScheduleId[1] || splittedScheduleId[0];
+    public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): ScheduleModel {
+        const scheduleModel = new ScheduleModel();
+        scheduleModel.id = scheduleSynchronizeDTO.id;
         scheduleModel.cycleId = scheduleSynchronizeDTO.cycleId;
-        if (scheduleModel.shouldDelete) {
-            return scheduleModel;
-        }
-
         scheduleModel.name = scheduleSynchronizeDTO.name;
         scheduleModel.description = scheduleSynchronizeDTO.description;
         scheduleModel.cron = new CronSync();
         scheduleModel.cron.date = scheduleSynchronizeDTO.cron.date;
         scheduleModel.cron.pattern = scheduleSynchronizeDTO.cron.pattern;
-        scheduleModel.cron.sunBehavior = new SunBehavior();
-        scheduleModel.cron.sunBehavior.isBefore = scheduleSynchronizeDTO.cron.sunBehavior.isBefore;
-        scheduleModel.cron.sunBehavior.sunState = scheduleSynchronizeDTO.cron.sunBehavior.sunState;
-        scheduleModel.cron.sunBehavior.time = scheduleSynchronizeDTO.cron.sunBehavior.time;
+        if (scheduleSynchronizeDTO.cron.sunBehavior) {
+            scheduleModel.cron.sunBehavior = new SunBehavior();
+            scheduleModel.cron.sunBehavior.sunState = scheduleSynchronizeDTO.cron.sunBehavior.sunState;
+            scheduleModel.cron.sunBehavior.time = scheduleSynchronizeDTO.cron.sunBehavior.time;
+        }
 
         scheduleModel.isPaused = scheduleSynchronizeDTO.isPaused;
         return scheduleModel;
     }
 }
+@ValidatorConstraint({ name: 'string-or-number', async: false })
+export class IsNumberOrString implements ValidatorConstraintInterface {
+    public validate(text: any, args: ValidationArguments) {
+        return typeof text === 'number' || typeof text === 'string';
+    }
 
+    public defaultMessage(args: ValidationArguments) {
+        return '($value) must be number or string';
+    }
+}
 export class ConditionSync {
     @IsString()
     @IsNotEmpty()
@@ -186,8 +217,9 @@ export class ConditionSync {
     public name: string;
     @IsString()
     public description: string;
-    @IsString()
-    public function: string;
+    @IsDefined()
+    @Validate(IsNumberOrString)
+    public value: number | ExecutableAction;
     @IsString()
     public operator: string;
     @IsString()
@@ -207,8 +239,8 @@ export class TriggerSynchronizeDTO {
     @IsNotEmpty()
     @ApiProperty()
     public action: ExecutableAction;
-    @Type(() => triggerSync)
-    public trigger: triggerSync;
+    @Type(() => TriggerSync)
+    public trigger: TriggerSync;
     @IsBoolean()
     public isPaused: boolean;
     @IsNumber()
@@ -219,43 +251,37 @@ export class TriggerSynchronizeDTO {
     @Type(() => ConditionSync)
     public conditions?: ConditionSync[];
 
-    public static mapToTriggerModel(triggerSynchronizeDTO: TriggerSynchronizeDTO): SynchronizeTriggerModel {
-        const triggerModel = new SynchronizeTriggerModel();
+    public static mapToTriggerModel(triggerSynchronizeDTO: TriggerSynchronizeDTO): TriggerModel {
+        const triggerModel = new TriggerModel();
 
-        const splittedScheduleId = triggerSynchronizeDTO.id.split('_');
-        triggerModel.shouldDelete = splittedScheduleId.length > 1 && splittedScheduleId[0] === 'deleted';
-        triggerModel.id = splittedScheduleId[1] || splittedScheduleId[0];
-        triggerModel.cycleId = triggerSynchronizeDTO.cycleId;
-        if (triggerModel.shouldDelete) {
-            return triggerModel;
-        }
-
+        triggerModel.id = triggerSynchronizeDTO.id;
         triggerModel.name = triggerSynchronizeDTO.name;
         triggerModel.description = triggerSynchronizeDTO.description;
-        triggerModel.trigger = new triggerSync();
+        triggerModel.trigger = new TriggerSync();
         triggerModel.trigger.timeAfter = triggerSynchronizeDTO.trigger.timeAfter;
         triggerModel.shouldConfirmation = triggerSynchronizeDTO.shouldConfirmation;
         triggerModel.delay = triggerSynchronizeDTO.delay;
         triggerModel.action = triggerSynchronizeDTO.action;
+        triggerModel.cycleId = triggerSynchronizeDTO.cycleId;
 
         if (triggerSynchronizeDTO.trigger?.sunBehavior) {
             triggerModel.trigger.sunBehavior = new SunBehavior();
-            triggerModel.trigger.sunBehavior.isBefore = triggerSynchronizeDTO.trigger?.sunBehavior?.isBefore;
             triggerModel.trigger.sunBehavior.sunState = triggerSynchronizeDTO.trigger.sunBehavior?.sunState;
             triggerModel.trigger.sunBehavior.time = triggerSynchronizeDTO.trigger?.sunBehavior?.time; //time befor or after sunset sunrise
         }
-
+        triggerModel.conditions = [];
         if (triggerSynchronizeDTO.conditions?.length > 0) {
             triggerSynchronizeDTO.conditions.forEach(conditionSync => {
                 const condition = new SynchronizeConditionModel();
                 const splittedConditionId = conditionSync.id.split('_');
                 condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
                 condition.id = splittedConditionId[1] || splittedConditionId[0];
-                condition.triggerId = triggerModel.id;
+                condition.parentId = triggerModel.id;
                 condition.name = conditionSync.name;
                 condition.description = conditionSync.name;
                 condition.deviceId = conditionSync.deviceId;
                 condition.operator = conditionSync.operator;
+                condition.value = conditionSync.value;
                 triggerModel.conditions.push(condition);
             });
         }
@@ -278,21 +304,42 @@ export class SensorSynchronizeDTO {
     @ApiProperty()
     public type: SensorType;
 
-    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SynchronizeSensorModel {
-        const sensorModel = new SynchronizeSensorModel();
-
-        const splittedScheduleId = sensorSynchronizeDTO.id.split('_');
-        sensorModel.shouldDelete = splittedScheduleId.length > 1 && splittedScheduleId[0] === 'deleted';
-        sensorModel.id = splittedScheduleId[1] || splittedScheduleId[0];
-        if (sensorModel.shouldDelete) {
-            return sensorModel;
-        }
-
+    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
+        const sensorModel = new SensorModel();
+        sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.name = sensorSynchronizeDTO.name;
         sensorModel.description = sensorSynchronizeDTO.description;
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.type = sensorSynchronizeDTO.type;
         sensorModel.unit = sensorSynchronizeDTO.unit;
         return sensorModel;
+    }
+}
+
+export class StructureSynchronizeDTO {
+
+    @IsArray()
+    @Type(() => CycleSynchronizeDTO)
+    public cycles: CycleSynchronizeDTO[];
+
+    @IsArray()
+    @Type(() => SensorSynchronizeDTO)
+    public sensors: SensorSynchronizeDTO[];
+
+    public static mapToStructureModel(structureSynchronizeDTO: StructureSynchronizeDTO): StructureModel {
+
+        const structureModel = new StructureModel();
+        structureModel.cycles = [];
+        structureModel.sensors = [];
+
+        structureSynchronizeDTO.cycles.forEach(cycle => {
+            structureModel.cycles.push(CycleSynchronizeDTO.mapToCycleModel(cycle));
+        });
+
+        structureSynchronizeDTO.sensors.forEach(cycle => {
+            structureModel.sensors.push(SensorSynchronizeDTO.mapToSensorModel(cycle));
+        });
+
+        return structureModel;
     }
 }
