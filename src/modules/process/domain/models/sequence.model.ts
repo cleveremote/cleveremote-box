@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ModuleModel } from './module.model';
+import { ConditionModel } from './condition.model';
 
 
 export class SequenceModel {
@@ -11,6 +12,7 @@ export class SequenceModel {
     public progression: { startedAt: Date; duration: number };
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public maxDuration: number;
+    public conditions: ConditionModel[];
     public modules: ModuleModel[] = [];
 
     public async reset(): Promise<void> {

@@ -1,33 +1,43 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
-import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus } from '../interfaces/executable.interface';
-import { ProcessModel } from '../models/process.model';
+import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
+import { ExecutableStatus } from '../interfaces/executable.interface';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
 import { ScheduleModel } from '../models/schedule.model';
 import { TriggerModel } from '../models/trigger.model';
 import { BehaviorSubject } from 'rxjs';
-import { SensorModel } from '../models/sensor.model';
-import { IExecutableState, ISensorValue } from '../interfaces/structure-repository.interface';
+import { StructureEntity } from '@process/infrastructure/entities/structure.entity';
+import { SensorValueModel } from '../models/sensor-value.model';
+import { ProcessValueModel } from '../models/proccess-value.model';
+import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
+import { ValueModel } from '../models/value.model';
+import { ProcessValueEntity } from '@process/infrastructure/entities/process-value.entity';
 
 @Injectable()
-export class ConfigurationService {
+export class StructureService {
     public structure: StructureModel;
     public sequences: SequenceModel[];
     public schedules: ScheduleModel[];
     public triggers: TriggerModel[];
-    public deviceListeners: { subject: BehaviorSubject<ISensorValue | IExecutableState>, deviceId }[] = [];
-    public constructor(private structureRepository: ConfigurationRepository) {
+    public deviceListeners: { subject: BehaviorSubject<SensorValueModel | ProcessValueModel>, deviceId }[] = [];
+
+    public constructor(
+        private structureRepository: StructureRepository,
+        private valueRepository: ValueRepository
+    ) {
     }
 
-    public async getConfiguration(): Promise<StructureModel> {
-        return this.structureRepository.getStructure().then((data) => {
-            this.structure = data;
+    public async getStructure(): Promise<StructureModel> {
+        return this.structureRepository.get().then((data) => {
+            const structureModel = StructureEntity.mapToModel(data);
+            this.structure = structureModel;
             let sequences: SequenceModel[] = [];
             let schedules: ScheduleModel[] = [];
             let triggers: TriggerModel[] = [];
+
             this.structure.cycles.forEach((cycle) => {
+                this.deviceListeners.push({ subject: new BehaviorSubject<ProcessValueModel>(null), deviceId: cycle.id });
                 sequences = sequences.concat(cycle.sequences);
                 sequences = [...new Set([...sequences, ...cycle.sequences])];
                 schedules = schedules.concat(cycle.schedules);
@@ -40,50 +50,33 @@ export class ConfigurationService {
             this.schedules = schedules;
             this.triggers = triggers;
 
-            return data;
+            return this.structure;
         });
     }
 
     public async getConfigurationWithStatus(): Promise<StructureModel> {
-        const struc = await this.getConfiguration();
-        const results = await this.structureRepository.getProcessesStatus();
+        const struc = await this.getStructure();
+        const sequencesProc: ProcessValueEntity[] = await this.valueRepository.getValues('SEQUENCE') as ProcessValueEntity[];
+        const cyclesProc: ProcessValueEntity[] = await this.valueRepository.getValues('CYCLE') as ProcessValueEntity[];
 
-        results.cycles.forEach(cycle => {
+        cyclesProc?.forEach(cycle => {
             const structCycle = struc.cycles.find((x) => x.id === cycle.id);
-            structCycle.progression = { duration: cycle.duration, startedAt: cycle.startedAt };
-            structCycle.status = ExecutableStatus[cycle.status];
+            if (structCycle) {
+                structCycle.progression = { duration: cycle.duration, startedAt: cycle.startedAt };
+                structCycle.status = ExecutableStatus[cycle.status];
+            }
         });
 
-        results.sequences.forEach(seq => {
+        sequencesProc?.forEach(seq => {
             const sequences = struc.getSequences();
             const sequence = sequences.find((x) => x.id === seq.id);
-            sequence.progression = { duration: seq.duration, startedAt: seq.startedAt };
-            sequence.status = ExecutableStatus[seq.status];
+            if (sequence) {
+                sequence.progression = { duration: seq.duration, startedAt: seq.startedAt };
+                sequence.status = ExecutableStatus[seq.status];
+            }
+
         });
         return struc;
-    }
-
-    public getAllCyles(): Array<ProcessModel> {
-        const cycles = this.structure.cycles;
-        const AllProcesses: Array<ProcessModel> = [];
-        cycles.forEach(cycle => {
-            const process = new ProcessModel();
-            process.cycle = cycle;
-            process.action = ExecutableAction.OFF;
-            process.type = ProcessType.FORCE;
-            process.mode = ProcessMode.MANUAL;
-            AllProcesses.push(process);
-        });
-        return AllProcesses;
-    }
-
-    public getDevice(id: string): SensorModel {
-        return this.structure.sensors.find(x => x.id === id);
-    }
-
-    public updateProcessesValues(data: any): Promise<any[]> {
-        // return this.structureRepository.updateProcessesValues(data);
-        return null;
     }
 
 }

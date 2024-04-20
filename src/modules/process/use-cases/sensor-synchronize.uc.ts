@@ -14,7 +14,7 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 export class SensorSynchronizeUC {
     public constructor(private synchronizeService: SynchronizeService) { }
 
-    public execute(synchronizeSensorModel: SynchronizeSensorModel): Promise<SensorModel> {
-        return this.synchronizeService.sychronizeSensor(synchronizeSensorModel);
+    public execute(sensorModel: SensorModel): Promise<SensorModel> {
+        return this.synchronizeService.sychronizeSensor(sensorModel);
     }
 }

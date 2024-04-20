@@ -1,7 +1,7 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigurationRepository } from '@process/infrastructure/repositories/configuration.repository';
+import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { delayWhen, from, map, mergeMap, Observable, of, Subject, Subscription, takeLast, takeUntil, tap, timer } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
@@ -9,14 +9,24 @@ import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
     ExecutableAction,
     ExecutableStatus,
-    ExecutableType,
+    ProcessMode,
     ProcessType
 } from '../interfaces/executable.interface';
 import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
-import { ConfigurationService } from './configuration.service';
+import { StructureService } from './configuration.service';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
+import { CycleModel } from '../models/cycle.model';
+import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
+import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
+import { ExecutableType } from '../models/value.model';
+import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
+import { ProcessValueEntity } from '@process/infrastructure/entities/process-value.entity';
+import { ProcessValueRepository } from '@process/infrastructure/repositories/process-value.repository';
+import { SensorValueModel } from '../models/sensor-value.model';
+import { ProcessValueModel } from '../models/proccess-value.model';
+import * as math from 'mathjs';
 
 @Injectable()
 export class ProcessService {
@@ -24,16 +34,19 @@ export class ProcessService {
     public queuedSequences = [];
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
-        private configurationService: ConfigurationService,
+        private configurationService: StructureService,
         private wsService: SocketIoClientProxyService,
-        private configurationRepository: ConfigurationRepository
+        private configurationRepository: StructureRepository,
+        private processValueRepository: ProcessValueRepository,
+        private cycleRepository: CycleRepository,
+        private valueRepository: ValueRepository
     ) {
 
     }
 
     public async execute(process: ProcessModel): Promise<void> {
         this._initializeProcess(process);
-        return this._manageProcessType(process);
+        return await this._manageProcessType(process);
     }
 
     public async reset(process: ProcessModel): Promise<void> {
@@ -44,7 +57,10 @@ export class ProcessService {
             await process.cycle.reset();
             this.processList.splice(index, 1);
             for (const sequence of process.cycle.sequences) {
-                await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
+                const state = await this.valueRepository.getValues('SEQUENCE', sequence.id)[0] as ProcessValueEntity;
+                if (state?.status !== ExecutableStatus.STOPPED) {
+                    await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
+                }
             }
 
             await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
@@ -53,21 +69,25 @@ export class ProcessService {
     }
 
     public async resetAllModules(): Promise<void> {
-        const processes = this.configurationService.getAllCyles();
-        for (const key in processes) {
-            if (Object.prototype.hasOwnProperty.call(processes, key)) {
-                const process = processes[key];
-                await this._initialReset(process);
+        const cycles = await this.cycleRepository.get();
+        for (const key in cycles) {
+            if (Object.prototype.hasOwnProperty.call(cycles, key)) {
+                const cycleModel = CycleEntity.mapToModel(cycles[key]);
+                await this._initialReset(cycleModel);
             }
         }
     }
 
     public async testAllModules(): Promise<void> {
-        const processes = this.configurationService.getAllCyles();
-        for (const key in processes) {
-            if (Object.prototype.hasOwnProperty.call(processes, key)) {
-                const process = processes[key];
+        const cycles = await this.cycleRepository.get();
+        for (const key in cycles) {
+            if (Object.prototype.hasOwnProperty.call(cycles, key)) {
+                const cycleModel = CycleEntity.mapToModel(cycles[key]);
+                const process = new ProcessModel();
+                process.cycle = cycleModel;
                 process.action = ExecutableAction.ON;
+                process.type = ProcessType.FORCE;
+                process.mode = ProcessMode.MANUAL;
                 await this.execute(process);
             }
         }
@@ -89,9 +109,14 @@ export class ProcessService {
         }
     }
 
-    private async _initialReset(process: ProcessModel): Promise<void> {
-        await process.cycle.reset();
-        await this._processProgress(process.cycle.id, ExecutableAction.OFF);
+    private async _initialReset(cycleModel: CycleModel): Promise<void> {
+        await cycleModel.reset();
+
+        for (const sequence of cycleModel.sequences) {
+            await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
+        }
+
+        await this._processProgress(cycleModel.id, ExecutableAction.OFF);
     }
 
     private _initializeProcess(process: ProcessModel): void {
@@ -131,6 +156,9 @@ export class ProcessService {
         const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
         const report: { id: string; type: ProcessType; cause: string }[] = [];
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
+        if (!conflictedProcesses.length) {
+            process.type = ProcessType.FORCE;
+        }
         for (const proc of conflictedProcesses) {
             if (cyclePriority.priority < proc.cycle.modePriority.find((x) => x.mode === proc.mode).priority) {
                 process.type = ProcessType.FORCE;
@@ -178,7 +206,7 @@ export class ProcessService {
         const modules = process.cycle.getModules();
         modules.forEach((module) => {
             this.processList.forEach((proc) => {
-                if (proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id)) {
+                if (proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id) && proc.cycle.id !== process.cycle.id) {
                     conflictedExecutable.push(proc);
                 }
             })
@@ -237,18 +265,42 @@ export class ProcessService {
                             this.queuedSequences.splice(index, 1);
                         }
                         this.queuedSequences.push(ref);
-                        this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
-                            { id: currentSeq.sequenceId, pins: currentPins, duration: currentSeq.duration }, modules);
+                        this._checkSequenceCondition(ref.sequenceId).then((skipExecSequence) => {
 
-                        setTimeout(() => {
-                            ref.flag.next(null);
-                        }, currentSeq.duration);
+                            if (!skipExecSequence) {
+                                this._switchProcess({ id: previousSeq?.sequenceId, pins: previousPins, duration: previousSeq?.duration },
+                                    { id: currentSeq.sequenceId, pins: currentPins, duration: currentSeq.duration }, modules);
+                            }
+                            setTimeout(() => {
+                                ref.flag.next(null);
+                            }, skipExecSequence ? 0 : currentSeq.duration);
+                        });
                         return currentSeq;
                     })
                 );
             }),
             delayWhen(() => ref.flag)
         );
+    }
+
+    private async _checkSequenceCondition(sequenceId: string): Promise<boolean> {
+        const sequence = this.configurationService.sequences.find(x => x.id === sequenceId);
+        const parser = math.parser();
+
+        const asyncEvery = async (arr: any[], predicate: { (condition: any): Promise<any>; (arg0: any): any; }) => {
+            for (const e of arr) {
+                if (!await predicate(e)) return false;
+            }
+            return true;
+        };
+
+        return await asyncEvery(sequence.conditions, async (condition) => {
+            const extractedVal = await this.valueRepository.getDeviceValue(condition.deviceId);
+            const value = (extractedVal as SensorValueModel).value || (extractedVal as ProcessValueModel).status;
+            if (!value) { return false; }
+            return parser.evaluate(`(${value} ${condition.operator} ${condition.value})`);
+        });
+
     }
 
     private async _switchProcess(previousData: { id: string; pins: number[]; duration: number },
@@ -277,6 +329,9 @@ export class ProcessService {
     private async _processProgress(id: string, action: ExecutableAction, duration?: number): Promise<string> {
         const seqFound = this.configurationService.sequences.find(seq => seq.id === id);
         const cycFound = this.configurationService.structure.cycles.find(cyc => cyc.id === id);
+        if (!seqFound && !cycFound) {
+            return;
+        }
         const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const startedAt = new Date();
         //const endedAt = action === ExecutableAction.ON && duration ? startedAt.setMilliseconds(startedAt.getMilliseconds() + duration) : undefined;
@@ -293,12 +348,12 @@ export class ProcessService {
             data = { type, id, status, startedAt, duration: cycleDuration };
         }
 
-        const pro = this.configurationRepository.insertProcessStatus(data);
+        const pro = this.processValueRepository.save(data);
 
         if (cycFound) {
             const st = this.configurationService.deviceListeners.find(x => x.deviceId === cycFound.id);
             if (st) {
-                st.subject.next(data);
+                //st.subject.next(data); // pour ecouter les trigger
             }
 
         }

@@ -1,7 +1,7 @@
 import { MockClass } from '@framework/utils/test.utils';
 import { SynchronizeCycleModel } from '@process/domain/models/synchronize.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
-import { ConfigurationPartialSynchronizeUC } from './configuration-partial-synchronize.uc';
+import { CycleSynchronizeUC } from './cycle-synchronize.uc';
 describe('Process use case test', () => {
     it('Should execute partial sync and return a response dto', async () => {
         // GIVEN
@@ -13,7 +13,7 @@ describe('Process use case test', () => {
         const synchronizeCycleModel = new SynchronizeCycleModel();
 
         // WHEN
-        const uc = new ConfigurationPartialSynchronizeUC(synchronizeService);
+        const uc = new CycleSynchronizeUC(synchronizeService);
         await uc.execute(synchronizeCycleModel);
 
         // THEN

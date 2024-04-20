@@ -1,4 +1,5 @@
 import { CycleModel } from '@process/domain/models/cycle.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SynchronizeScheduleModel } from '@process/domain/models/synchronize.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
@@ -13,7 +14,7 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 export class ScheduleSynchronizeUC {
     public constructor(private synchronizeService: SynchronizeService) { }
 
-    public execute(synchronizeCycleModel: SynchronizeScheduleModel): Promise<CycleModel> {
-        return this.synchronizeService.sychronizeSchedule(synchronizeCycleModel);
+    public execute(scheduleModel: ScheduleModel): Promise<ScheduleModel> {
+        return this.synchronizeService.synchronizeSchedule(scheduleModel);
     }
 }

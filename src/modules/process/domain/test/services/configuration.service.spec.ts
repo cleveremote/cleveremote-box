@@ -1,20 +1,20 @@
-import { ConfigurationService } from '@process/domain/services/configuration.service';
+import { StructureService } from '@process/domain/services/configuration.service';
 import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
 
 describe('Notification Service unit testing ', () => {
-    let configurationService: ConfigurationService;
+    let configurationService: StructureService;
     afterEach(() => {
         jest.resetAllMocks();
     });
 
     beforeEach(async () => {
         const structureRepository = new StructureRepositorySpecMock();
-        configurationService = new ConfigurationService(structureRepository);
+        configurationService = new StructureService(structureRepository);
     });
 
     it('Should get configuration', async () => {
         //WHEN
-        const configuration = await configurationService.getConfiguration();
+        const configuration = await configurationService.getStructure();
         //THEN
         expect(configuration).toBeDefined();
     });

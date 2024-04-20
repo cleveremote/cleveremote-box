@@ -1,4 +1,3 @@
-import { BehaviorSubject } from 'rxjs';
 import { ModuleModel } from '../models/module.model';
 import { SequenceModel } from '../models/sequence.model';
 
@@ -29,17 +28,6 @@ export enum ProcessType {
     IGNORE = 'IGNORE', //par confirmation
     SKIP = 'SKIP' // concerne les sequences ...
 }
-
-export enum ExecutableType {
-    CYCLE = 'CYCLE',
-    SEQUENCE = 'SEQUENCE'
-}
-
-export enum ReadableType  {
-    SENSOR = 'SENSOR'
-}
-
-export type ReadableElementType = ReadableType | ExecutableType;
 
 export enum TASK {
     DATE = 'DATE',
