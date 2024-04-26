@@ -62,8 +62,10 @@ export class StructureService {
         cyclesProc?.forEach(cycle => {
             const structCycle = struc.cycles.find((x) => x.id === cycle.id);
             if (structCycle) {
-                structCycle.progression = { duration: cycle.duration, startedAt: cycle.startedAt };
                 structCycle.status = ExecutableStatus[cycle.status];
+                if (structCycle.status === ExecutableStatus.IN_PROCCESS) {
+                    structCycle.progression = { duration: cycle.duration, startedAt: cycle.startedAt };
+                }
             }
         });
 
@@ -71,8 +73,10 @@ export class StructureService {
             const sequences = struc.getSequences();
             const sequence = sequences.find((x) => x.id === seq.id);
             if (sequence) {
-                sequence.progression = { duration: seq.duration, startedAt: seq.startedAt };
                 sequence.status = ExecutableStatus[seq.status];
+                if (sequence.status === ExecutableStatus.IN_PROCCESS) {
+                    sequence.progression = { duration: seq.duration, startedAt: seq.startedAt };
+                }
             }
 
         });

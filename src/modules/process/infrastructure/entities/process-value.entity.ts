@@ -10,7 +10,12 @@ export class ProcessValueEntity extends ProcessValueModel {
         model.status = entity.status;
         model.startedAt = entity.startedAt;
         model.duration = entity.duration;
-
+        model.causes = [];
+        if (entity.causes?.length > 0) {
+            entity.causes.forEach(cause => {
+                model.causes.push(cause);
+            });
+        }
         return model;
     }
 
@@ -21,7 +26,12 @@ export class ProcessValueEntity extends ProcessValueModel {
         entity.status = model.status;
         entity.startedAt = model.startedAt;
         entity.duration = model.duration;
-
+        entity.causes = [];
+        if (model.causes?.length > 0) {
+            model.causes.forEach(cause => {
+                entity.causes.push(cause);
+            });
+        }
         return entity;
     }
 

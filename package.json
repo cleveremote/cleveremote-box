@@ -38,6 +38,7 @@
     "reflect-metadata": "^0.1.13",
     "rimraf": "^3.0.2",
     "rxjs": "^7.2.0",
+    "serialport": "^12.0.0",
     "socket.io-client": "^4.5.1",
     "sunrise-sunset-js": "^2.2.1"
   },

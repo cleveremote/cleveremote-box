@@ -103,7 +103,7 @@
                     ],
                     "isPaused": false,
                     "delay": 15000,
-                    "lastTriggeredAt": "2024-04-20T17:59:00.073Z"
+                    "lastTriggeredAt": "2024-04-26T12:41:51.120Z"
                 }
             ],
             "id": "0.840889220537641",
@@ -164,6 +164,274 @@
                 "iconColor": {
                     "icon": "#f472b6",
                     "base": "pink.500"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "24",
+                            "status": "OFF",
+                            "portNum": 24,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.39434282373580776",
+                    "name": "new sequence",
+                    "maxDuration": 5000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.8796926308156658",
+            "name": "Cycle conflit 1",
+            "description": "new description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "24",
+                            "status": "OFF",
+                            "portNum": 24,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7847399776638643",
+                    "name": "new sequence",
+                    "maxDuration": 500000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.6552795852660118",
+            "name": "Cycle conflit 2",
+            "description": "new description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "21",
+                            "status": "OFF",
+                            "portNum": 21,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.44466809923669615",
+                    "name": "Sector 1",
+                    "maxDuration": 50000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 20,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7029173520958717",
+                    "name": "Sector 2",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.5223380524202714",
+            "name": "Irrigation full",
+            "description": "new description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "21",
+                            "status": "OFF",
+                            "portNum": 21,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7184374563285956",
+                    "name": "Soctor 1",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.7817029024163632",
+            "name": "Irrigation Sector 1",
+            "description": "new description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 20,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.6203460252251354",
+                    "name": "Sector 2",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.3925937615635484",
+            "name": "Irrigation Sector 2",
+            "description": "new description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
                 }
             },
             "modePriority": [

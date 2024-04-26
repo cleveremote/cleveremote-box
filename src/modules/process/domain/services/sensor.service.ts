@@ -4,16 +4,24 @@ import { BehaviorSubject } from 'rxjs';
 import { SynchronizeService } from './synchronize.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { TriggerService } from './trigger.service';
+import { ReadlineParser, SerialPort } from 'serialport'
 
 @Injectable()
 export class SensorService {
     //sensors can be added automatically only. device id is serial number on sensor box app.
     public intervals = []
+    private serialport;
     public constructor(
         private configurationService: StructureService,
         private synchronizeService: SynchronizeService,
         private triggerService: TriggerService
-    ) { }
+    ) {
+
+        this.serialport = new SerialPort({ path: '/dev/cu.usbserial-1440', baudRate: 9600 })
+        const parser = new ReadlineParser();
+        this.serialport.pipe(parser)
+        parser.on('data', console.log)
+    }
 
 
 
@@ -52,5 +60,9 @@ export class SensorService {
         this.intervals.forEach(nIntervId => {
             clearInterval(nIntervId);
         });
+    }
+
+    private testreceivemessagehc12() {
+
     }
 }

@@ -47,7 +47,7 @@ export class ValueRepository {
                 break;
             case 'CYCLE':
                 res = await this.processValueRepository.get(id);
-                if (Array.isArray(result)) {
+                if (Array.isArray(res)) {
                     result = res.filter(x => x.type === 'CYCLE');
                 } else {
                     result = [res]
