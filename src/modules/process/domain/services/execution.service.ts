@@ -323,7 +323,7 @@ export class ProcessService {
 
         return await asyncEvery(sequence.conditions, async (condition) => {
             const extractedVal = await this.valueRepository.getDeviceValue(condition.deviceId);
-            const value = (extractedVal as SensorValueModel).value || (extractedVal as ProcessValueModel).status;
+            const value = (extractedVal as SensorValueModel)?.value || (extractedVal as ProcessValueModel)?.status;
             if (!value) { return false; }
             return parser.evaluate(`(${value} ${condition.operator} ${condition.value})`);
         });

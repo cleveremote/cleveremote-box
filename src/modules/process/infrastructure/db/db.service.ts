@@ -27,6 +27,13 @@ export class DbService {
         } catch (error) {
             console.error('The database DB_VALUES could not be loaded');
             await this.executeBackUp('DB_VALUES', 'RESTORE');
+            if (!await this.DB_VALUES.exists('/sensors')) {
+                await this.DB_VALUES.push('/sensors', []);
+            }
+
+            if (!await this.DB_VALUES.exists('/processes')) {
+                await this.DB_VALUES.push('/processes', []);
+            }
         }
     }
 
