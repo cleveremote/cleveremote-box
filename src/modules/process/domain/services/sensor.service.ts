@@ -80,7 +80,7 @@ export class SensorService {
                                 console.log('A new value was written:', value);
 
 
-fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
+//fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
                                 callback(AttErrors.SUCCESS); // actually only needs to be called when needsResponse is true
                             }
                         },
