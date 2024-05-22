@@ -9,11 +9,11 @@ export class SocketIoClientProxyService extends ClientProxy {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async connect(): Promise<any> {
-        this._client.getSocket();
+        // this._client.getSocket(true);
     }
 
     public async close(): Promise<void> {
-        this._client.getSocket().disconnect();
+       // this._client.getSocket(true).disconnect();
     }
 
     /**
@@ -23,16 +23,16 @@ export class SocketIoClientProxyService extends ClientProxy {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async dispatchEvent(packet: ReadPacket<string>): Promise<any> {
-        return this._emitMessage(packet);
+        // return this._emitMessage(packet,false);
     }
 
-    public async sendMessage(packet: ReadPacket<string>): Promise<string> {
-        return this._emitMessage<string>(packet);
+    public async sendMessage(packet: ReadPacket<string>,isLocal:boolean): Promise<string> {
+        return this._emitMessage<string>(packet,isLocal);
     }
 
-    private async _emitMessage<T>(packet: ReadPacket<T>): Promise<T> {
+    private async _emitMessage<T>(packet: ReadPacket<T>,isLocal:boolean): Promise<T> {
         return new Promise((resolve, reject) => {
-            this._client.getSocket().emit(packet.pattern, packet.data, (response) => {
+            this._client.getSocket(isLocal).emit(packet.pattern, packet.data, (response) => {
                 if (!response) return reject('err')
                 resolve(response);
             })

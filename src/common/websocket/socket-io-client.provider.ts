@@ -8,22 +8,21 @@ export class SocketIoClientProvider {
     private readonly _config: ConfigService;
 
     private _socket: Socket;
-
-    private _connect(): Socket {
-        this._socket = io(this._config.get('SOCKET_SERVER'), {
+    private _localSocket: Socket;
+    private _connect(isLocal: boolean): Socket {
+        const socket = io(isLocal ? this._config.get('SOCKET_SERVER_LOCAL') : this._config.get('SOCKET_SERVER'), {
             extraHeaders: {
                 myTestBox: '1234'
             }
         });
-
-
-        return this._socket;
+        isLocal ? (this._localSocket = socket) : (this._socket = socket);
+        return isLocal ? this._localSocket : this._socket;
     }
 
-    public getSocket = (): Socket => {
-        if (!this._socket) {
-            return this._connect();
+    public getSocket = (isLocal: boolean): Socket => {
+        if ((isLocal && !this._localSocket) || (!isLocal && !this._socket)) {
+            return this._connect(isLocal);
         }
-        return this._socket;
+        return isLocal ? this._localSocket : this._socket;
     };
 }

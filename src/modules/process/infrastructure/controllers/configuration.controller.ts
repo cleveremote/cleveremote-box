@@ -22,36 +22,36 @@ export class ConfigurationController {
         private _configurationService: StructureService,
         private _synchronizeService: SynchronizeService) {
     }
-    @UsePipes(ValidationPipe)
-    @MessagePattern('box/synchronize/configuration')
+    @UsePipes(ValidationPipe) 
+    @MessagePattern(['box/synchronize/configuration','box/synchronize/configuration/local'])
     public async synchronise(@Payload() configurationSynchronizeDTO: StructureSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
         const input = StructureSynchronizeDTO.mapToStructureModel(configurationSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('box/synchronize/cycle')
+    @MessagePattern(['box/synchronize/cycle','box/synchronize/cycle/local'])
     public async synchronisePartial(@Payload() cycleSynchronizeDTO: CycleSynchronizeDTO): Promise<CycleModel> {
         const uc = new CycleSynchronizeUC(this._synchronizeService);
-        const input = CycleSynchronizeDTO.mapToCycleModel(cycleSynchronizeDTO);
+        const input = CycleSynchronizeDTO.mapToCycleModel(cycleSynchronizeDTO); 
         return uc.execute(input);
     }
 
-    @MessagePattern('box/synchronize/schedule')
+    @MessagePattern(['box/synchronize/schedule','box/synchronize/schedule/local'])
     public async synchroniseSchedule(@Payload() scheduleSynchronizeDTO: ScheduleSynchronizeDTO): Promise<ScheduleModel> {
         const uc = new ScheduleSynchronizeUC(this._synchronizeService);
         const input = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('box/synchronize/trigger')
+    @MessagePattern(['box/synchronize/trigger','box/synchronize/trigger/local'])
     public async synchroniseTrigger(@Payload() triggerSynchronizeDTO: TriggerSynchronizeDTO): Promise<TriggerModel> {
         const uc = new TriggerSynchronizeUC(this._synchronizeService);
         const input = TriggerSynchronizeDTO.mapToTriggerModel(triggerSynchronizeDTO);
         return uc.execute(input);
     }
 
-    @MessagePattern('box/synchronize/sensor')
+    @MessagePattern(['box/synchronize/sensor','box/synchronize/sensor/local'])
     public async synchroniseSensor(@Payload() sensorSynchronizeDTO: SensorSynchronizeDTO): Promise<SensorModel> {
         console.log('sensorSynchronizeDTO',sensorSynchronizeDTO);
         const uc = new SensorSynchronizeUC(this._synchronizeService);
@@ -59,7 +59,7 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
-    @MessagePattern('box/fetch/configuration')
+    @MessagePattern(['box/fetch/configuration','box/fetch/configuration/local'])
     public async getConfiguration(): Promise<string> {
         const uc = new ConfigurationFetchUC(this._configurationService);
         const response = await uc.execute()

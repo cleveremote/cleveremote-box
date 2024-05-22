@@ -12,9 +12,16 @@ async function bootstrap(): Promise<void> {
     const socketIoClientProvider = app.get<SocketIoClientProvider>(
         SocketIoClientProvider
     );
+    
+    const socketIoClientProviderLocal = app.get<SocketIoClientProvider>(
+        SocketIoClientProvider
+    );
+    app.connectMicroservice<MicroserviceOptions>({
+        strategy: new SocketIoClientStrategy(socketIoClientProvider.getSocket(false),false)
+    });
 
     app.connectMicroservice<MicroserviceOptions>({
-        strategy: new SocketIoClientStrategy(socketIoClientProvider.getSocket())
+        strategy: new SocketIoClientStrategy(socketIoClientProviderLocal.getSocket(true),true)
     });
 
     await app.startAllMicroservices();

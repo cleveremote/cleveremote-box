@@ -73,7 +73,7 @@ export class SynchronizeService {
 
     private _testNotification() {
         const serviceAccount =
-            require('/Users/nya-perso/cleveremote/cleveremote-box/src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
+            require('src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
 
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)

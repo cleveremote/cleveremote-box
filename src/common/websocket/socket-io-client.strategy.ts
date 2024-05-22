@@ -3,7 +3,7 @@ import { Socket } from 'socket.io-client';
 
 export class SocketIoClientStrategy extends Server
     implements CustomTransportStrategy {
-    public constructor(private client: Socket) {
+    public constructor(private client: Socket, private isLocal: boolean) {
         super();
     }
 
@@ -24,9 +24,9 @@ export class SocketIoClientStrategy extends Server
 
 
 
-        this.messageHandlers.forEach((handler, pattern) => {
+        this.messageHandlers.forEach((handler, pattern) => { 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.client.on(pattern, async (data: any, callb) => {
+           this.client.on(pattern, async (data: any, callb) => {
                 callb(await handler(data, this.client));
             });
         });

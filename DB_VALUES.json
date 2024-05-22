@@ -1,0 +1,124 @@
+{
+    "sensors": [],
+    "processes": [
+        {
+            "id": "0.3096113500099204",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.275Z",
+            "causes": []
+        },
+        {
+            "id": "0.5345164464316021",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.284Z",
+            "causes": []
+        },
+        {
+            "id": "0.840889220537641",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.296Z",
+            "duration": 100000,
+            "causes": []
+        },
+        {
+            "id": "0.6180420689602358",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.299Z",
+            "causes": []
+        },
+        {
+            "id": "0.2899646915732173",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.307Z",
+            "duration": 5000,
+            "causes": []
+        },
+        {
+            "id": "0.39434282373580776",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.315Z",
+            "causes": []
+        },
+        {
+            "id": "0.8796926308156658",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.322Z",
+            "duration": 5000,
+            "causes": []
+        },
+        {
+            "id": "0.7847399776638643",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.327Z",
+            "causes": []
+        },
+        {
+            "id": "0.6552795852660118",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.332Z",
+            "duration": 500000,
+            "causes": []
+        },
+        {
+            "id": "0.44466809923669615",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.339Z",
+            "causes": []
+        },
+        {
+            "id": "0.7029173520958717",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.349Z",
+            "causes": []
+        },
+        {
+            "id": "0.5223380524202714",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.354Z",
+            "duration": 100000,
+            "causes": []
+        },
+        {
+            "id": "0.7184374563285956",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.359Z",
+            "causes": []
+        },
+        {
+            "id": "0.7817029024163632",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.364Z",
+            "duration": 50000,
+            "causes": []
+        },
+        {
+            "id": "0.6203460252251354",
+            "type": "SEQUENCE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.373Z",
+            "causes": []
+        },
+        {
+            "id": "0.3925937615635484",
+            "type": "CYCLE",
+            "status": "STOPPED",
+            "startedAt": "2024-05-22T13:19:13.381Z",
+            "duration": 50000,
+            "causes": []
+        }
+    ]
+}

@@ -111,9 +111,13 @@ export class ProcessService {
         const data = { type: ExecutableType.CYCLE, id: process.cycle.id, status: ExecutableStatus.STOPPED };
         const pro = this.processValueRepository.save(data);
         //const process: { id: string; causes: { type: ProcessType; cause: string }[] } = { id: processModel.cycle.id, causes };
-        return pro.then(() =>
+        return pro.then(() => {
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            return 'sent';
+        }
             //test if connected ... to not hang nya
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) })
+
         );
     }
 
@@ -385,20 +389,22 @@ export class ProcessService {
 
         }
 
-        return pro.then(() =>
-            //test if connected ... to not hang nya
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) })
-        );
+        return pro.then(() => {
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            return 'sent';
+        });
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
         const data = { type: ExecutableType.CYCLE, id: processModel.cycle.id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };
         const pro = this.processValueRepository.save(data);
         //const process: { id: string; causes: { type: ProcessType; cause: string }[] } = { id: processModel.cycle.id, causes };
-        return pro.then(() =>
-            //test if connected ... to not hang nya
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) })
-        );
+        return pro.then(() => {
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            return 'sent';
+        });
     }
 
     private static _ofNull<T>(): Observable<T> {
