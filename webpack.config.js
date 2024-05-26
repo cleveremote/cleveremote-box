@@ -37,7 +37,7 @@ module.exports =
   target: 'node',
   entry:
   {
-    server: './src/main.ts',
+    server: './dist/src/main.js',
   },
   devtool: 'source-map',
   module:
@@ -46,7 +46,8 @@ module.exports =
     [
       {
         test: /\.tsx?$/,
-        use: 'ts-loader'
+        use: 'ts-loader',
+        exclude: /node_modules/,
       },
     ],
   },

@@ -5,7 +5,7 @@ import { SynchronizeService } from './synchronize.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { TriggerService } from './trigger.service';
 import { DelimiterParser, ReadlineParser, SerialPort } from 'serialport';
-const HciSocket = require('hci-socket');
+import  * as HciSocket from 'hci-socket';
 const NodeBleHost = require('ble-host');
 const BleManager = NodeBleHost.BleManager;
 const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
