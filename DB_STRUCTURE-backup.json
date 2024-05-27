@@ -40,7 +40,15 @@
                     "conditions": []
                 }
             ],
-            "schedules": [],
+            "schedules": [
+                {
+                    "cycleId": "0.840889220537641",
+                    "id": "trigger_0.9819347115209701",
+                    "cron": {
+                        "date": "2024-05-27T05:47:00.555Z"
+                    }
+                }
+            ],
             "triggers": [
                 {
                     "id": "test-trigger-id",
@@ -94,7 +102,7 @@
                     ],
                     "isPaused": false,
                     "delay": 15000,
-                    "lastTriggeredAt": "2024-05-22T08:25:02.149Z"
+                    "lastTriggeredAt": "2024-05-27T05:46:55.521Z"
                 }
             ],
             "id": "0.840889220537641",

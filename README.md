@@ -46,3 +46,7 @@ npx postject server NODE_SEA_BLOB sea-prep.blob     --sentinel-fuse NODE_SEA_FUS
 
 node-sea -e main-exe.js -o main-exe
 node-sea -e main-exe.js -o main-exe -n -a armv7
+generate password
+echo $(tr -dc 'A-Za-z0-9!?%=' < /dev/urandom | head -c 10)
+get login 
+cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2 serial number

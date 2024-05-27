@@ -21,6 +21,8 @@ import { SensorRepository } from './repositories/sensor.repository';
 import { ProcessValueRepository } from './repositories/process-value.repository';
 import { SensorValueRepository } from './repositories/sensor-value.repository';
 import { ValueRepository } from './repositories/value.repository';
+import { AuthenticationService } from '@process/domain/services/authentication.service';
+import { AuthenticationRepository } from './repositories/authentication.repository';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -33,6 +35,7 @@ import { ValueRepository } from './repositories/value.repository';
     providers: [
         DbService,
         //----Repositories------//
+        AuthenticationRepository,
         CycleRepository,
         TriggerRepository,
         ScheduleRepository,
@@ -42,6 +45,7 @@ import { ValueRepository } from './repositories/value.repository';
         SensorValueRepository,
         ValueRepository,
         //---------------------//
+        AuthenticationService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,

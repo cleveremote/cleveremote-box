@@ -5,11 +5,13 @@ import { ScheduleService } from './schedule.service';
 import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
 import { DbService } from '@process/infrastructure/db/db.service';
+import { AuthenticationService } from './authentication.service';
 
 @Injectable()
 export class InitService {
     public constructor(
         private configurationService: StructureService,
+        private authenticationService: AuthenticationService,
         private dbService: DbService,
         private processService: ProcessService,
         private scheduleService: ScheduleService,
@@ -18,8 +20,12 @@ export class InitService {
     ) { }
 
     public initialize(): Promise<void> {
+
+
+
         return this.dbService.initialize()
             .then(() => this._loadConfiguration())
+            .then(() => this.authenticationService.initAuthentication(!!process.argv.find(x => x === 'genpass')))
             .then(() => this.triggerService.initilize())
             .then(() => this.sensorService.initialize()) // temps for test purpose
             .then(() => this._resetAllModules())
@@ -28,7 +34,7 @@ export class InitService {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
     }
-
+    
     private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes...', 'initialization');

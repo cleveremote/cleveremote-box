@@ -6,8 +6,10 @@ import { Config, JsonDB } from 'node-json-db';
 export class DbService {
     public DB_VALUES: JsonDB;
     public DB_STRUCTURE: JsonDB;
+    public DB_AUTH: JsonDB;
 
     public async initialize(): Promise<void> {
+        await this._initialiseDbAuth();
         await this._initialiseDbStructure();
         await this._initialiseDbValues();
     }
@@ -34,6 +36,15 @@ export class DbService {
             if (!await this.DB_VALUES.exists('/processes')) {
                 await this.DB_VALUES.push('/processes', []);
             }
+        }
+    }
+
+    private async _initialiseDbAuth(): Promise<void> {
+        try {
+            this.DB_AUTH = new JsonDB(new Config('DB_AUTH', true, true, '/'));
+        } catch (error) {
+            console.error('The database DB_AUTH could not be loaded');
+            await this.executeBackUp('DB_AUTH', 'RESTORE');
         }
     }
 

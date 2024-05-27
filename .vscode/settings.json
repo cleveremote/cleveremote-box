@@ -1,8 +1,8 @@
 {
-    "files.watcherExclude": {
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/node_modules/**": true,
-        "**/samples": true
-    }
+    // "files.watcherExclude": {
+    //     "**/.git/objects/**": true,
+    //     "**/.git/subtree-cache/**": true,
+    //     "**/node_modules/**": true,
+    //     "**/samples": true
+    // }
 }
