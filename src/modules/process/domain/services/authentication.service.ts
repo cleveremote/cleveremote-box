@@ -5,6 +5,8 @@ import { exec } from "child_process";
 import { AuthenticationModel } from '../models/authentication.model';
 import * as bcrypt from "bcrypt";
 import * as generator from "generate-password";
+//var fs = require('fs');
+import * as fs from 'fs'
 
 @Injectable()
 export class AuthenticationService {
@@ -12,60 +14,35 @@ export class AuthenticationService {
         private authenticationRepository: AuthenticationRepository) {
     }
 
-    private async execCommand(cmd: string): Promise<string> {
-        const result = (): Promise<string> => {
-            return new Promise((resolve, reject) => {
-                exec(cmd, (error, stdout, stderr) => {
-                    if (error) {
-                        console.log(`error: ${error.message}`);
-                        return;
-                    }
-                    if (stderr) {
-                        console.log(`stderr: ${stderr}`);
-                        return;
-                    }
-                    resolve(stdout)
-                });
-            })
-        }
-        return await result();
-    }
-
-    private async managePassword(): Promise<AuthenticationModel> {
+    private async _managePassword(): Promise<AuthenticationModel> {
         const salt = bcrypt.genSaltSync(13);
         const palainPassword = generator.generate({
-            length: 10,
+            length: 13,
             numbers: true,
             symbols: true
         });
-        console.log('palainPassword',palainPassword);
+        console.log('palainPassword', palainPassword);
         const password = bcrypt.hashSync(palainPassword, salt);
-        const login: string = this.getserial();
+        const login: string = this._getSerial();
         console.log("password & login", password, '', login);
         return { login, password };
     }
 
-    private getserial() {
-
-        var fs = require('fs');
-
-        var content = fs.readFileSync('/proc/cpuinfo', 'utf8');
-
-        var cont_array = content.split("\n");
-
-        var serial_line = cont_array[cont_array.length - 3];
-
-        var serial = serial_line.split(":");
-
+    private _getSerial(): string {
+        const content = fs.readFileSync('/proc/cpuinfo', 'utf8');
+        const contArray = content.split('\n');
+        const serialLine = contArray[contArray.length - 3];
+        const serial = serialLine.split(':');
         return serial[1].slice(1);
-
     }
 
     public async initAuthentication(exec: boolean): Promise<boolean> {
-        const model = await this.managePassword();
-        return !!this.authenticationRepository.update(model);
+        if (exec) {
+            const model = await this._managePassword();
+            return !! await this.authenticationRepository.update(model);
+        }
+        return true;
     }
-
 
     public async checkPassword(password): Promise<boolean> {
         const model = await this.authenticationRepository.get();
