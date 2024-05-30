@@ -1,7 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
 import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
-import { exec } from "child_process";
 import { AuthenticationModel } from '../models/authentication.model';
 import * as bcrypt from "bcrypt";
 import * as generator from "generate-password";
@@ -44,8 +43,8 @@ export class AuthenticationService {
         return true;
     }
 
-    public async checkPassword(password): Promise<boolean> {
+    public async checkPassword(data: AuthenticationModel): Promise<boolean> {
         const model = await this.authenticationRepository.get();
-        return await bcrypt.compare(password, model.password);
+        return await bcrypt.compare(data.password, model.password);
     }
 }

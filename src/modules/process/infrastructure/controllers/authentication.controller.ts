@@ -32,7 +32,7 @@ export class AuthenticationController {
     }
 
     @MessagePattern(['box/check/connection'])
-    public async checkConnection(@Payload() authenticationDto: AuthenticationModel): Promise<boolean> {
+    public async checkConnection(): Promise<boolean> {
         return true;
     }
 }

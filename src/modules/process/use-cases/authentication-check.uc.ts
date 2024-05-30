@@ -1,4 +1,6 @@
+import { AuthenticationModel } from '@process/domain/models/authentication.model';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**
@@ -9,10 +11,10 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
  * @include ConfigurationService.synchronize
  *
 */
-export class ConfigurationSynchronizeUC {
-    public constructor(private synchronizeService: SynchronizeService) { }
+export class AuthenticationCheckUC {
+    public constructor(private _authenticationService: AuthenticationService) { }
 
-    public execute(structure: StructureModel): Promise<StructureModel> {
-        return this.synchronizeService.synchronize(structure);
+    public execute(data: AuthenticationModel): Promise<boolean> {
+        return this._authenticationService.checkPassword(data);
     }
 }
