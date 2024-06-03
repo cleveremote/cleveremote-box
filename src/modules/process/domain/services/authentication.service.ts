@@ -27,7 +27,7 @@ export class AuthenticationService {
         return { login, password };
     }
 
-    private _getSerial(): string {
+    public _getSerial(): string {
         const content = fs.readFileSync('/proc/cpuinfo', 'utf8');
         const contArray = content.split('\n');
         const serialLine = contArray[contArray.length - 3];

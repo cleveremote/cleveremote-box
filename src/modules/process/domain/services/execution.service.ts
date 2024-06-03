@@ -56,6 +56,8 @@ export class ProcessService {
             this.processList[index].instance?.unsubscribe();
             await process.cycle.reset();
             this.processList.splice(index, 1);
+            // pour ne pas avoir de latece lors de l'execution off il etaignait toutes les sequences avant d'etindre le cycle.
+            await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
             for (const sequence of process.cycle.sequences) {
                 const state = await this.valueRepository.getValues('SEQUENCE', sequence.id)[0] as ProcessValueEntity;
                 if (state?.status !== ExecutableStatus.STOPPED) {
@@ -63,7 +65,7 @@ export class ProcessService {
                 }
             }
 
-            await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
+            
         }
 
     }

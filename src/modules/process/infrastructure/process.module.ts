@@ -23,6 +23,7 @@ import { SensorValueRepository } from './repositories/sensor-value.repository';
 import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
+import { AuthenticationController } from './controllers/authentication.controller';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -30,7 +31,8 @@ import { AuthenticationRepository } from './repositories/authentication.reposito
     ],
     controllers: [
         ConfigurationController,
-        ExecutionController
+        ExecutionController,
+        AuthenticationController
     ],
     providers: [
         DbService,

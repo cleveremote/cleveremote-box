@@ -35,76 +35,31 @@
                         }
                     ],
                     "id": "0.5345164464316021",
+                    "name": "new sequenceمينيننيي",
+                    "maxDuration": 50000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "19",
+                            "status": "OFF",
+                            "portNum": 19,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.6642734659641887",
                     "name": "new sequence",
                     "maxDuration": 50000,
                     "conditions": []
                 }
             ],
-            "schedules": [
-                {
-                    "cycleId": "0.840889220537641",
-                    "id": "trigger_0.9819347115209701",
-                    "cron": {
-                        "date": "2024-05-27T05:47:00.555Z"
-                    }
-                }
-            ],
-            "triggers": [
-                {
-                    "id": "test-trigger-id",
-                    "cycleId": "0.840889220537641",
-                    "name": "test-trigger-name",
-                    "description": "test-trigger-description",
-                    "trigger": {
-                        "timeAfter": 5000
-                    },
-                    "conditions": [
-                        {
-                            "id": "0.956919235239801",
-                            "name": "condition-name-1",
-                            "description": "condition-name-1",
-                            "deviceId": "sensor-moisture-1",
-                            "operator": "<",
-                            "value": 50
-                        },
-                        {
-                            "id": "0.956919235239802",
-                            "name": "condition-name-1",
-                            "description": "condition-name-1",
-                            "deviceId": "sensor-moisture-2",
-                            "operator": "<",
-                            "value": 50
-                        },
-                        {
-                            "id": "0.956919235239803",
-                            "name": "condition-name-3",
-                            "description": "condition-name-3",
-                            "deviceId": "sensor-moisture-3",
-                            "operator": "<",
-                            "value": 50
-                        },
-                        {
-                            "id": "0.956919235239804",
-                            "name": "condition-name-3",
-                            "description": "condition-name-3",
-                            "deviceId": "sensor-moisture-4",
-                            "operator": "<",
-                            "value": 50
-                        },
-                        {
-                            "id": "0.956919235239805",
-                            "name": "condition-name-3",
-                            "description": "condition-name-3",
-                            "deviceId": "sensor-moisture-5",
-                            "operator": "<",
-                            "value": 50
-                        }
-                    ],
-                    "isPaused": false,
-                    "delay": 15000,
-                    "lastTriggeredAt": "2024-05-27T05:46:55.521Z"
-                }
-            ],
+            "schedules": [],
+            "triggers": [],
             "id": "0.840889220537641",
             "name": "new cycleer",
             "description": "new description",

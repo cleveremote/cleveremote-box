@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Socket, io } from 'socket.io-client';
+import * as fs from 'fs'
 
 @Injectable()
 export class SocketIoClientProvider {
@@ -9,10 +10,20 @@ export class SocketIoClientProvider {
 
     private _socket: Socket;
     private _localSocket: Socket;
+    
+    public _getSerial(): string {
+        const content = fs.readFileSync('/proc/cpuinfo', 'utf8');
+        const contArray = content.split('\n');
+        const serialLine = contArray[contArray.length - 3];
+        const serial = serialLine.split(':');
+        return serial[1].slice(1); 
+    }
+
     private _connect(isLocal: boolean): Socket {
         const socket = io(isLocal ? this._config.get('SOCKET_SERVER_LOCAL') : this._config.get('SOCKET_SERVER'), {
             extraHeaders: {
-                myTestBox: '1234'
+                boxId: this._getSerial(),
+                type:'box'
             }
         });
         isLocal ? (this._localSocket = socket) : (this._socket = socket);

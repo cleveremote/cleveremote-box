@@ -50,3 +50,5 @@ generate password
 echo $(tr -dc 'A-Za-z0-9!?%=' < /dev/urandom | head -c 10)
 get login 
 cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2 serial number
+
+"start:debug": "nest start --debug=0.0.0.0:5200 --watch -- genpass",
