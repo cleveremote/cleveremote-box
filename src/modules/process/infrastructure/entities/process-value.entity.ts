@@ -10,6 +10,7 @@ export class ProcessValueEntity extends ProcessValueModel {
         model.status = entity.status;
         model.startedAt = entity.startedAt;
         model.duration = entity.duration;
+        model.mapSectionId = entity.mapSectionId;
         model.causes = [];
         if (entity.causes?.length > 0) {
             entity.causes.forEach(cause => {
@@ -26,6 +27,7 @@ export class ProcessValueEntity extends ProcessValueModel {
         entity.status = model.status;
         entity.startedAt = model.startedAt;
         entity.duration = model.duration;
+        entity.mapSectionId = model.mapSectionId;
         entity.causes = [];
         if (model.causes?.length > 0) {
             model.causes.forEach(cause => {
@@ -35,5 +37,5 @@ export class ProcessValueEntity extends ProcessValueModel {
         return entity;
     }
 
-}
+} 
 

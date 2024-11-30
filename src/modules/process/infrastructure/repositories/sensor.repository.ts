@@ -16,7 +16,7 @@ export class SensorRepository implements IRepository<SensorEntity> {
     public shouldDelete(id: string): string {
         const splittedCycleId = id.split('_');
         if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
-            return splittedCycleId[0];
+            return splittedCycleId[1];
         }
         return null;
     }
@@ -27,13 +27,13 @@ export class SensorRepository implements IRepository<SensorEntity> {
         const idToDelete = this.shouldDelete(entity.id)
         if (idToDelete) {
             await this.delete(idToDelete);
-            result = null;
+            return entity;
         }
         const found = await this.get(entity.id);
         if (found) {
             result = await this.update(entity);
         } else {
-            result = await this.create(entity);
+            result = await this.create(entity); 
         }
         this.dbService.executeBackUp('DB_STRUCTURE');
         return SensorEntity.mapToModel(result);
@@ -67,12 +67,15 @@ export class SensorRepository implements IRepository<SensorEntity> {
         throw new ElementNotFoundExeception(id, 'delete', 'sensor');
     }
 
-    public async get(id: string): Promise<SensorEntity> {
+    public async get(id: string): Promise<SensorEntity | SensorEntity[]> {
+        if (!id) {
+            return await this.dbService.DB_STRUCTURE.getObject<SensorEntity[]>('/sensors');
+        }
         const index = await this.dbService.DB_STRUCTURE.getIndex('/sensors', id);
         if (index !== -1) {
             return await this.dbService.DB_STRUCTURE.getObject<SensorEntity>(`/sensors[${index}]`);
         }
-        throw new ElementNotFoundExeception(id, 'get', 'sensor');
+        return null;
     }
 
 

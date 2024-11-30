@@ -13,6 +13,7 @@ export class CycleModel implements IExecutable {
     public name: string;
     public style: { bgColor: string; fontColor: string; iconColor: string };
     public description: string;
+    public mapSectionId: string;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public modePriority: { mode: ProcessMode; priority: number }[];
     public progression?: { startedAt: Date; duration: number };
@@ -34,7 +35,7 @@ export class CycleModel implements IExecutable {
     }
 
     public async reset(): Promise<void> {
-        for (const sequence of this.sequences) {0
+        for (const sequence of this.sequences) {
             await sequence.reset();
         }
         this.status = ExecutableStatus.STOPPED;

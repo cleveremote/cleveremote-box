@@ -1,4 +1,4 @@
 export enum SensorType {
-    TEMPERATURE = 'TEMPERATURE',
-    MOISTURE = 'MOISTURE'
+    TEMPERATURE = 'T',
+    MOISTURE = 'H'
 }

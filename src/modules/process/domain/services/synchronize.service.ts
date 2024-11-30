@@ -64,7 +64,7 @@ export class SynchronizeService {
 
     public async synchronizeSchedule(scheduleModel: ScheduleModel): Promise<ScheduleModel> {
         const schedule = await this.scheduleRepository.save(scheduleModel);
-        return this.scheduleService.initSchedule(schedule || scheduleModel, !schedule);
+        return this.scheduleService.initSchedule(schedule || scheduleModel, !!this.scheduleRepository.shouldDelete(schedule.id));
     }
 
     public async sychronizeSensor(sensorData: SensorModel): Promise<SensorModel> {
@@ -74,10 +74,9 @@ export class SynchronizeService {
     private _testNotification() {
         const serviceAccount =
             require('src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
-
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
     }
 
     // sendNotification() {

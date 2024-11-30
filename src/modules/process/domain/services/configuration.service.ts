@@ -13,6 +13,8 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { ValueModel } from '../models/value.model';
 import { ProcessValueEntity } from '@process/infrastructure/entities/process-value.entity';
+import { SensorModel } from '../models/sensor.model';
+import { DataModel } from '../models/data.model';
 
 @Injectable()
 export class StructureService {
@@ -46,12 +48,12 @@ export class StructureService {
                 triggers = [...new Set([...triggers, ...cycle.triggers])];
             });
 
-            this.sequences = sequences;
+            this.sequences = sequences; 
             this.schedules = schedules;
-            this.triggers = triggers;
+            this.triggers = triggers; 
 
             return this.structure;
-        });
+        }); 
     }
 
     public async getConfigurationWithStatus(): Promise<StructureModel> {
@@ -79,8 +81,28 @@ export class StructureService {
                 }
             }
 
-        });
+        }); 
         return struc;
+    }
+
+    private async getData(query: any): Promise<DataModel[]> {
+        return (await this.valueRepository.getData(query));
+    }
+
+    public async getStatus(type: string, query?: any): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel | DataModel[]> {
+        if (type === "DATA" && query) {
+            return this.getData(query);
+        }
+
+        const structValues = await this.valueRepository.getValues(type);
+        switch (type) {
+            case "PROCESS":
+                return (structValues as ValueModel).processes || [];
+            case "SENSORS":
+                return (structValues as ValueModel).sensors || [];
+            default:
+                return await this.valueRepository.getValues(type);
+        }
     }
 
 }

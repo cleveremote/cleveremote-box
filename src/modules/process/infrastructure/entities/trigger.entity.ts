@@ -7,12 +7,14 @@ export class TriggerEntity extends TriggerModel {
     public static mapToModel(triggerEntity: TriggerEntity): TriggerModel {
         const trigger = new TriggerModel();
         trigger.id = triggerEntity.id;
+        trigger.action = triggerEntity.action;
         trigger.cycleId = triggerEntity.cycleId;
         trigger.name = triggerEntity.name;
         trigger.description = triggerEntity.description;
         trigger.trigger = { timeAfter: triggerEntity.trigger.timeAfter, sunBehavior: triggerEntity.trigger.sunBehavior };
         trigger.conditions = triggerEntity.conditions;
         trigger.isPaused = triggerEntity.isPaused;
+        trigger.shouldConfirmation = triggerEntity.shouldConfirmation;
         trigger.delay = triggerEntity.delay;
         trigger.lastTriggeredAt = triggerEntity.lastTriggeredAt;
         trigger.conditions = [];
@@ -29,10 +31,11 @@ export class TriggerEntity extends TriggerModel {
         trigger.name = triggerModel.name;
         trigger.description = triggerModel.description;
         trigger.trigger = { timeAfter: triggerModel.trigger.timeAfter, sunBehavior: triggerModel.trigger.sunBehavior };
-        trigger.conditions = triggerModel.conditions;
         trigger.isPaused = triggerModel.isPaused;
+        trigger.shouldConfirmation = triggerModel.shouldConfirmation;
         trigger.delay = triggerModel.delay;
         trigger.lastTriggeredAt = triggerModel.lastTriggeredAt;
+        trigger.action = triggerModel.action;
         trigger.conditions = [];
         triggerModel.conditions.forEach(conditionData => {
             trigger.conditions.push(ConditionEntity.mapToEntity(conditionData));

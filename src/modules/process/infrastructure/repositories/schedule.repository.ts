@@ -14,7 +14,7 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
     public shouldDelete(id: string): string {
         const splittedCycleId = id.split('_');
         if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
-            return splittedCycleId[0];
+            return splittedCycleId[1];
         }
         return null;
     }
@@ -24,7 +24,7 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
         const idToDelete = this.shouldDelete(entity.id)
         if (idToDelete) {
             await this.delete(idToDelete, entity.cycleId);
-            return null;
+            return entity;
         }
         const found = await this.get(entity.id, entity.cycleId);
         if (found) {

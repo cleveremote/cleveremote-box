@@ -14,6 +14,7 @@ export class ScheduleEntity extends ScheduleModel {
             schedule.cron.date = new Date(scheduleEntity.cron.date);
         }
         schedule.isPaused = scheduleEntity.isPaused;
+        schedule.shouldConfirmation = scheduleEntity.shouldConfirmation;
         return schedule;
     }
 
@@ -25,6 +26,7 @@ export class ScheduleEntity extends ScheduleModel {
         schedule.description = scheduleModel.description;
         schedule.cron = scheduleModel.cron;
         schedule.isPaused = scheduleModel.isPaused;
+        schedule.shouldConfirmation = scheduleModel.shouldConfirmation;
         return schedule;
     }
 

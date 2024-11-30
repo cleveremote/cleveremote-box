@@ -15,6 +15,8 @@ export class SequenceEntity extends SequenceModel {
         const sequence = new SequenceModel();
         sequence.id = sequenceEntity.id;
         sequence.name = sequenceEntity.name;
+        sequence.description = sequenceEntity.description;
+        sequence.mapSectionId = sequenceEntity.mapSectionId;
         sequence.status = sequenceEntity.status;
         sequence.maxDuration = sequenceEntity.maxDuration;
         sequence.modules = [];
@@ -35,6 +37,8 @@ export class SequenceEntity extends SequenceModel {
         const sequence = new SequenceEntity();
         sequence.id = sequenceModel.id;
         sequence.name = sequenceModel.name;
+        sequence.description = sequenceModel.description;
+        sequence.mapSectionId = sequenceModel.mapSectionId;
         sequence.status = sequenceModel.status;
         sequence.maxDuration = sequenceModel.maxDuration;
         sequence.modules = [];

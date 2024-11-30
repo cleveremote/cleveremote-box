@@ -11,6 +11,8 @@ import { ProcessService } from './execution.service';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
+import { getSunrise, getSunset } from 'sunrise-sunset-js'
+import { SunState } from '../interfaces/schedule.interface';
 
 @Injectable()
 export class ScheduleService {
@@ -25,15 +27,24 @@ export class ScheduleService {
     }
 
     public createSchedule(schedule: ScheduleModel, methode: () => void): ScheduleModel {
-
+        let job;
         const isExists = this.schedulerRegistry.doesExist('cron', schedule.id);
         if (isExists) {
-            const job = this.schedulerRegistry.getCronJob(schedule.id);
+            job = this.schedulerRegistry.getCronJob(schedule.id);
             job.stop();
             this.schedulerRegistry.deleteCronJob(schedule.id);
         }
         try {
-            const job = new CronJob(schedule.cron.date || schedule.cron.pattern, methode);
+            const coord = { lat: 34.100780850096896, long: -6.4666017095313935 }
+            const sunBehavior = schedule.cron.sunBehavior;
+            const executionDate = sunBehavior ? (sunBehavior.sunState === SunState.SUNRISE ? getSunset(coord.lat, coord.long, new Date()) : getSunrise(coord.lat, coord.long, new Date())).getTime() + sunBehavior.time : null;
+
+            if (executionDate) {
+                job = new CronJob(new Date(executionDate), methode);
+            } else {
+                job = new CronJob(schedule.cron.pattern, methode);
+            }
+
             this.schedulerRegistry.addCronJob(schedule.id, job);
             if (schedule.isPaused) {
                 job.stop();
@@ -64,13 +75,13 @@ export class ScheduleService {
     }
 
     public async initSchedule(schedule: ScheduleModel, isDeleted: boolean = false,
-        mode: ProcessMode = ProcessMode.SCHEDULED, type: ProcessType = ProcessType.FORCE, overridedMethode?: () => void): Promise<ScheduleModel> {
+        mode: ProcessMode = ProcessMode.SCHEDULED, type: ProcessType = ProcessType.INIT, overridedMethode?: () => void): Promise<ScheduleModel> {
 
         if (isDeleted) {
             const index = this.configurationService.schedules.findIndex(x => x.id === schedule.id);
             this.configurationService.schedules.splice(index, 1);
             await this.deleteCronJob(schedule.id);
-            return null;
+            return schedule;
         }
 
         this.configurationService.schedules.push(schedule);
@@ -78,21 +89,23 @@ export class ScheduleService {
         if (!methode) {
             const process = this.preapreScheduleProcess(schedule, mode, type);
             methode = async (): Promise<void> => {
-                await this.clearAllSchedules();
-                if (!process.schedule.isPaused) {
-                    await this.processService.execute(process);
-                }
+                setTimeout(async () => {
+                    await this.clearAllSchedules();
+                    if (!process.schedule.isPaused) {
+                        await this.processService.execute({...process});
+                    }
+                }, schedule.cron.sunBehavior ? 0 : schedule.cron.after);
             };
         }
         return this.createSchedule(schedule, methode);
     }
 
     public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULED,
-        type: ProcessType = ProcessType.FORCE): ProcessModel {
+        type: ProcessType = ProcessType.FORCE, action: ExecutableAction = ExecutableAction.ON): ProcessModel {
         const process = new ProcessModel();
         process.cycle = this.configurationService.structure.cycles.find(x => x.id === schedule.cycleId);
-        process.action = ExecutableAction.ON;
-        process.type = type;
+        process.action = action;
+        process.type = ProcessType.INIT;
         process.mode = mode;
         process.schedule = schedule;
         return process;
@@ -109,11 +122,16 @@ export class ScheduleService {
                 const process = new ProcessModel();
                 process.cycle = cycleModel;
                 process.action = ExecutableAction.ON;
-                process.type = ProcessType.FORCE;
-                process.mode = ProcessMode.MANUAL;
+                process.type = ProcessType.INIT;
+                process.mode = ProcessMode.SCHEDULED;
                 const methode = async (): Promise<void> => {
-                    await this.clearAllSchedules();
-                    return this.processService.execute(process);
+                    setTimeout(async () => {
+                        await this.clearAllSchedules();
+                        if (!schedule.isPaused) {
+                            await this.processService.execute({...process}); 
+                        }
+                    }, schedule.cron.after);
+
                 };
                 this.createSchedule(schedule, methode);
             }

@@ -9,7 +9,7 @@ import { CycleModel } from '@process/domain/models/cycle.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
-import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeSequenceModel } from '@process/domain/models/synchronize.model';
+import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsDate, IsDefined, IsEnum, IsNotEmpty, IsNumber, IsString, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
@@ -21,11 +21,13 @@ export class SequenceSync {
     public name: string;
     @IsString()
     public description: string;
+    @IsString()
+    public mapSectionId: string;
     @IsNumber()
     public maxDuration: number;
     @IsArray()
-    @Type(() => String)
-    public modules: string[];
+    @Type(() => ModuleSync)
+    public modules: ModuleSync[];
     @IsArray()
     @Type(() => ConditionSync)
     public conditions?: ConditionSync[];
@@ -37,7 +39,7 @@ export class Style {
     @IsString()
     public fontColor: string;
     @IsString()
-    public iconColor: string
+    public iconColor: any
 }
 
 export class ModePriority {
@@ -54,15 +56,22 @@ export class CycleSynchronizeDTO {
     public name?: string;
     @IsString()
     public description: string;
+    @IsString()
+    public mapSectionId: string;
     @Type(() => Style)
     public style?: Style;
     @IsArray()
     @Type(() => ModePriority)
     public modePriority: ModePriority[];
-
     @IsArray()
     @Type(() => SequenceSync)
     public sequences?: SequenceSync[];
+    @IsArray()
+    @Type(() => TriggerSynchronizeDTO)
+    public triggers?: TriggerSynchronizeDTO[];
+    @IsArray()
+    @Type(() => ScheduleSynchronizeDTO)
+    public schedules?: ScheduleSynchronizeDTO[];
 
     public static mapToCycleModel(cycleSynchronizeDTO: CycleSynchronizeDTO): CycleModel {
         const cycle = new CycleModel();
@@ -70,6 +79,8 @@ export class CycleSynchronizeDTO {
         cycle.name = cycleSynchronizeDTO.name;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
+        cycle.mapSectionId = cycleSynchronizeDTO.mapSectionId;
+        
         cycle.modePriority = [];
         if (cycleSynchronizeDTO.modePriority) {
             cycleSynchronizeDTO.modePriority?.forEach(priority => { //nya remove optional
@@ -82,7 +93,6 @@ export class CycleSynchronizeDTO {
             cycle.modePriority.push({ mode: ProcessMode.TRIGGER, priority: 2 });
         }
 
-
         cycle.sequences = [];
         cycleSynchronizeDTO.sequences.forEach(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();
@@ -93,11 +103,12 @@ export class CycleSynchronizeDTO {
             if (!sequence.shouldDelete) {
                 sequence.name = sequenceSync.name;
                 sequence.description = sequenceSync.description;
+                sequence.mapSectionId = sequenceSync.mapSectionId;
                 sequence.maxDuration = sequenceSync.maxDuration;
                 sequence.modules = [];
-                sequenceSync.modules?.forEach((moduleId) => {
+                sequenceSync.modules?.forEach((moduleDto) => {
                     const module = new SynchronizeModuleModel();
-                    const splittedModuleId = moduleId.split('_');
+                    const splittedModuleId = moduleDto.id.split('_');
                     module.shouldDelete = splittedModuleId.length > 1 && splittedModuleId[0] === 'deleted';
                     //no need to save deleted...
                     if (!module.shouldDelete) {
@@ -116,24 +127,87 @@ export class CycleSynchronizeDTO {
                         const condition = new SynchronizeConditionModel();
                         const splittedConditionId = conditionSync.id.split('_');
                         condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
-                        condition.id = splittedConditionId[1] || splittedConditionId[0];
-                        condition.parentId = sequenceSync.id;
-                        condition.name = conditionSync.name;
-                        condition.description = conditionSync.name;
-                        condition.deviceId = conditionSync.deviceId;
-                        condition.operator = conditionSync.operator;
-                        condition.value = conditionSync.value;
-                        sequence.conditions.push(condition);
+                        if (!condition.shouldDelete) {
+                            condition.id = splittedConditionId[1] || splittedConditionId[0];
+                            condition.parentId = sequenceSync.id;
+                            condition.name = conditionSync.name;
+                            condition.description = conditionSync.name;
+                            condition.deviceId = conditionSync.deviceId;
+                            condition.operator = conditionSync.operator;
+                            condition.value = conditionSync.value;
+                            sequence.conditions.push(condition);
+                        }
                     });
                 }
-
-               
-
                 cycle.sequences.push(sequence);
             }
 
         });
 
+        cycle.triggers = [];
+        cycleSynchronizeDTO.triggers?.forEach(triggerSync => {
+            const trigger = new SynchronizeTriggerModel();
+            const splittedTriggerId = triggerSync.id.split('_');
+            trigger.shouldDelete = splittedTriggerId.length > 1 && splittedTriggerId[0] === 'deleted';
+            trigger.id = splittedTriggerId[1] || splittedTriggerId[0];
+            //no need to save deleted...
+            if (!trigger.shouldDelete) {
+                trigger.name = triggerSync.name;
+                trigger.description = triggerSync.description;
+                trigger.shouldConfirmation = triggerSync.shouldConfirmation;
+                trigger.isPaused = triggerSync.isPaused;
+                trigger.trigger = triggerSync.trigger;
+                trigger.cycleId = triggerSync.cycleId;
+                trigger.delay = triggerSync.delay;
+                trigger.action = triggerSync.action;
+
+                trigger.conditions = [];
+                if (triggerSync.conditions?.length > 0) {
+                    triggerSync.conditions.forEach(conditionSync => {
+                        const condition = new SynchronizeConditionModel();
+                        const splittedConditionId = conditionSync.id.split('_');
+                        condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
+                        if (!condition.shouldDelete) {
+                            condition.id = splittedConditionId[1] || splittedConditionId[0];
+                            condition.parentId = triggerSync.id;
+                            condition.name = conditionSync.name;
+                            condition.description = conditionSync.description;
+                            condition.deviceId = conditionSync.deviceId;
+                            condition.operator = conditionSync.operator;
+                            condition.value = conditionSync.value;
+                            trigger.conditions.push(condition);
+                        }
+                    });
+                }
+                cycle.triggers.push(trigger);
+            }
+        });
+
+        cycle.schedules = [];
+        cycleSynchronizeDTO.schedules?.forEach(scheduleSync => {
+            const scheduleModel = new SynchronizeScheduleModel();
+            const splittedTriggerId = scheduleSync.id.split('_');
+            scheduleModel.shouldDelete = splittedTriggerId.length > 1 && splittedTriggerId[0] === 'deleted';
+            scheduleModel.id = splittedTriggerId[1] || splittedTriggerId[0];
+            if (!scheduleModel.shouldDelete) {
+                scheduleModel.id = scheduleSync.id;
+                scheduleModel.cycleId = scheduleSync.cycleId;
+                scheduleModel.name = scheduleSync.name;
+                scheduleModel.description = scheduleSync.description;
+                scheduleModel.cron = new CronSync();
+                scheduleModel.cron.date = scheduleSync.cron?.date;
+                scheduleModel.cron.pattern = scheduleSync.cron?.pattern;
+                scheduleModel.cron.after = scheduleSync.cron?.after;
+                if (scheduleSync.cron?.sunBehavior) { 
+                    scheduleModel.cron.sunBehavior = new SunBehavior();
+                    scheduleModel.cron.sunBehavior.sunState = scheduleSync.cron?.sunBehavior?.sunState;
+                    scheduleModel.cron.sunBehavior.time = scheduleSync.cron?.sunBehavior?.time;
+                }
+                scheduleModel.isPaused = scheduleSync.isPaused;
+                scheduleModel.shouldConfirmation = scheduleSync.shouldConfirmation;
+                cycle.schedules.push(scheduleModel);
+            }
+        })
         return cycle;
     }
 
@@ -178,6 +252,8 @@ export class ScheduleSynchronizeDTO {
     public cron: CronSync;
     @IsBoolean()
     public isPaused: boolean
+    @IsBoolean()
+    public shouldConfirmation: boolean
 
 
     public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): ScheduleModel {
@@ -188,6 +264,7 @@ export class ScheduleSynchronizeDTO {
         scheduleModel.description = scheduleSynchronizeDTO.description;
         scheduleModel.cron = new CronSync();
         scheduleModel.cron.date = scheduleSynchronizeDTO.cron.date;
+        scheduleModel.cron.after = scheduleSynchronizeDTO.cron.after;
         scheduleModel.cron.pattern = scheduleSynchronizeDTO.cron.pattern;
         if (scheduleSynchronizeDTO.cron.sunBehavior) {
             scheduleModel.cron.sunBehavior = new SunBehavior();
@@ -196,6 +273,7 @@ export class ScheduleSynchronizeDTO {
         }
 
         scheduleModel.isPaused = scheduleSynchronizeDTO.isPaused;
+        scheduleModel.shouldConfirmation = scheduleSynchronizeDTO.shouldConfirmation;
         return scheduleModel;
     }
 }
@@ -225,6 +303,15 @@ export class ConditionSync {
     @IsString()
     public deviceId: string;
 }
+
+export class ModuleSync {
+    @IsString()
+    @IsNotEmpty()
+    public id: string;
+    @IsString()
+    public portNum: string;
+}
+
 export class TriggerSynchronizeDTO {
     @IsNotEmpty()
     public id: string;
@@ -300,8 +387,10 @@ export class SensorSynchronizeDTO {
     public unit: string;
     @IsString()
     public description: string;
+    @Type(() => Style)
+    public style?: Style;
     @IsNotEmpty()
-    @ApiProperty()
+    @ApiProperty() 
     public type: SensorType;
 
     public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
@@ -309,6 +398,7 @@ export class SensorSynchronizeDTO {
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.name = sensorSynchronizeDTO.name;
         sensorModel.description = sensorSynchronizeDTO.description;
+        sensorModel.style  = sensorSynchronizeDTO.style;
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.type = sensorSynchronizeDTO.type;
         sensorModel.unit = sensorSynchronizeDTO.unit;
@@ -321,7 +411,6 @@ export class StructureSynchronizeDTO {
     @IsArray()
     @Type(() => CycleSynchronizeDTO)
     public cycles: CycleSynchronizeDTO[];
-
     @IsArray()
     @Type(() => SensorSynchronizeDTO)
     public sensors: SensorSynchronizeDTO[];

@@ -5,7 +5,7 @@ import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.i
 
 export type FakeGpio = { writeSync: (_value: number) => void; direction: () => GPIODirection; unexport: () => void; readSync: () => number };
 export class ModuleModel {
-    public id: string;
+    public id: string; 
     public status: ModuleStatus;
     public instance: Gpio | FakeGpio;
     public portNum: number;
@@ -36,6 +36,9 @@ export class ModuleModel {
     }
 
     public execute(action: number): void {
+        if(!this.instance){
+            this.configure();
+        }
         if (this.instance.direction() === GPIODirection.OUT) {
             this.instance.writeSync(action as BinaryValue);
             this.status = action === 1 ? ModuleStatus.ON : ModuleStatus.OFF;

@@ -10,7 +10,6 @@ export class ModuleEntity extends ModuleModel {
         module.portNum = moduleEntity.portNum;
         module.direction = moduleEntity.direction;
         module.edge = moduleEntity.edge;
-        module.configure();
         return module;
     }
 

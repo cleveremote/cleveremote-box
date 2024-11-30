@@ -14,6 +14,8 @@ import { SensorValueRepository } from './sensor-value.repository';
 import { ProcessValueRepository } from './process-value.repository';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
+import { DataModel } from '@process/domain/models/data.model';
+import { DataRepository } from './data.repository';
 
 @Injectable()
 export class ValueRepository {
@@ -21,7 +23,8 @@ export class ValueRepository {
     public constructor(
         private dbService: DbService,
         private sensorValueRepository: SensorValueRepository,
-        private processValueRepository: ProcessValueRepository
+        private processValueRepository: ProcessValueRepository,
+        private dataRepository: DataRepository
     ) { }
 
     // eslint-disable-next-line max-len
@@ -59,6 +62,43 @@ export class ValueRepository {
         }
 
         return result;
+    }
+
+    public async getData(query: any): Promise<DataModel[]> {
+
+        const startDate = new Date(query.startDate);
+        const endDate = new Date(query.endDate);
+
+        const startMonthIndex = startDate.getMonth();
+        const startYearhIndex = startDate.getFullYear();
+        const endMonthIndexDb = endDate.getMonth();
+        const endYearhIndex = endDate.getFullYear();
+        const keys = []
+
+        for (let index = startYearhIndex; index <= endYearhIndex; index++) {
+            if (index === startYearhIndex) {
+                for (let indexM = startMonthIndex; indexM <= endMonthIndexDb; indexM++) {
+                    keys.push(`${indexM}-${startYearhIndex}`);
+                }
+            } else {
+                for (let indexM = 1; indexM <= 12; indexM++) {
+                    keys.push(`${indexM}-${startYearhIndex}`);
+                }
+            }
+        }
+        let resultArray = [];
+
+        for (let index = 0; index < keys.length; index++) {
+            const key = keys[index];
+            resultArray = resultArray.concat(await this.dataRepository.get(key) as DataModel[]);
+        }
+
+        resultArray = resultArray.filter(x => x.deviceId === query.deviceId)
+
+        const indexStartDate = resultArray.findIndex(x => x.date.getTime() >= startDate.getTime());
+        const indexEndtDate = resultArray.findIndex(x => x.date.getTime() >= endDate.getTime());
+
+        return resultArray.slice(indexStartDate === -1 ? 0 : indexStartDate, indexEndtDate === -1 ? resultArray.length:indexEndtDate);
     }
 
     public async getDeviceValue(deviceId: string): Promise<SensorValueModel | ProcessValueModel> {

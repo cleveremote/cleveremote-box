@@ -14,7 +14,7 @@ export enum ExecutableAction {
 }
 
 export enum ProcessMode {
-    SCHEDULED = 'SCHEDULED',
+    SCHEDULED = 'SCHEDULE',
     MANUAL = 'MANUAL',
     TRIGGER = 'TRIGGER'
 }

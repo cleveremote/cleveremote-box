@@ -7,17 +7,20 @@ export class DbService {
     public DB_VALUES: JsonDB;
     public DB_STRUCTURE: JsonDB;
     public DB_AUTH: JsonDB;
+    public DB_SENSOR_VALUE = {};
+
 
     public async initialize(): Promise<void> {
         await this._initialiseDbAuth();
         await this._initialiseDbStructure();
         await this._initialiseDbValues();
+        await this._initialiseDbSensorData();
+        
     }
 
     private async _initialiseDbValues(): Promise<void> {
         try {
             this.DB_VALUES = new JsonDB(new Config('DB_VALUES', true, true, '/'));
-
 
             if (!await this.DB_VALUES.exists('/sensors')) {
                 await this.DB_VALUES.push('/sensors', []);
@@ -48,6 +51,21 @@ export class DbService {
         }
     }
 
+    private async _initialiseDbSensorData(): Promise<void> {
+        try {
+            const key = `${(new Date()).getMonth()}-${(new Date()).getFullYear()}`
+            this.DB_SENSOR_VALUE[key] = new JsonDB(new Config(`sensor/${key}`, true, false, '/'));
+            if (!await this.DB_SENSOR_VALUE[key].exists('/data')) {
+                await this.DB_SENSOR_VALUE[key].push('/data', []);
+            }
+            let numberOfElements = await this.DB_SENSOR_VALUE[key].count("/data");
+            console.log(numberOfElements); 
+        } catch (error) {
+            console.error('The database DB_AUTH could not be loaded');
+            await this.executeBackUp('DB_AUTH', 'RESTORE');
+        }
+    }
+
     private async _initialiseDbStructure(): Promise<void> {
         try {
             this.DB_STRUCTURE = new JsonDB(new Config('DB_STRUCTURE', true, true, '/'));
@@ -68,7 +86,6 @@ export class DbService {
         try {
             await fs.copyFile(`${type}${action === 'RESTORE' ? '-backup' : ''}.json`,
                 `${type}${action === 'RESTORE' ? '' : '-backup'}.json`);
-            // console.log(`the database ${type} has been ${action.toLowerCase()}D`);
         } catch {
             console.error(`·the database ${type} could not be ${action.toLowerCase()}d`);
         }

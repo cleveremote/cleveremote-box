@@ -7,5 +7,6 @@ export class ProcessValueModel {
     public status: ExecutableStatus;
     public startedAt?: Date;
     public duration?: number;
-    public causes?: { type: ProcessType; cause: string }[]
+    public causes?: { type: ProcessType; cause: string }[];
+    public mapSectionId: string;
 }

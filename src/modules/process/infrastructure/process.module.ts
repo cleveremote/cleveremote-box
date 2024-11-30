@@ -24,10 +24,13 @@ import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
 import { AuthenticationController } from './controllers/authentication.controller';
+import { DataRepository } from './repositories/data.repository';
+import { HttpModule } from '@nestjs/axios';
 @Module({
     imports: [
         ConfigModule.forRoot(),
-        ScheduleModule.forRoot()
+        ScheduleModule.forRoot(),
+        HttpModule
     ],
     controllers: [
         ConfigurationController,
@@ -46,6 +49,7 @@ import { AuthenticationController } from './controllers/authentication.controlle
         ProcessValueRepository,
         SensorValueRepository,
         ValueRepository,
+        DataRepository,
         //---------------------//
         AuthenticationService,
         StructureService,

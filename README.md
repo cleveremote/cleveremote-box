@@ -51,4 +51,17 @@ echo $(tr -dc 'A-Za-z0-9!?%=' < /dev/urandom | head -c 10)
 get login 
 cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2 serial number
 
-"start:debug": "nest start --debug=0.0.0.0:5200 --watch -- genpass",
+"start:debug": "nest start --debug=0.0.0.0:5200 --watch -- genpass", qGb=a|wE5i!Aa
+
+
+npm install -g npm@10.8.2
+
+sudo setcap cap_net_admin=ep $(eval readlink -f `which node`) hci
+
+docker system prune --all --force
+docker stop $(docker ps -a -q)
+docker build --target production -t clever-box .
+docker build -t clever-box .
+docker exec -it 4e7a238f2866 /bin/sh
+docker images
+docker rmi fe47debaa2bc --force

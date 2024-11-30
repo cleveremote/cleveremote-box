@@ -27,6 +27,7 @@ import { ProcessValueRepository } from '@process/infrastructure/repositories/pro
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
+import { DataRepository } from '@process/infrastructure/repositories/data.repository';
 
 @Injectable()
 export class ProcessService {
@@ -39,7 +40,8 @@ export class ProcessService {
         private configurationRepository: StructureRepository,
         private processValueRepository: ProcessValueRepository,
         private cycleRepository: CycleRepository,
-        private valueRepository: ValueRepository
+        private valueRepository: ValueRepository,
+        private dataRepository: DataRepository
     ) {
 
     }
@@ -59,13 +61,11 @@ export class ProcessService {
             // pour ne pas avoir de latece lors de l'execution off il etaignait toutes les sequences avant d'etindre le cycle.
             await this._processProgress(process.cycle.id, ExecutableAction.OFF).then(() => true);
             for (const sequence of process.cycle.sequences) {
-                const state = await this.valueRepository.getValues('SEQUENCE', sequence.id)[0] as ProcessValueEntity;
-                if (state?.status !== ExecutableStatus.STOPPED) {
+                const state = await this.valueRepository.getValues('SEQUENCE', sequence.id);
+                if (state[0]?.status !== ExecutableStatus.STOPPED) {
                     await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
                 }
             }
-
-            
         }
 
     }
@@ -110,12 +110,12 @@ export class ProcessService {
             this.processList.splice(index, 1);
         }
 
-        const data = { type: ExecutableType.CYCLE, id: process.cycle.id, status: ExecutableStatus.STOPPED };
+        const data = { type: ExecutableType.CYCLE, id: process.cycle.id, status: ExecutableStatus.STOPPED, mapSectionId: process.cycle.mapSectionId };
         const pro = this.processValueRepository.save(data);
         //const process: { id: string; causes: { type: ProcessType; cause: string }[] } = { id: processModel.cycle.id, causes };
         return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(() => { });
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(() => { });
             return 'sent';
         }
             //test if connected ... to not hang nya
@@ -151,8 +151,13 @@ export class ProcessService {
             const sequenceSkipFlag = this.queuedSequences.find(x => x.sequenceId === process.id);
             sequenceSkipFlag.flag.next(null);
         } else if (process.type === ProcessType.FORCE) {
-            await this._resetConflictedProcesses(process);
-            this._executeProcess(process);
+            await this.dataRepository.save({ id: Math.random().toString(), deviceId: process.cycle.id, date: new Date(), type: process.mode, value: process.action })
+            if (process.action === ExecutableAction.OFF) {
+                await this.reset(process);
+            } else {
+                await this._resetConflictedProcesses(process);
+                this._executeProcess(process);
+            }
         } else if (process.type === ProcessType.QUEUED) {
             throw new Error('Method not implemented.');
         } else if (process.type === ProcessType.IGNORE) {
@@ -175,7 +180,12 @@ export class ProcessService {
         }
         for (const proc of conflictedProcesses) {
             if (cyclePriority.priority < proc.cycle.modePriority.find((x) => x.mode === proc.mode).priority) {
-                process.type = ProcessType.FORCE;
+                if ((process.mode === ProcessMode.SCHEDULED || process.mode === ProcessMode.TRIGGER) && process.schedule.shouldConfirmation) {
+                    process.type = ProcessType.CONFIRMATION;
+                } else {
+                    process.type = ProcessType.FORCE;
+                }
+
                 report.push({ id: proc.id, type: process.type, cause: 'conflicted with cycle : ' + proc.cycle.name });
             } else {
                 const processAlreadyExist = this.processList.find(x => x.cycle.id === process.cycle.id);
@@ -203,6 +213,7 @@ export class ProcessService {
             {
                 next: async () => {
                     await this.reset(process);
+                    await this.dataRepository.save({ id: Math.random().toString(), deviceId: process.cycle.id, date: new Date(), type: process.mode, value: "OFF" })
                 },
                 error: async (_err) => {
                     Logger.debug(_err, 'execution');
@@ -230,7 +241,7 @@ export class ProcessService {
         const modules = process.cycle.getModules();
         modules.forEach((module) => {
             this.processList.forEach((proc) => { // and not in confirmation state
-                if ((process.type !== ProcessType.CONFIRMATION) && proc.type !== ProcessType.CONFIRMATION && proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id) && proc.cycle.id !== process.cycle.id) {
+                if ((process.type !== ProcessType.CONFIRMATION) && proc.type !== ProcessType.CONFIRMATION && proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id) && process.action !== 'OFF') { //&& (proc.cycle.id !== process.cycle.id)
                     conflictedExecutable.push(proc);
                 }
             })
@@ -323,7 +334,7 @@ export class ProcessService {
             return true;
         };
 
-        if (!sequence.conditions?.length) {
+        if (!sequence?.conditions?.length) {
             return false;
         }
 
@@ -369,7 +380,7 @@ export class ProcessService {
         const startedAt = new Date();
         //const endedAt = action === ExecutableAction.ON && duration ? startedAt.setMilliseconds(startedAt.getMilliseconds() + duration) : undefined;
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
-        let data = { type, id, status, startedAt, duration };
+        let data = { type, id, status, startedAt, duration, mapSectionId: seqFound?.mapSectionId };
         if (type === ExecutableType.SEQUENCE) {
             seqFound.status = status;
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
@@ -378,7 +389,7 @@ export class ProcessService {
             let cycleDuration = 0;
             cycFound.sequences.forEach((x) => cycleDuration = cycleDuration + Number(x.maxDuration))
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
-            data = { type, id, status, startedAt, duration: cycleDuration };
+            data = { type, id, status, startedAt, duration: cycleDuration, mapSectionId: cycFound?.mapSectionId };
         }
 
         const pro = this.processValueRepository.save(data);
@@ -392,19 +403,19 @@ export class ProcessService {
         }
 
         return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(() => { });
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(() => { });
             return 'sent';
         });
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
-        const data = { type: ExecutableType.CYCLE, id: processModel.cycle.id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };
+        const data = { type: ExecutableType.CYCLE, id: processModel.cycle.id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes, mapSectionId: processModel.cycle.mapSectionId };
         const pro = this.processValueRepository.save(data);
         //const process: { id: string; causes: { type: ProcessType; cause: string }[] } = { id: processModel.cycle.id, causes };
         return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(()=>{});
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(()=>{});
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true).then(() => { });
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(() => { });
             return 'sent';
         });
     }

@@ -19,15 +19,15 @@ export class ProcessValueRepository implements IRepository<ProcessValueEntity> {
         return null;
     }
 
-    public async save(model: ProcessValueEntity): Promise<ProcessValueEntity> {
+    public async save(model: ProcessValueEntity): Promise<ProcessValueEntity> { 
         let result: ProcessValueEntity;
-        const entity = ProcessValueEntity.mapToEntity(model);
+        const entity = ProcessValueEntity.mapToEntity(model); 
         const idToDelete = this.shouldDelete(entity.id)
         if (idToDelete) {
             await this.delete(idToDelete);
-            return null;
+            return entity;
         }
-        const found = await this.get(entity.id);
+        const found = await this.get(entity.id); 
         if (found) {
             result = await this.update(entity);
         } else {

@@ -7,5 +7,5 @@ export class ConditionModel {
     public description: string;
     public deviceId: string;
     public operator: string;
-    public value: ExecutableAction | number;
+    public value: ExecutableAction | number; 
 }

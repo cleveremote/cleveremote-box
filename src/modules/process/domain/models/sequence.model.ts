@@ -9,7 +9,8 @@ export class SequenceModel {
     public id: string;
     public name: string;
     public description: string;
-    public progression: { startedAt: Date; duration: number };
+    public mapSectionId: string;
+    public progression: { startedAt: Date; duration: number};
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public maxDuration: number;
     public conditions: ConditionModel[];

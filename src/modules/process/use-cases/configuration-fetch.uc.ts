@@ -1,5 +1,5 @@
-import { StructureModel } from '@process/domain/models/structure.model';
-import { StructureService } from '@process/domain/services/configuration.service';
+import { StructureModel } from "@process/domain/models/structure.model";
+import { StructureService } from "@process/domain/services/configuration.service";
 
 /**
  * # Synchronisation et enregitrement de la nouvelle structure cycle/sequence

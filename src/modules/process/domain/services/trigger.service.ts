@@ -23,8 +23,7 @@ import { SensorValueRepository } from '@process/infrastructure/repositories/sens
 import { ProcessService } from './execution.service';
 import { ConditionModel } from '../models/condition.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
-import { ValueEntity } from '@process/infrastructure/entities/value.entity';
-
+import { DataRepository } from '@process/infrastructure/repositories/data.repository';
 @Injectable()
 export class TriggerService {
     public triggers: TriggerModel[] = [];
@@ -40,6 +39,7 @@ export class TriggerService {
         private sensorRepository: SensorRepository,
         private processValueRepository: ProcessValueRepository,
         private sensorValueRepository: SensorValueRepository,
+        private dataRepository: DataRepository,
         private valueRepository: ValueRepository,
         private processService: ProcessService
 
@@ -65,9 +65,10 @@ export class TriggerService {
     }
 
     private _listenValueChanged(): void {
-        this.onElementValueChanged.subscribe((element: SensorValueModel | ProcessValueModel) => {
+        this.onElementValueChanged.subscribe(async (element: SensorValueModel | ProcessValueModel) => {
             if (element) {
                 const triggers = this._getTriggerByElementId(element);
+                await this.dataRepository.save({ id: Math.random().toString(), deviceId: element.id, date: new Date(), type: "SENSOR",value:(element as SensorValueModel ).value.toString() })
                 for (const trigger of triggers) {
                     this._checkTriggerConditions(trigger, element);
                 }
@@ -155,14 +156,14 @@ export class TriggerService {
         scheduleModel.cycleId = trigger.cycleId;
         scheduleModel.id = 'trigger_' + math.random();
         scheduleModel.cron = { date: new Date(executionDate) };
+        scheduleModel.shouldConfirmation = trigger.shouldConfirmation;
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
-
-        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE)
+        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
         const methode = async (): Promise<void> => {
             await this.scheduleService.clearAllSchedules();
-            await this.processService.execute(process);
+            await this.processService.execute({ ...process });
             trigger.isCheckInProgress = false;
-            this.checkTriggerQueueProcess.next({ trigger, data });
+            this.checkTriggerQueueProcess.next({ trigger, data })
         };
 
         this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, ProcessType.FORCE, methode);

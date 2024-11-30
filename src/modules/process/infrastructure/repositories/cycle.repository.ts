@@ -27,7 +27,7 @@ export class CycleRepository implements IRepository<CycleEntity> {
         const idToDelete = this.shouldDelete(entity.id)
         if (idToDelete) {
             await this.delete(idToDelete);
-            return null;
+            return entity;
         }
         const found = await this.get(entity.id);
         if (found) {

@@ -8,6 +8,7 @@ export class SensorEntity extends SensorModel {
         sensor.id = sensorEntity.id;
         sensor.name = sensorEntity.name;
         sensor.description = sensorEntity.description;
+        sensor.style = sensorEntity.style;
         sensor.id = sensorEntity.id;
         sensor.type = sensorEntity.type;
         sensor.unit = sensorEntity.unit;
@@ -19,6 +20,7 @@ export class SensorEntity extends SensorModel {
         sensor.id = sensorModel.id;
         sensor.name = sensorModel.name;
         sensor.description = sensorModel.description;
+        sensor.style = sensorModel.style;
         sensor.id = sensorModel.id;
         sensor.type = sensorModel.type;
         sensor.unit = sensorModel.unit;

@@ -15,7 +15,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
     public shouldDelete(id: string): string {
         const splittedCycleId = id.split('_');
         if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
-            return splittedCycleId[0];
+            return splittedCycleId[1];
         }
         return null;
     }
@@ -26,7 +26,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         const idToDelete = this.shouldDelete(entity.id);
         if (idToDelete) {
             await this.delete(idToDelete, entity.cycleId);
-            result = null;
+            result = entity;
         }
         const found = await this.get(entity.id, entity.cycleId);
         if (found) {
@@ -79,7 +79,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
     }
 
     private async _getParentNode(parentId: string): Promise<string> {
-        const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', parentId);
+        const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', parentId); 
         return cycleIndex !== -1 ? `/cycles[${cycleIndex}]` : null;
     }
 

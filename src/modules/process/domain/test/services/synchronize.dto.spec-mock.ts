@@ -9,7 +9,7 @@ export function CreateSynchronizePartialDto(): CycleSynchronizeDTO {
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
     irrigationSecteur1.maxDuration = 10000; //3 secondes
-    irrigationSecteur1.modules = ['16', '26'];
+    //irrigationSecteur1.modules = ['16', '26'];
 
     const cycleSynchronizeDTO: CycleSynchronizeDTO = new CycleSynchronizeDTO();
     cycleSynchronizeDTO.id = 'partial1';
@@ -29,7 +29,7 @@ export function CreateSynchronizePartialUpdateDto(): CycleSynchronizeDTO {
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
     irrigationSecteur1.maxDuration = 10000; //3 secondes
-    irrigationSecteur1.modules = ['16', '26'];
+   //irrigationSecteur1.modules = ['16', '26'];
 
     const cycleSynchronizeDTO: CycleSynchronizeDTO = new CycleSynchronizeDTO();
     cycleSynchronizeDTO.id = '1';
@@ -58,7 +58,7 @@ export function CreateDelSeqAndDelModuleDto(): CycleSynchronizeDTO {
     irrigationSecteur1.name = 'irrigationSecteur1';
     irrigationSecteur1.description = 'description irrigationSecteur1';
     irrigationSecteur1.maxDuration = 10000; //3 secondes
-    irrigationSecteur1.modules = ['16', 'deleted_26'];
+    //irrigationSecteur1.modules = ['16', 'deleted_26'];
 
     const irrigationSecteur2: SequenceSync = new SequenceSync();
     irrigationSecteur2.id = 'deleted_12';

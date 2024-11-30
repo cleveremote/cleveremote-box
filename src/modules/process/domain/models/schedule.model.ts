@@ -7,5 +7,6 @@ export class ScheduleModel {
     public description: string;
     public cron: { date?: Date; pattern?: string; sunBehavior?: SunBehavior; after?: number };
     public isPaused: boolean;
+    public shouldConfirmation: boolean;
     public shouldDelete: boolean;
 }

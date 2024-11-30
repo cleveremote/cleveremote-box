@@ -32,7 +32,7 @@ export class AuthenticationController {
     }
 
     @MessagePattern(['box/check/connection'])
-    public async checkConnection(): Promise<boolean> {
-        return true;
+    public async checkConnection(): Promise<boolean> { 
+        return true; 
     }
 }
