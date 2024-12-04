@@ -4,7 +4,7 @@
             "status": "STOPPED",
             "sequences": [
                 {
-                    "status": "STOPPED",
+                    "status": "STOPPED", 
                     "modules": [
                         {
                             "activeLow": false,
