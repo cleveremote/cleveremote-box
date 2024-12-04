@@ -53,7 +53,7 @@ export class SynchronizeService {
 
     public async synchronizeCycle(cycleModel: CycleModel): Promise<CycleModel> {
         const cycle = await this.cycleRepository.save(cycleModel);
-        await this.configurationService.getStructure();
+        await this.configurationService.getStructure(); 
         return cycle;
     }
 
