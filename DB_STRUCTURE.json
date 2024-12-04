@@ -208,7 +208,7 @@
                             "reconfigureDirection": true,
                             "id": "20",
                             "status": "OFF",
-                            "portNum": 25,
+                            "portNum": 25, 
                             "direction": "out",
                             "edge": "both"
                         },
