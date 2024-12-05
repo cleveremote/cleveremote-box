@@ -67,8 +67,8 @@ RUN apt-get update && apt-get install -y \
     musl-dev
 
 #( musl-dev link to execute epoll/bindings )    
-RUN ln -s /usr/lib/arm-linux-musleabihf/libc.so /lib/libc.musl-armv7.so.1    
-   
+# RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1    
+RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1
 ENV APP_PORT 3000
 ENV SOCKET_SERVER "http://192.168.1.11:5001"
 ENV SOCKET_SERVER_LOCAL "http://127.0.0.1:5001"
