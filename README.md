@@ -12,10 +12,10 @@
 
 [TOC]
 
-#Project setup
-##Installation/Configuration prerequisites
+# Project setup
+## Installation/Configuration prerequisites
 
-###AWS
+### AWS
  - **Installation**
  
  ```shell
@@ -35,7 +35,7 @@ aws configure
 aws ecr get-login-password --region eu-west-3 | docker login --username AWS --password-stdin 182399677959.dkr.ecr.eu-west-3.amazonaws.com
 ```
 
-###docker
+### docker
  - **installation**
  ```shell
 sudo apt-get update && sudo apt-get upgrade
@@ -53,7 +53,7 @@ sudo usermod -aG docker pi
 sudo chmod 666 /var/run/docker.sock
 ```
 
-###node
+### node
 - **installation**
  ```shell
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
@@ -70,7 +70,7 @@ nvm install 20
 nvm alias default 20
 ```
 
-###git
+### git
 - **installation**
  ```shell
 sudo apt update
@@ -94,7 +94,7 @@ git clone https://github.com/cleveremote/cleveremote-box.git
 ```shell
 npm run start:dev
 ```
-###Debug Mode (vscode)
+### Debug Mode (vscode)
 - prerequisites
 create file in workspace project **.vscode/launch.json**
 ```javascript
@@ -121,7 +121,7 @@ create file in workspace project **.vscode/launch.json**
 ```shell
 npm run start:debug
 ```
-###Exec test
+### Exec test
 ```shell
 npm run test:e2e
 ```
