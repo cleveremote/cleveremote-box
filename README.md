@@ -88,9 +88,9 @@ git config --global user.email cleveremote-tech@gmail.com
 ```shell
 git clone https://github.com/cleveremote/cleveremote-box.git
 ```
-- follow steps [create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner")
-##Launch App
-###Exec Mode
+- [Create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner") follow steps 
+## Launch App
+### Exec Mode
 ```shell
 npm run start:dev
 ```
