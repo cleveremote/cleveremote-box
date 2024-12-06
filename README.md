@@ -59,7 +59,7 @@ sudo chmod 666 /var/run/docker.sock
 ```
   prerequisites login aws cli with at least with pull autorisiations
 ```shell
-    docker run -d --name clever-box --net=host --privileged --restart unless-stopped -t cleveremote/clever-box:latest
+    docker run -v /etc/wpa_supplicant:/etc/wpa_supplicant:rw -d --name clever-box --net=host --privileged --restart unless-stopped -t cleveremote/clever-box:latest
 ```
 ```shell
     docker pull 182399677959.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
@@ -162,3 +162,12 @@ cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2
 ```shell
 cat ~/.bash_history
 ```
+- **remove all images except latest tag**
+```shell
+docker rmi -f $(docker images --format "{{.ID}}" |  grep -v $(docker images --format "{{.ID}}" --filter "reference=*/cleveremote/clv-box:*latest" ))
+```
+- **remove all containers with exited status**
+```shell
+docker rm -v $(docker ps --filter status=exited -q)
+```
+
