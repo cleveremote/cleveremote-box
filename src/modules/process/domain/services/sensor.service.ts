@@ -55,7 +55,7 @@ export class SensorService {
                 }
             }
         });
-        SerialPort.list().then((x) => console.log("resultat,", x));
+        SerialPort.list().then((x) => console.log("resultat:,", x));
 
 
         this.getWeather().subscribe((res)=> { 
