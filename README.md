@@ -53,6 +53,15 @@ sudo usermod -aG docker pi
 sudo chmod 666 /var/run/docker.sock
 ```
 
+- **Actions**
+```shell
+    docker build --progress=plain --no-cache -t xxxxxx.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:v1.x.x -t xxxxxxx.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
+```
+  prerequisites login aws cli with at least with pull autorisiations
+```shell
+    docker run -d --name clever-box --net=host --privileged --restart unless-stopped -t cleveremote/clever-box:latest
+```
+
 ### node
 - **installation**
  ```shell
@@ -88,8 +97,15 @@ git config --global user.email cleveremote-tech@gmail.com
 ```shell
 git clone https://github.com/cleveremote/cleveremote-box.git
 ```
-- [Create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner") follow steps 
+- [Create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner") follow steps
+- [Execute self hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service "Execute self hosted runner") follow steps
+
 ## Launch App
+
+### Set bluetooth capabilities
+```shell
+sudo setcap cap_net_admin=ep $(eval readlink -f `which node`)
+```
 ### Exec Mode
 ```shell
 npm run start:dev
@@ -124,4 +140,22 @@ npm run start:debug
 ### Exec test
 ```shell
 npm run test:e2e
+```
+### miscellaneous
+- **stop all images & Remove all unused containers**
+ ```shell
+ docker stop $(docker ps -a -q)
+ docker system prune --all --force
+```
+- **access the container**
+```shell
+docker run -it --entrypoint /bin/bash clever-box
+```
+- **get device serial**
+```shell
+cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2
+```
+- **get commands line history**
+```shell
+cat ~/.bash_history
 ```

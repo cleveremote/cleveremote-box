@@ -13,7 +13,7 @@ export class CycleRepository implements IRepository<CycleEntity> {
 
     public constructor(private dbService: DbService) { }
 
-    public shouldDelete(id: string): string {
+    public shouldDelete(id: string): string { 
         const splittedCycleId = id.split('_');
         if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
             return splittedCycleId[1];
