@@ -61,6 +61,9 @@ sudo chmod 666 /var/run/docker.sock
 ```shell
     docker run -d --name clever-box --net=host --privileged --restart unless-stopped -t cleveremote/clever-box:latest
 ```
+```shell
+    docker pull 182399677959.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
+```
 
 ### node
 - **installation**
