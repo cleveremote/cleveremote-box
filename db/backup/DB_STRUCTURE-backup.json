@@ -1,0 +1,566 @@
+{
+    "cycles": [
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED", 
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 20,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.3096113500099204",
+                    "name": "Secteur 1",
+                    "description": "Description secteur 11",
+                    "mapSectionId": "sel_1",
+                    "maxDuration": 50000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "21",
+                            "status": "OFF",
+                            "portNum": 21,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.5345164464316021",
+                    "name": "Secteur 2",
+                    "description": "Desc",
+                    "mapSectionId": "sel_2",
+                    "maxDuration": 30000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "19",
+                            "status": "OFF",
+                            "portNum": 19,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.6642734659641887",
+                    "name": "Secteur 3",
+                    "mapSectionId": "sel_4",
+                    "maxDuration": 30000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "26",
+                            "status": "OFF",
+                            "portNum": 26,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7072877533476456",
+                    "name": "Secteur 4",
+                    "mapSectionId": "sel_5",
+                    "maxDuration": 30000,
+                    "conditions": []
+                },
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "16",
+                            "status": "OFF",
+                            "portNum": 16,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.8778294049799905",
+                    "name": "Secteur 5",
+                    "mapSectionId": "sel_6",
+                    "maxDuration": 30000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [
+                {
+                    "id": "0.47781001772680315",
+                    "cycleId": "0.840889220537641",
+                    "name": "new schedule",
+                    "description": "new schedule",
+                    "cron": {
+                        "date": null,
+                        "pattern": "*/2 * * * *",
+                        "after": null
+                    },
+                    "isPaused": true,
+                    "shouldConfirmation": false
+                }
+            ],
+            "triggers": [],
+            "id": "0.840889220537641",
+            "name": "Irrigate all sectors",
+            "description": "Description Irrigate all sectors",
+            "style": {
+                "fontColor": "emerald.500",
+                "iconColor": {
+                    "icon": "#44d399",
+                    "base": "emerald.500"
+                },
+                "bgColor": "emerald.200"
+            },
+            "modePriority": [
+                {
+                    "mode": "TRIGGER",
+                    "priority": 0
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 1
+                },
+                {
+                    "mode": "MANUAL",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "22",
+                            "status": "OFF",
+                            "portNum": 21,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "27",
+                            "status": "OFF",
+                            "portNum": 20,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 16,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 12,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 7,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 8,
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "20",
+                            "status": "OFF",
+                            "portNum": 25, 
+                            "direction": "out",
+                            "edge": "both"
+                        },
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "2",
+                            "status": "OFF",
+                            "portNum": 24,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.1747831990685377",
+                    "name": "Sector 1",
+                    "maxDuration": 60000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [
+                {
+                    "id": "0.9184615004688228",
+                    "cycleId": "0.2899646915732173",
+                    "name": "Schedule test",
+                    "description": "Exec. Every minute",
+                    "cron": {
+                        "date": null,
+                        "pattern": "*/1 * * * *",
+                        "after": 0
+                    },
+                    "isPaused": true,
+                    "shouldConfirmation": false
+                }
+            ],
+            "triggers": [],
+            "id": "0.2899646915732173",
+            "name": "Only Sector 1",
+            "description": "new description",
+            "style": {
+                "fontColor": "lightBlue.500",
+                "iconColor": {
+                    "icon": "#41bdf8",
+                    "base": "lightBlue.500"
+                },
+                "bgColor": "lightBlue.200"
+            },
+            "modePriority": [
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "MANUAL",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "21",
+                            "status": "OFF",
+                            "portNum": 21,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7012942959160233",
+                    "name": "Sector 2",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.8796926308156658",
+            "name": "Only Sector 2",
+            "description": "new description",
+            "style": {
+                "bgColor": "lightBlue.200",
+                "fontColor": "lightBlue.500",
+                "iconColor": {
+                    "icon": "#41bdf8",
+                    "base": "lightBlue.500"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "19",
+                            "status": "OFF",
+                            "portNum": 19,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7847399776638643",
+                    "name": "Sector 3",
+                    "maxDuration": 500000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.6552795852660118",
+            "name": "Only Sector 3",
+            "description": "new description",
+            "style": {
+                "bgColor": "lightBlue.200",
+                "fontColor": "lightBlue.500",
+                "iconColor": {
+                    "icon": "#41bdf8",
+                    "base": "lightBlue.500"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "26",
+                            "status": "OFF",
+                            "portNum": 26,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.44466809923669615",
+                    "name": "Sector 4",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.5223380524202714",
+            "name": "Only Sector 4",
+            "description": "new description",
+            "style": {
+                "bgColor": "lightBlue.200",
+                "fontColor": "lightBlue.500",
+                "iconColor": {
+                    "icon": "#41bdf8",
+                    "base": "lightBlue.500"
+                }
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "status": "STOPPED",
+            "sequences": [
+                {
+                    "status": "STOPPED",
+                    "modules": [
+                        {
+                            "activeLow": false,
+                            "reconfigureDirection": true,
+                            "id": "16",
+                            "status": "OFF",
+                            "portNum": 16,
+                            "direction": "out",
+                            "edge": "both"
+                        }
+                    ],
+                    "id": "0.7184374563285956",
+                    "name": "Soctor 5",
+                    "maxDuration": 50000,
+                    "conditions": []
+                }
+            ],
+            "schedules": [],
+            "triggers": [],
+            "id": "0.7817029024163632",
+            "name": "Only Sector 5",
+            "description": "new description",
+            "style": {
+                "fontColor": "lightBlue.500",
+                "iconColor": {
+                    "icon": "#41bdf8",
+                    "base": "lightBlue.500"
+                },
+                "bgColor": "lightBlue.200"
+            },
+            "modePriority": [
+                {
+                    "mode": "MANUAL",
+                    "priority": 0
+                },
+                {
+                    "mode": "TRIGGER",
+                    "priority": 1
+                },
+                {
+                    "mode": "SCHEDULE",
+                    "priority": 2
+                }
+            ]
+        }
+    ],
+    "sensors": [
+        {
+            "id": "00002",
+            "name": "New sensor 00002",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "H",
+            "unit": "%"
+        },
+        {
+            "id": "00001",
+            "name": "New sensor 00001",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "T",
+            "unit": "°"
+        },
+        {
+            "id": "00101",
+            "name": "New sensor 00101",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "T",
+            "unit": "°"
+        },
+        {
+            "id": "00006",
+            "name": "New sensor 00006",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "H",
+            "unit": "%"
+        },
+        {
+            "id": "02001",
+            "name": "New sensor 02001",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "T",
+            "unit": "°"
+        },
+        {
+            "id": "00003",
+            "name": "New sensor 00003",
+            "description": "new sensor description",
+            "style": {
+                "bgColor": "cyan.200",
+                "fontColor": "blue.400",
+                "iconColor": {
+                    "base": "blue",
+                    "icon": "#60a5fa"
+                }
+            },
+            "type": "H",
+            "unit": "%"
+        }
+    ]
+}

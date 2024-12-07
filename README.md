@@ -1,73 +1,173 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# CLV-BOX
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+![](hydrophyto.svg)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+ ![](https://img.shields.io/github/stars/pandao/editor.md.svg) ![](https://img.shields.io/github/forks/pandao/editor.md.svg) ![](https://img.shields.io/github/tag/pandao/editor.md.svg) ![](https://img.shields.io/github/release/pandao/editor.md.svg) ![](https://img.shields.io/github/issues/pandao/editor.md.svg) ![](https://img.shields.io/bower/v/editor.md.svg)
 
-## Description
+### Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Irrigation's control based on simple to complexe scenarios, includind sensors values as input.
 
-## Installation
+**Table of Contents**
 
-```bash
-$ npm install
+[TOC]
+
+# Project setup
+## Installation/Configuration prerequisites
+
+### AWS
+ - **Installation**
+ 
+ ```shell
+sudo apt-get update && sudo apt-get upgrade
+```
+```shell
+sudo apt install awscli
 ```
 
-## Running the app
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+- **configuration**
+  - prepare your credentials as (admin) AWS, downloaded previously
+ ```shell
+aws configure
+```
+ - login aws cli
+ ```shell
+aws ecr get-login-password --region eu-west-3 | docker login --username AWS --password-stdin 182399677959.dkr.ecr.eu-west-3.amazonaws.com
 ```
 
-## Test
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+### docker
+ - **installation**
+ ```shell
+sudo apt-get update && sudo apt-get upgrade
+```
+```shell
+curl -fsSL https://get.docker.com -o get-docker.sh
+```
+```shell
+sudo sh get-docker.sh
+```
+```shell
+sudo usermod -aG docker pi
+```
+```shell
+sudo chmod 666 /var/run/docker.sock
 ```
 
-## Support
+- **Actions**
+```shell
+    docker build --progress=plain --no-cache -t xxxxxx.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:v1.x.x -t xxxxxxx.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
+```
+  prerequisites login aws cli with at least with pull autorisiations
+```shell
+    docker run -v /etc/wpa_supplicant:/etc/wpa_supplicant:rw -d --name clever-box --net=host --privileged --restart unless-stopped -t cleveremote/clever-box:latest
+```
+```shell
+    docker pull 182399677959.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### node
+- **installation**
+ ```shell
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+```
+```shell
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+```
+```shell
+nvm install 20
+```
+```shell
+nvm alias default 20
+```
 
-## Stay in touch
+### git
+- **installation**
+ ```shell
+sudo apt update
+```
+```shell
+sudo apt install git
+```
+- **configuration**
+ ```shell
+git config --global user.name Nadime
+```
+```shell
+git config --global user.email cleveremote-tech@gmail.com
+```
+```shell
+git clone https://github.com/cleveremote/cleveremote-box.git
+```
+- [Create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner") follow steps
+- [Execute self hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service "Execute self hosted runner") follow steps
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Launch App
 
-## License
+### Set bluetooth capabilities
+```shell
+sudo setcap cap_net_admin=ep $(eval readlink -f `which node`)
+```
+### Exec Mode
+```shell
+npm run start:dev
+```
+### Debug Mode (vscode)
+- prerequisites
+create file in workspace project **.vscode/launch.json**
+```javascript
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "attach",
+            "name": "Attach sales-api",
+            "address": "127.0.0.1",
+            "port": 5200,
+            "remoteRoot": "${workspaceRoot}/dist",
+            "localRoot":"${workspaceRoot}/dist",
+            "outFiles":["${workspaceRoot}/dist/**/*.js"],
+            "sourceMaps": true,
+            "protocol": "inspector",
+            "restart": true,
+            "trace": true
+        }
+    ]
+}
+```
+```shell
+npm run start:debug
+```
+### Exec test
+```shell
+npm run test:e2e
+```
+### miscellaneous
+- **stop all images & Remove all unused containers**
+ ```shell
+ docker stop $(docker ps -a -q)
+ docker system prune --all --force
+```
+- **access the container**
+```shell
+docker run -it --entrypoint /bin/bash clever-box
+```
+- **get device serial**
+```shell
+cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2
+```
+- **get commands line history**
+```shell
+cat ~/.bash_history
+```
+- **remove all images except latest tag**
+```shell
+docker rmi -f $(docker images --format "{{.ID}}" |  grep -v $(docker images --format "{{.ID}}" --filter "reference=*/cleveremote/clv-box:*latest" ))
+```
+- **remove all containers with exited status**
+```shell
+docker rm -v $(docker ps --filter status=exited -q)
+```
 
-Nest is [MIT licensed](LICENSE).
