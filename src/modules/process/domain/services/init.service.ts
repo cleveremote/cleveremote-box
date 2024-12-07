@@ -6,7 +6,7 @@ import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
 import { DbService } from '@process/infrastructure/db/db.service';
 import { AuthenticationService } from './authentication.service';
-
+const network = require("node-network-manager");
 @Injectable()
 export class InitService {
     public constructor(
@@ -20,10 +20,13 @@ export class InitService {
     ) { }
 
     public initialize(): Promise<void> {
-
-
-
-        return this.dbService.initialize()
+        // network
+        // .enable()
+        // .then(() => console.log("network has just turned on"))
+        // .then(() => network.wifiConnect("Livebox-7950", "ZH44bKUeautjj4Mtpf"))
+        // .then((data) => console.log(data))  
+        //.then(() => this.dbService.initialize())
+       return this.dbService.initialize()
             .then(() => this._loadConfiguration())
             .then(() => this.authenticationService.initAuthentication(!!process.argv.find(x => x === 'genpass')))
             .then(() => this.triggerService.initilize())
@@ -34,7 +37,7 @@ export class InitService {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
     }
-    
+
     private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes...', 'initialization');

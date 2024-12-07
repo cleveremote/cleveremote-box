@@ -52,6 +52,7 @@
     "mqtt": "^5.6.1",
     "nats": "^2.26.0",
     "node-json-db": "^2.3.0",
+    "node-network-manager": "^1.0.14",
     "onoff": "git+https://github.com/cleveremote/clv-onoff.git",
     "reflect-metadata": "^0.1.13",
     "rimraf": "^3.0.2",

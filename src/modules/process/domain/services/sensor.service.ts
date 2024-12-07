@@ -18,6 +18,7 @@ const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
 const HciErrors = NodeBleHost.HciErrors;
 const AttErrors = NodeBleHost.AttErrors;
 const fs = require('fs');
+
 const deviceName = 'clv';
 
 var transport = new HciSocket(); // connects to the first hci device on the computer, for example hci0
@@ -51,14 +52,14 @@ export class SensorService {
                 const id = arr[0];
                 if (arr[0] && arr[1] && arr[2]) {
                     this.pairingSensor(id, arr[1], arr[1] === 'T' ? '°' : '%');
-                    this.emitReceivedData({ id: id, value: Number(arr[2]), type: 'SENSOR' }); 
+                    this.emitReceivedData({ id: id, value: Number(arr[2]), type: 'SENSOR' });
                 }
             }
         });
         SerialPort.list().then((x) => console.log("resultat:,", x));
 
 
-        this.getWeather().subscribe((res)=> { 
+        this.getWeather().subscribe((res) => {
             const t = res;
         })
     }
@@ -70,7 +71,7 @@ export class SensorService {
         //https://api.openweathermap.org/data/3.0/onecall?lat=33.44&lon=-94.04&appid={API key}
         //return this.httpService.get(`api.openweathermap.org/data/2.5/weather?lat=${coord.lat}&lon=${coord.lon}&exclude=${part}&appid=${APIKey}`);
         return this.httpService.get(`https://api.openweathermap.org/data/2.5/weather?lat=34.100780850096896&lon=-6.4666017095313935&units=metric&appid=a4292466eac0aee6506725f3bbd60880`);
-            //
+        //
     }
 
 
@@ -186,6 +187,8 @@ export class SensorService {
     }
 
     private buildContenteConfigFile(data: { country: string, ssid: string, psk: string }) {
+        
+
         //fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
 
         // fs.readFile('wpa_nadime.conf', 'utf8', (err, content) => {
@@ -199,13 +202,13 @@ export class SensorService {
         // });
 
 
-        const content = fs.readFileSync('wpa_nadime.conf', 'utf8');
-        let searchString = 'country=';
-        let re = new RegExp('^.*' + searchString + '.*$', 'gm');
-        let formatted = content.replace(re, `country=${data.country}`);
-        fs.writeFileSync('wpa_nadime.conf', formatted, 'utf8');
-        const cfg = `\n network={\n ssid="${data.ssid}"\n psk="${data.psk}"\n priority="${1}"\n}`;
-        fs.appendFileSync('wpa_nadime.conf', cfg);
+        // const content = fs.readFileSync('wpa_nadime.conf', 'utf8');
+        // let searchString = 'country=';
+        // let re = new RegExp('^.*' + searchString + '.*$', 'gm');
+        // let formatted = content.replace(re, `country=${data.country}`);
+        // fs.writeFileSync('wpa_nadime.conf', formatted, 'utf8');
+        // const cfg = `\n network={\n ssid="${data.ssid}"\n psk="${data.psk}"\n priority="${1}"\n}`;
+        // fs.appendFileSync('wpa_nadime.conf', cfg);
 
 
     }
