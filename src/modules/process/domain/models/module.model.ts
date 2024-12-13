@@ -2,6 +2,7 @@
 import { BinaryValue, Gpio } from 'onoff';
 import { NotSwitchError } from '../errors/not-switch.error';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.interface';
+import { getGPIO } from 'src/common/tools/find_gipio';
 
 export type FakeGpio = { writeSync: (_value: number) => void; direction: () => GPIODirection; unexport: () => void; readSync: () => number };
 export class ModuleModel {
@@ -18,7 +19,7 @@ export class ModuleModel {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     public reconfigureDirection: boolean = true;
 
-    public configure(): void {
+    public async configure(): Promise<void> {
         if (this.instance) {
             this.instance.unexport();
         }
@@ -26,18 +27,19 @@ export class ModuleModel {
         if (Gpio.accessible) {
             const gpioOptions = { debounceTimeout: this.debounceTimeout, activeLow: this.activeLow, reconfigureDirection: this.reconfigureDirection };
             try {
-                this.instance = new Gpio(this.portNum, this.direction, this.edge, gpioOptions);
+                const gpio = await getGPIO(this.portNum);
+                this.instance = new Gpio(gpio, this.direction, this.edge, gpioOptions);
             } catch (error) {
                 this.instance = this._getFakeInstance();
             }
         } else {
-            this.instance = this._getFakeInstance();
+            this.instance = this._getFakeInstance(); 
         }
     }
 
-    public execute(action: number): void {
+    public async execute(action: number): Promise<void> {
         if(!this.instance){
-            this.configure();
+            await this.configure();
         }
         if (this.instance.direction() === GPIODirection.OUT) {
             this.instance.writeSync(action as BinaryValue);
