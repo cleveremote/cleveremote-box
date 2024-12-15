@@ -61,7 +61,7 @@ export class InitService {
             if (Gpio.accessible) {
                 const gpio = await getGPIO(21);
                 const led = new Gpio(gpio, 'out');
-                led.write(1)
+                await led.write(1)
                     .then(() => led.write(0))
                     .then(() => new Promise(resolve => setTimeout(resolve, 200)))
                     .then(() => led.write(1))
@@ -70,7 +70,7 @@ export class InitService {
         }
     }
 
-    private _testAllModules(): Promise<void> {
+    private _testAllModules(): Promise<void> { 
 
         Logger.log('Start initialize processes...', 'initialization');
         return this.processService.testAllModules()
@@ -79,7 +79,7 @@ export class InitService {
             })
     }
 
-    private _loadConfiguration(): Promise<void> {
+    private _loadConfiguration(): Promise<void> { 
 
         Logger.log('Start loading configuration...', 'initialization');
         return this.configurationService.getStructure()
