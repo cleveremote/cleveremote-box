@@ -60,12 +60,14 @@ export class InitService {
         if (Gpio.accessible) {
             if (Gpio.accessible) {
                 const gpio = await getGPIO(21);
-                const led = new Gpio(gpio, 'out');
-                await led.write(1)
-                    .then(() => led.write(0))
-                    .then(() => new Promise(resolve => setTimeout(resolve, 200)))
-                    .then(() => led.write(1))
-                    .then(() => led.write(0))
+                const led = new Gpio(gpio, 'out','both',{reconfigureDirection:true,activeLow:false});
+                led.writeSync(1);
+                await new Promise(r => setTimeout(r, 10));
+                led.writeSync(0);
+                await new Promise(r => setTimeout(r, 200));
+                led.writeSync(1);
+                await new Promise(r => setTimeout(r, 10));
+                led.writeSync(0);
             }
         }
     }
