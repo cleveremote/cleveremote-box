@@ -240,6 +240,10 @@ Error: libc.musl-aarch64.so.1: cannot open shared object file: No such file or d
 }
 ```
 
+problem docker alpine upgrade make some copilation package issues
+ fix the working version in dockerfile .
+ check the alpine relase note 
+
  problème 1
 * cas de changement de sd vers une autre rsb problème de clé ssh
     *  supprimer la ligne correspondante à l’adresse ip

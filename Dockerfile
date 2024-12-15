@@ -2,7 +2,7 @@
 # BUILD FOR LOCAL DEVELOPMENT
 ###################
 
-FROM node:20-alpine As development
+FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As development
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -28,7 +28,7 @@ USER node
 # BUILD FOR PRODUCTION
 ###################
 
-FROM node:20-alpine As build
+FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As build
 
 WORKDIR /usr/src/app
 
