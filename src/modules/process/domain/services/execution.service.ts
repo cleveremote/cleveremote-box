@@ -272,10 +272,13 @@ export class ProcessService {
         });
 
         return obs.pipe(
+            tap(async (previousSeq) => {
+                for (const previousPin of previousSeq.portNums) {
+                    const mod = modules.find(x => x.portNum === previousPin);
+                    await mod.execute(0);
+                }
+            }),
             mergeMap((previousSeq) => {
-                previousSeq.portNums.forEach((previousPin) => {
-                    modules.find(x => x.portNum === previousPin).execute(0);
-                });
                 const index = this.queuedSequences.findIndex(x => x.sequenceId === previousSeq?.sequenceId);
                 if (index >= 0) {
                     this.queuedSequences.splice(index, 1);
@@ -351,22 +354,26 @@ export class ProcessService {
         currentData: { id: string; pins: number[]; duration: number }, modules: ModuleModel[]): Promise<boolean> {
 
         if (previousData.id) {
-            this._switchModule(previousData.pins, modules, 0);
+            await this._switchModule(previousData.pins, modules, 0);
             await this._processProgress(previousData.id, ExecutableAction.OFF).then(() => true);
         }
 
-        this._switchModule(currentData.pins, modules, 1);
+        await this._switchModule(currentData.pins, modules, 1);
         return this._processProgress(currentData.id, ExecutableAction.ON, currentData.duration).then(() => true);
     }
 
-    private _switchModule(dataPins: number[], modules: ModuleModel[], action: number): void {
-        dataPins.forEach((dataPin) => {
+    private async _switchModule(dataPins: number[], modules: ModuleModel[], action: number): Promise<void> {
+
+        for (const dataPin of dataPins) {
             try {
-                modules.find(x => x.portNum === dataPin).execute(action);
+                const mod = modules.find(x => x.portNum === dataPin);
+                await mod.execute(action);
             } catch (error) {
                 Logger.warn(error, 'execution module pornum: ' + dataPin);
             }
-        });
+        }
+           
+              
     }
 
     // eslint-disable-next-line complexity

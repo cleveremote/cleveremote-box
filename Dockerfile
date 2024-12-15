@@ -2,7 +2,7 @@
 # BUILD FOR LOCAL DEVELOPMENT
 ###################
 
-FROM node:20-alpine As development
+FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As development
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -28,7 +28,7 @@ USER node
 # BUILD FOR PRODUCTION
 ###################
 
-FROM node:20-alpine As build
+FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As build
 
 WORKDIR /usr/src/app
 
@@ -70,7 +70,7 @@ RUN apt-get update && apt-get install -y \
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1    
 RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1
 ENV APP_PORT 3000
-ENV SOCKET_SERVER "http://192.168.1.11:5001"
+ENV SOCKET_SERVER "http://ec2-35-180-91-81.eu-west-3.compute.amazonaws.com:5001"
 ENV SOCKET_SERVER_LOCAL "http://127.0.0.1:5001"
 ENV INITIAL_PASSWORD 'CLV_Box-121715!'
 

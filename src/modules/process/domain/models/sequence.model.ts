@@ -19,7 +19,7 @@ export class SequenceModel {
     public async reset(): Promise<void> {
         for (const module of this.modules) {
             try {
-                module.execute(0);
+                await module.execute(0);
             } catch (error) {
                 Logger.warn(error, 'execution sequence id: ' + this.id);
             }

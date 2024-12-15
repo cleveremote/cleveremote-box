@@ -64,6 +64,11 @@ sudo chmod 666 /var/run/docker.sock
 ```shell
     docker pull 182399677959.dkr.ecr.eu-west-3.amazonaws.com/cleveremote/clv-box:latest
 ```
+- mapping folder so that container can access local device folder/file...
+```shell
+    docker run -v external_path:path_in_the_container:rw -it --entrypoint /bin/bash clever-box
+```
+
 
 ### node
 - **installation**
@@ -102,6 +107,30 @@ git clone https://github.com/cleveremote/cleveremote-box.git
 ```
 - [Create self hosted runner](http://https://github.com/cleveremote/cleveremote-box/settings/actions/runners/new?arch=arm64&os=linux "create self hosted runner") follow steps
 - [Execute self hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service "Execute self hosted runner") follow steps
+
+- **Actions**
+
+```shell
+git tag v1.0.0
+```
+```shell
+git push origin  main --tags
+```
+
+## configure permission for networkmanager so that app can manage wifi whith clv user.
+- edit file and  add the content below
+```shell
+sudo nano /etc/polkit-1/localauthority/90-mandatory.d/99-network.pkla`)
+```
+
+```shell
+[Allow netdev users to modify all network states and settings]
+Identity=unix-group:clv    
+Action=org.freedesktop.NetworkManager.network-control;org.freedesktop.NetworkManager.enable-disable-wifi;org.freedesktop.NetworkManager.settings.modify.system // Action=org.freedesktop.NetworkManager.* full right
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+````
 
 ## Launch App
 
@@ -145,6 +174,12 @@ npm run start:debug
 npm run test:e2e
 ```
 ### miscellaneous
+
+- kill process using specific port if not exisis "sudo apt install lsof"
+
+```shell
+ kill -9 $(lsof -ti:8081)
+```
 - **stop all images & Remove all unused containers**
  ```shell
  docker stop $(docker ps -a -q)
@@ -171,3 +206,45 @@ docker rmi -f $(docker images --format "{{.ID}}" |  grep -v $(docker images --fo
 docker rm -v $(docker ps --filter status=exited -q)
 ```
 
+## Install runners
+- go to your repository (in github) => settings => actions (on side menu) => runners => + add new runner.
+- select yout os & arch then follow the steps.
+- if multi runners in the same machi exampe multiple embaded apps in the same device then think to create different specific folder for each project.
+- install runner as service on the machine
+```shell
+ sudo ./svc.sh install
+ sudo ./svc.sh start
+ ```
+- Stop runner
+```shell
+sudo ./svc.sh stop
+ ```
+- Remove runner service
+ ```shell
+sudo ./svc.sh uninstall
+ ```
+
+ ## troubleshooting
+
+- when linking libs for musldev docker file sometimes new version of musl-dev update the name of lib be aware to modify this line in the docker file **"RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1"** and put the right path/file of the lib.
+example of the error
+``` shell
+/node_modules/bindings/bindings.js:121
+        throw e;
+        ^
+
+Error: libc.musl-aarch64.so.1: cannot open shared object file: No such file or directory
+    …
+ {
+  code: 'ERR_DLOPEN_FAILED'
+}
+```
+
+problem docker alpine upgrade make some copilation package issues
+ fix the working version in dockerfile .
+ check the alpine relase note 
+
+ problème 1
+* cas de changement de sd vers une autre rsb problème de clé ssh
+    *  supprimer la ligne correspondante à l’adresse ip
+    * refaire la manipulation d’authentification ssh
