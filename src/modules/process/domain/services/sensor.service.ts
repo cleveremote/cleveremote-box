@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { StructureService } from './configuration.service';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, find, Observable } from 'rxjs';
 import { SynchronizeService } from './synchronize.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { TriggerService } from './trigger.service';
@@ -39,7 +39,25 @@ export class SensorService {
         private readonly httpService: HttpService
     ) {
 
-        this.serialport = new SerialPort({ path: '/dev/ttyS0', baudRate: 9600 })
+
+
+
+
+
+        this.getWeather().subscribe((res) => {
+            const t = res;
+        })
+    }
+
+    public async initSensor(): Promise<void> {
+
+        const portList = await SerialPort.list();
+        console.log('portList', portList);
+        let ttys = portList.find((x)=> x.path ==="/dev/ttyS0");
+        if(!ttys){
+             ttys = portList.find((x)=> x.path ==="/dev/ttyAMA0"); 
+        }
+        this.serialport = new SerialPort({ path: ttys.path, baudRate: 9600 })
         const parser = new ReadlineParser()
         this.serialport.pipe(parser);
         parser.on('data', (data) => {
@@ -56,12 +74,6 @@ export class SensorService {
                 }
             }
         });
-        SerialPort.list().then((x) => console.log("resultat:,", x));
-
-
-        this.getWeather().subscribe((res) => {
-            const t = res;
-        })
     }
 
     private getWeather(): Observable<any> {
@@ -187,7 +199,7 @@ export class SensorService {
     }
 
     private buildContenteConfigFile(data: { country: string, ssid: string, psk: string }) {
-        
+
 
         //fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
 
