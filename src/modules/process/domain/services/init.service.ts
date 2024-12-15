@@ -34,6 +34,7 @@ export class InitService {
             .then(() => this._loadConfiguration())
             .then(() => this.authenticationService.initAuthentication(!!process.argv.find(x => x === 'genpass')))
             .then(() => this.triggerService.initilize())
+            .then(() => this.sensorService.initSensor())
             .then(() => this.sensorService.initialize()) // temps for test purpose
             .then(() => this._resetAllModules())
             .then(() => this.scheduleService.restartAllSchedules())
