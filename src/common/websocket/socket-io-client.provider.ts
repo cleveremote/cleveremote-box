@@ -12,11 +12,7 @@ export class SocketIoClientProvider {
     private _localSocket: Socket;
     
     public _getSerial(): string {
-        const content = fs.readFileSync('/proc/cpuinfo', 'utf8');
-        const contArray = content.split('\n');
-        const serialLine = contArray[contArray.length - 3];
-        const serial = serialLine.split(':');
-        return serial[1].slice(1); 
+        return fs.readFileSync('/home/clv/udi/unique_device_id', 'utf8');
     }
 
     private _connect(isLocal: boolean): Socket {

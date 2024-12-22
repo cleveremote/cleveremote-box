@@ -23,21 +23,16 @@ export class AuthenticationService {
         //     numbers: true,
         //     symbols: true
         // });
-         console.log('palainPassword/123456789', 'CLV_Box-121715!');
         const password = bcrypt.hashSync(this._config.get('INITIAL_PASSWORD'), salt);
         const login: string = this._getSerial();
         return { id: login, login, password }; 
     }
 
     public _getSerial(): string {
-        const content = fs.readFileSync('/proc/cpuinfo', 'utf8');
-        const contArray = content.split('\n');
-        const serialLine = contArray[contArray.length - 3];
-        const serial = serialLine.split(':');
-        return serial[1].slice(1); 
+        return fs.readFileSync('/home/clv/udi/unique_device_id', 'utf8');
     }
 
-    public async initAuthentication(exec: boolean): Promise<boolean> {
+    public async initAuthentication(): Promise<boolean> {
         const exists = await this.authenticationRepository.get();
         if (!(exists.login || exists.password) ) {
             const model = await this._managePassword();
