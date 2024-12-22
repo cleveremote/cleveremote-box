@@ -32,7 +32,7 @@ export class InitService {
 
         return this.dbService.initialize()
             .then(() => this._loadConfiguration())
-            .then(() => this.authenticationService.initAuthentication(!!process.argv.find(x => x === 'genpass')))
+            .then(() => this.authenticationService.initAuthentication())
             .then(() => this.triggerService.initilize())
             .then(() => this.sensorService.initSensor())
             .then(() => this.sensorService.initialize()) // temps for test purpose

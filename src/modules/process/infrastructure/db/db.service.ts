@@ -59,7 +59,6 @@ export class DbService {
                 await this.DB_SENSOR_VALUE[key].push('/data', []);
             }
             let numberOfElements = await this.DB_SENSOR_VALUE[key].count("/data");
-            console.log(numberOfElements); 
         } catch (error) {
             console.error('The database DB_AUTH could not be loaded');
             await this.executeBackUp('DB_AUTH', 'RESTORE');

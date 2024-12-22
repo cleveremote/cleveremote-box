@@ -145,11 +145,11 @@ export class SensorService {
                         }
                     ]
                 }
-            ]);
+            ]); 
 
             const advDataBuffer = new AdvertisingDataBuilder()
                 .addFlags(['leGeneralDiscoverableMode', 'brEdrNotSupported'])
-                .addLocalName(/*isComplete*/ true, "a037cd1e")
+                .addLocalName(/*isComplete*/ true, fs.readFileSync('/home/clv/udi/unique_device_id', 'utf8'))
                 .add128BitServiceUUIDs(/*isComplete*/ true, ['22222222-3333-4444-5555-666666666666'])
                 .build();
             manager.setAdvertisingData(advDataBuffer);
