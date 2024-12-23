@@ -12,12 +12,14 @@ import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { forEach } from 'mathjs';
 import { HttpService } from '@nestjs/axios';
+import { DbService } from '@process/infrastructure/db/db.service';
 const NodeBleHost = require('ble-host');
 const BleManager = NodeBleHost.BleManager;
 const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
 const HciErrors = NodeBleHost.HciErrors;
 const AttErrors = NodeBleHost.AttErrors;
 const fs = require('fs');
+const network = require("node-network-manager");
 
 const deviceName = 'clv';
 
@@ -36,7 +38,8 @@ export class SensorService {
         private triggerService: TriggerService,
         private wsService: SocketIoClientProxyService,
         private sensorRepository: SensorRepository,
-        private readonly httpService: HttpService
+        private readonly httpService: HttpService,
+        private dbService: DbService
     ) {
 
 
@@ -53,9 +56,9 @@ export class SensorService {
 
         const portList = await SerialPort.list();
         console.log('portList', portList);
-        let ttys = portList.find((x)=> x.path ==="/dev/ttyS0");
-        if(!ttys){
-             ttys = portList.find((x)=> x.path ==="/dev/ttyAMA0"); 
+        let ttys = portList.find((x) => x.path === "/dev/ttyS0");
+        if (!ttys) {
+            ttys = portList.find((x) => x.path === "/dev/ttyAMA0");
         }
         this.serialport = new SerialPort({ path: ttys.path, baudRate: 9600 })
         const parser = new ReadlineParser()
@@ -119,7 +122,7 @@ export class SensorService {
                             uuid: '22222222-3333-4444-5555-666666666668',
                             properties: ['read'],
                             onRead: function (connection, callback) {
-                                callback(AttErrors.SUCCESS, new Date().toString());
+                                callback(AttErrors.SUCCESS, ['test1','test2'].toString());
                             }
                         },
                         {
@@ -145,7 +148,7 @@ export class SensorService {
                         }
                     ]
                 }
-            ]); 
+            ]);
 
             const advDataBuffer = new AdvertisingDataBuilder()
                 .addFlags(['leGeneralDiscoverableMode', 'brEdrNotSupported'])
@@ -200,6 +203,15 @@ export class SensorService {
 
     private buildContenteConfigFile(data: { country: string, ssid: string, psk: string }) {
 
+        // network
+        // .enable()
+        // .then(() => console.log("network has just turned on"))
+        // .then(() => network.wifiConnect("Livebox-7950", "ZH44bKUeautjj4Mtpf"));
+
+        // network
+        //     .getConnectionProfilesList()
+        //     .then((data) => console.log(data))
+        //     .catch((error) => console.log(error));
 
         //fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
 

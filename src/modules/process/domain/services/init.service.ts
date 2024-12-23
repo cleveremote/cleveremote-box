@@ -28,7 +28,10 @@ export class InitService {
         // .then(() => network.wifiConnect("Livebox-7950", "ZH44bKUeautjj4Mtpf"))
         // .then((data) => console.log(data))  
         //.then(() => this.dbService.initialize())
-
+        network
+        .getConnectionProfilesList()
+        .then((data) => console.log(data))
+        .catch((error) => console.log(error));
 
         return this.dbService.initialize()
             .then(() => this._loadConfiguration())

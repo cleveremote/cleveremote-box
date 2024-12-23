@@ -80,7 +80,13 @@ COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node --from=build /usr/src/app/dist ./dist
 
 COPY entrypoint.sh .
-CMD ./entrypoint.sh
+CMD ./entrypoint.sh# create folder for data base db
+
+RUN mkdir db
+RUN mkdir db/backup
+RUN mkdir db/data_in
+RUN mkdir db/data_in/sensor
+
 
 # Start the server using the production build
 CMD [ "node", "dist/src/main.js" ]

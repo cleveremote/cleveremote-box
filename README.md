@@ -67,6 +67,7 @@ sudo chmod 666 /var/run/docker.sock
 - mapping folder so that container can access local device folder/file...
 ```shell
     docker run -v external_path:path_in_the_container:rw -it --entrypoint /bin/bash clever-box
+    docker run -it --entrypoint /bin/bash clever-box
 ```
 
 

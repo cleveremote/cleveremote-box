@@ -54,7 +54,7 @@ export class DbService {
     private async _initialiseDbSensorData(): Promise<void> {
         try {
             const key = `${(new Date()).getMonth()}-${(new Date()).getFullYear()}`
-            this.DB_SENSOR_VALUE[key] = new JsonDB(new Config(`data_in/sensor/${key}`, true, false, '/'));
+            this.DB_SENSOR_VALUE[key] = new JsonDB(new Config(`db/data_in/sensor/${key}`, true, false, '/'));
             if (!await this.DB_SENSOR_VALUE[key].exists('/data')) {
                 await this.DB_SENSOR_VALUE[key].push('/data', []);
             }
