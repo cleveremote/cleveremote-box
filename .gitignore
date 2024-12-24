@@ -3,6 +3,7 @@
 /node_modules
 /aws
 /actions-runner
+/db*
 # Logs
 logs
 *.log

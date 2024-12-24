@@ -54,7 +54,6 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/sensor'])
     public async synchroniseSensor(@Payload() sensorSynchronizeDTO: SensorSynchronizeDTO): Promise<SensorModel> {
-        console.log('sensorSynchronizeDTO', sensorSynchronizeDTO);
         const uc = new SensorSynchronizeUC(this._synchronizeService);
         const input = SensorSynchronizeDTO.mapToSensorModel(sensorSynchronizeDTO);
         return uc.execute(input);

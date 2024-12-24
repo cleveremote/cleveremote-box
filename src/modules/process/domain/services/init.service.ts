@@ -9,6 +9,8 @@ import { AuthenticationService } from './authentication.service';
 const network = require("node-network-manager");
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
+import { BleService } from './ble.service';
+
 @Injectable()
 export class InitService {
     public constructor(
@@ -18,20 +20,15 @@ export class InitService {
         private processService: ProcessService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
-        private sensorService: SensorService
+        private sensorService: SensorService,
+        private bleService: BleService
     ) { }
 
+
     public async initialize(): Promise<void> {
-        // network
-        // .enable()
-        // .then(() => console.log("network has just turned on"))
-        // .then(() => network.wifiConnect("Livebox-7950", "ZH44bKUeautjj4Mtpf"))
-        // .then((data) => console.log(data))  
-        //.then(() => this.dbService.initialize())
-
-
-        return this.dbService.initialize()
+        return this.dbService.initialize() 
             .then(() => this._loadConfiguration())
+            .then(() => this.bleService.initialize())
             .then(() => this.authenticationService.initAuthentication())
             .then(() => this.triggerService.initilize())
             .then(() => this.sensorService.initSensor())

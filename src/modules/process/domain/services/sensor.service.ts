@@ -12,20 +12,7 @@ import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { forEach } from 'mathjs';
 import { HttpService } from '@nestjs/axios';
-const NodeBleHost = require('ble-host');
-const BleManager = NodeBleHost.BleManager;
-const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
-const HciErrors = NodeBleHost.HciErrors;
-const AttErrors = NodeBleHost.AttErrors;
-const fs = require('fs');
-
-const deviceName = 'clv';
-
-var transport = new HciSocket(); // connects to the first hci device on the computer, for example hci0
-
-var options = {
-    // optional properties go here
-};
+import { DbService } from '@process/infrastructure/db/db.service';
 @Injectable()
 export class SensorService {
     //sensors can be added automatically only. device id is serial number on sensor box app.
@@ -36,13 +23,9 @@ export class SensorService {
         private triggerService: TriggerService,
         private wsService: SocketIoClientProxyService,
         private sensorRepository: SensorRepository,
-        private readonly httpService: HttpService
+        private readonly httpService: HttpService,
+        private dbService: DbService
     ) {
-
-
-
-
-
 
         this.getWeather().subscribe((res) => {
             const t = res;
@@ -52,10 +35,9 @@ export class SensorService {
     public async initSensor(): Promise<void> {
 
         const portList = await SerialPort.list();
-        console.log('portList', portList);
-        let ttys = portList.find((x)=> x.path ==="/dev/ttyS0");
-        if(!ttys){
-             ttys = portList.find((x)=> x.path ==="/dev/ttyAMA0"); 
+        let ttys = portList.find((x) => x.path === "/dev/ttyS0");
+        if (!ttys) {
+            ttys = portList.find((x) => x.path === "/dev/ttyAMA0");
         }
         this.serialport = new SerialPort({ path: ttys.path, baudRate: 9600 })
         const parser = new ReadlineParser()
@@ -95,81 +77,7 @@ export class SensorService {
     // }
     // }
     public async initialize(): Promise<void> {
-        BleManager.create(transport, options, (err, manager) => {
-            // err is either null or an Error object
-            // if err is null, manager contains a fully initialized BleManager object
-            if (err) {
-                console.error(err);
-                return;
-            }
-
-            var notificationCharacteristic;
-
-            manager.gattDb.setDeviceName(deviceName);
-            manager.gattDb.addServices([
-                {
-                    uuid: '22222222-3333-4444-5555-666666666666',
-                    characteristics: [
-                        {
-                            uuid: '22222222-3333-4444-5555-666666666667',
-                            properties: ['read', 'write'],
-                            value: 'some default value' // could be a Buffer for a binary value
-                        },
-                        {
-                            uuid: '22222222-3333-4444-5555-666666666668',
-                            properties: ['read'],
-                            onRead: function (connection, callback) {
-                                callback(AttErrors.SUCCESS, new Date().toString());
-                            }
-                        },
-                        {
-                            uuid: '22222222-3333-4444-5555-666666666669',
-                            properties: ['write'],
-                            onWrite: (connection, needsResponse, value, callback) => {
-                                console.log('A new value was written:', value);
-                                this.buildContenteConfigFile(JSON.parse(value.toString()))
-
-                                //fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
-                                callback(AttErrors.SUCCESS); // actually only needs to be called when needsResponse is true
-                            }
-                        },
-                        notificationCharacteristic = {
-                            uuid: '22222222-3333-4444-5555-66666666666A',
-                            properties: ['notify'],
-                            onSubscriptionChange: function (connection, notification, indication, isWrite) {
-                                if (notification) {
-                                    // Notifications are now enabled, so let's send something
-                                    notificationCharacteristic.notify(connection, 'Sample notification');
-                                }
-                            }
-                        }
-                    ]
-                }
-            ]); 
-
-            const advDataBuffer = new AdvertisingDataBuilder()
-                .addFlags(['leGeneralDiscoverableMode', 'brEdrNotSupported'])
-                .addLocalName(/*isComplete*/ true, fs.readFileSync('/home/clv/udi/unique_device_id', 'utf8'))
-                .add128BitServiceUUIDs(/*isComplete*/ true, ['22222222-3333-4444-5555-666666666666'])
-                .build();
-            manager.setAdvertisingData(advDataBuffer);
-            // call manager.setScanResponseData(...) if scan response data is desired too
-            startAdv();
-
-            function startAdv() {
-                manager.startAdvertising({/*options*/ }, connectCallback);
-            }
-
-            function connectCallback(status, conn) {
-                if (status != HciErrors.SUCCESS) {
-                    // Advertising could not be started for some controller-specific reason, try again after 10 seconds
-                    setTimeout(startAdv, 10000);
-                    return;
-                }
-                conn.on('disconnect', startAdv); // restart advertising after disconnect
-                console.log('Connection established!', conn);
-            }
-        });
+      
         return;
     }
 
@@ -196,33 +104,6 @@ export class SensorService {
 
             this.wsService.sendMessage({ pattern: 'box/synchronize/configuration', data: JSON.stringify({ sensor: savedSensor }) }, true).then(() => { });
         }
-    }
-
-    private buildContenteConfigFile(data: { country: string, ssid: string, psk: string }) {
-
-
-        //fs.appendFileSync('/etc/wpa_supplicant/wpa_supplicant.conf', '#data to append');
-
-        // fs.readFile('wpa_nadime.conf', 'utf8', (err, content) => {
-        //     let searchString = 'country=';
-        //     let re = new RegExp('^.*' + searchString + '.*$', 'gm');
-        //     let formatted = content.replace(re, `country=${data.country}`);
-
-        //     fs.writeFile('wpa_nadime.conf', formatted, 'utf8', function (err) {
-        //         if (err) return console.log(err);
-        //     });
-        // });
-
-
-        // const content = fs.readFileSync('wpa_nadime.conf', 'utf8');
-        // let searchString = 'country=';
-        // let re = new RegExp('^.*' + searchString + '.*$', 'gm');
-        // let formatted = content.replace(re, `country=${data.country}`);
-        // fs.writeFileSync('wpa_nadime.conf', formatted, 'utf8');
-        // const cfg = `\n network={\n ssid="${data.ssid}"\n psk="${data.psk}"\n priority="${1}"\n}`;
-        // fs.appendFileSync('wpa_nadime.conf', cfg);
-
-
     }
 
     //function used to emit value when intercepts sensor values. 

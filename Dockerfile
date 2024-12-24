@@ -42,9 +42,6 @@ COPY --chown=node:node . .
 # Run the build command which creates the production bundle
 RUN npm run build
 
-# Set NODE_ENV environment variable
-ENV NODE_ENV production
-
 RUN apk add --update python3 make g++\
    && rm -rf /var/cache/apk/*
 
@@ -64,7 +61,8 @@ FROM node:20 As production
 RUN apt-get update && apt-get install -y \
     bluez \
     dbus \
-    musl-dev
+    musl-dev \
+    network-manager
 
 #( musl-dev link to execute epoll/bindings )    
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1    
@@ -74,13 +72,16 @@ ENV APP_PORT 3000
 ENV SOCKET_SERVER "http://ec2-35-180-231-37.eu-west-3.compute.amazonaws.com:5001"
 ENV SOCKET_SERVER_LOCAL "http://127.0.0.1:5001"
 ENV INITIAL_PASSWORD 'CLV_Box-121715!'
+ENV DB_PATH '/home/clv/db'
 
 # Copy the bundled code from the build stage to the production image
 COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node --from=build /usr/src/app/dist ./dist
 
 COPY entrypoint.sh .
-CMD ./entrypoint.sh
+CMD ./entrypoint.sh# create folder for data base db
+
+
 
 # Start the server using the production build
 CMD [ "node", "dist/src/main.js" ]
