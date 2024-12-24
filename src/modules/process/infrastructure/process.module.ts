@@ -26,6 +26,7 @@ import { AuthenticationRepository } from './repositories/authentication.reposito
 import { AuthenticationController } from './controllers/authentication.controller';
 import { DataRepository } from './repositories/data.repository';
 import { HttpModule } from '@nestjs/axios';
+import { BleService } from '@process/domain/services/ble.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -60,7 +61,8 @@ import { HttpModule } from '@nestjs/axios';
         SynchronizeService,
         ScheduleService,
         TriggerService,
-        SensorService
+        SensorService,
+        BleService
     ],
     exports: [
         ProcessService,

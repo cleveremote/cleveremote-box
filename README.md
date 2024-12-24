@@ -69,7 +69,7 @@ sudo chmod 666 /var/run/docker.sock
     docker run -v external_path:path_in_the_container:rw -it --entrypoint /bin/bash clever-box
     docker run -it --entrypoint /bin/bash clever-box
 ```
-
+ docker run -d -e SOCKET_SERVER="http://ec2-35-180-231-37.eu-west-3.compute.amazonaws.com:5001" -v /home/clv/udi:/home/clv/udi:ro -v /sys/kernel/debug/:/sys/kernel/debug/:rw -v /sys/class/gpio/:/sys/class/gpio/:rw --name clv-box --net=host --privileged -v /var/run/dbus:/var/run/dbus:rw clv-box
 
 ### node
 - **installation**
@@ -121,13 +121,13 @@ git push origin  main --tags
 ## configure permission for networkmanager so that app can manage wifi whith clv user.
 - edit file and  add the content below
 ```shell
-sudo nano /etc/polkit-1/localauthority/90-mandatory.d/99-network.pkla`)
+sudo nano /etc/polkit-1/localauthority/90-mandatory.d/99-network.pkla
 ```
 
 ```shell
 [Allow netdev users to modify all network states and settings]
-Identity=unix-group:clv    
-Action=org.freedesktop.NetworkManager.network-control;org.freedesktop.NetworkManager.enable-disable-wifi;org.freedesktop.NetworkManager.settings.modify.system // Action=org.freedesktop.NetworkManager.* full right
+Identity=unix-group:clv
+Action=org.freedesktop.NetworkManager.network-control;org.freedesktop.NetworkManager.enable-disable-wifi;org.freedesktop.NetworkManager.settings.modify.system;org.freedesktop.NetworkManager.wifi.scan // Action=org.freedesktop.NetworkManager.* full right
 ResultAny=yes
 ResultInactive=yes
 ResultActive=yes
