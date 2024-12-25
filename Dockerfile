@@ -62,7 +62,9 @@ RUN apt-get update && apt-get install -y \
     bluez \
     dbus \
     musl-dev \
-    network-manager
+    network-manager \
+    gpiod \ 
+    libgpiod-dev
 
 #( musl-dev link to execute epoll/bindings )    
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1    
