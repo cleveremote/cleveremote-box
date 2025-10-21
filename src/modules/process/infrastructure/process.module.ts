@@ -27,6 +27,7 @@ import { AuthenticationController } from './controllers/authentication.controlle
 import { DataRepository } from './repositories/data.repository';
 import { HttpModule } from '@nestjs/axios';
 import { BleService } from '@process/domain/services/ble.service';
+import { CtrlPwmService } from '@process/domain/services/pwm-ctrl.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -62,7 +63,8 @@ import { BleService } from '@process/domain/services/ble.service';
         ScheduleService,
         TriggerService,
         SensorService,
-        BleService
+        BleService,
+        CtrlPwmService
     ],
     exports: [
         ProcessService,

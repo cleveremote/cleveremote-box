@@ -28,6 +28,7 @@ import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { DataRepository } from '@process/infrastructure/repositories/data.repository';
+import { CtrlPwmService } from './pwm-ctrl.service';
 
 @Injectable()
 export class ProcessService {
@@ -37,11 +38,12 @@ export class ProcessService {
         private schedulerRegistry: SchedulerRegistry,
         private configurationService: StructureService,
         private wsService: SocketIoClientProxyService,
-        private configurationRepository: StructureRepository,
         private processValueRepository: ProcessValueRepository,
         private cycleRepository: CycleRepository,
         private valueRepository: ValueRepository,
-        private dataRepository: DataRepository
+        private dataRepository: DataRepository,
+        private ctrlPwmService: CtrlPwmService,
+
     ) {
 
     }
@@ -257,7 +259,6 @@ export class ProcessService {
         }
         const modules = process.cycle.getModules();
         const executionLst = process.cycle.getExecutionStructure(process.duration);
-
         let obs: Observable<{ sequenceId: string; portNums: number[]; duration: number }> =
             ProcessService._ofNull<{ sequenceId: string; portNums: number[]; duration: number }>()
                 .pipe(tap(async () => {
@@ -372,8 +373,8 @@ export class ProcessService {
                 Logger.warn(error, 'execution module pornum: ' + dataPin);
             }
         }
-           
-              
+
+
     }
 
     // eslint-disable-next-line complexity
@@ -389,6 +390,7 @@ export class ProcessService {
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         let data = { type, id, status, startedAt, duration, mapSectionId: seqFound?.mapSectionId };
         if (type === ExecutableType.SEQUENCE) {
+            this.ctrlPwmService.sendVoltage(action === ExecutableAction.ON ? seqFound.vfd : 0)
             seqFound.status = status;
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
         } else {

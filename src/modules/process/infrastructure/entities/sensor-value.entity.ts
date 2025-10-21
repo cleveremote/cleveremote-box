@@ -7,7 +7,7 @@ export class SensorValueEntity extends SensorValueModel {
         model.id = entity.id;
         model.type = entity.type;
         model.value = entity.value;
-
+        model.date = entity.date;
         return model;
     }
 
@@ -16,6 +16,7 @@ export class SensorValueEntity extends SensorValueModel {
         entity.id = model.id;
         entity.type = model.type;
         entity.value = model.value;
+        entity.date = model.date;
 
         return entity;
     }
