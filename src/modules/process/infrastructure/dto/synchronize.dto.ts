@@ -25,6 +25,8 @@ export class SequenceSync {
     public mapSectionId: string;
     @IsNumber()
     public maxDuration: number;
+    @IsNumber()
+    public vfd: number;
     @IsArray()
     @Type(() => ModuleSync)
     public modules: ModuleSync[];
@@ -80,7 +82,7 @@ export class CycleSynchronizeDTO {
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
         cycle.mapSectionId = cycleSynchronizeDTO.mapSectionId;
-        
+
         cycle.modePriority = [];
         if (cycleSynchronizeDTO.modePriority) {
             cycleSynchronizeDTO.modePriority?.forEach(priority => { //nya remove optional
@@ -105,6 +107,7 @@ export class CycleSynchronizeDTO {
                 sequence.description = sequenceSync.description;
                 sequence.mapSectionId = sequenceSync.mapSectionId;
                 sequence.maxDuration = sequenceSync.maxDuration;
+                sequence.vfd = sequenceSync.vfd;
                 sequence.modules = [];
                 sequenceSync.modules?.forEach((moduleDto) => {
                     const module = new SynchronizeModuleModel();
@@ -198,7 +201,7 @@ export class CycleSynchronizeDTO {
                 scheduleModel.cron.date = scheduleSync.cron?.date;
                 scheduleModel.cron.pattern = scheduleSync.cron?.pattern;
                 scheduleModel.cron.after = scheduleSync.cron?.after;
-                if (scheduleSync.cron?.sunBehavior) { 
+                if (scheduleSync.cron?.sunBehavior) {
                     scheduleModel.cron.sunBehavior = new SunBehavior();
                     scheduleModel.cron.sunBehavior.sunState = scheduleSync.cron?.sunBehavior?.sunState;
                     scheduleModel.cron.sunBehavior.time = scheduleSync.cron?.sunBehavior?.time;
@@ -390,7 +393,7 @@ export class SensorSynchronizeDTO {
     @Type(() => Style)
     public style?: Style;
     @IsNotEmpty()
-    @ApiProperty() 
+    @ApiProperty()
     public type: SensorType;
 
     public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
@@ -398,7 +401,7 @@ export class SensorSynchronizeDTO {
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.name = sensorSynchronizeDTO.name;
         sensorModel.description = sensorSynchronizeDTO.description;
-        sensorModel.style  = sensorSynchronizeDTO.style;
+        sensorModel.style = sensorSynchronizeDTO.style;
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.type = sensorSynchronizeDTO.type;
         sensorModel.unit = sensorSynchronizeDTO.unit;

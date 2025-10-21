@@ -62,7 +62,11 @@ RUN apt-get update && apt-get install -y \
     bluez \
     dbus \
     musl-dev \
-    network-manager 
+    network-manager \
+    python3 \
+    python3-pip \
+    python3-gpiozero
+    
 
 #( musl-dev link to execute epoll/bindings )    
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1    
@@ -77,11 +81,15 @@ ENV DB_PATH '/home/clv/db'
 # Copy the bundled code from the build stage to the production image
 COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node --from=build /usr/src/app/dist ./dist
+COPY ./ctrl-pwm.py /app/ctrl-pwm.py
 
 COPY entrypoint.sh .
-CMD ./entrypoint.sh# create folder for data base db
+# create folder for data base db
+CMD ./entrypoint.sh
 
 
+CMD node dist/src/main.js & \
+    python3 /app/ctrl-pwm.py
 
-# Start the server using the production build
-CMD [ "node", "dist/src/main.js" ]
+# # Start the server using the production build
+# CMD [ "node", "dist/src/main.js" ]

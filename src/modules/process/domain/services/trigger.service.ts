@@ -68,7 +68,7 @@ export class TriggerService {
         this.onElementValueChanged.subscribe(async (element: SensorValueModel | ProcessValueModel) => {
             if (element) {
                 const triggers = this._getTriggerByElementId(element);
-                await this.dataRepository.save({ id: Math.random().toString(), deviceId: element.id, date: new Date(), type: "SENSOR",value:(element as SensorValueModel ).value.toString() })
+                await this.dataRepository.save({ id: Math.random().toString(), deviceId: element.id, date: new Date(), type: "SENSOR",value:(element as SensorValueModel ).value.toString() }) 
                 for (const trigger of triggers) {
                     this._checkTriggerConditions(trigger, element);
                 }
