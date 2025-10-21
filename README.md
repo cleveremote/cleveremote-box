@@ -85,7 +85,7 @@ export NVM_DIR="$HOME/.nvm"
 nvm install 20
 ```
 ```shell
-nvm alias default 20
+nvm alias default 20 
 ```
 
 ### git
