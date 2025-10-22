@@ -22,7 +22,7 @@ jobs:
       - name: Get latest tag
         id: get_tag
         run: |
-          TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+          TAG=$(git tag --sort=-v:refname | head -n 1 2>/dev/null || echo "v0.0.0")
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Determine bump type from source branch
