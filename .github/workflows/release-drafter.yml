@@ -74,6 +74,7 @@ jobs:
           git config user.email "cleveremote-tech@gmail.com"
           git tag ${{ steps.new_version.outputs.new_version }}
           git push origin ${{ steps.new_version.outputs.new_version }}
+
   update_release_draft:
     # if: github.repository == 'myorg/reponame'  # Uncomment this and set the repo name to ensure releases are not created on forks
     permissions:
