@@ -11,9 +11,9 @@ env:
   AWS_REGION: eu-west-3                        # set this to your preferred AWS region, e.g. us-west-1
   ECR_REPOSITORY: cleveremote/clv-box          # set this to your Amazon ECR repository name
   CONTAINER_NAME: clv-box                      # set this to the name of the container in the
-
-steps:                                              # containerDefinitions section of your task definition
-  jobs:
+                                              # containerDefinitions section of your task definition
+jobs:
+  steps:
     - name: Print release info
       run: |
       echo "Release tag: ${{ github.event.release.tag_name }}"
