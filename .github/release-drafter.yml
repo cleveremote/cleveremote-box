@@ -1,8 +1,10 @@
-# These will be overridden by the publish workflow and set to the new tag
-name-template: 'Release $NEXT_TAG'
-tag-template: '$NEXT_TAG'
+# .github/release-drafter.yml
+# Documentation : https://github.com/release-drafter/release-drafter
 
-# Optionally configure your categories and other templates
+name-template: '$RESOLVED_VERSION'
+tag-template: '$RESOLVED_VERSION'
+
+# ── Catégories de contenu ──────────────────────────────────────────────────
 categories:
   - title: '🚀 Features'
     labels:
@@ -23,6 +25,40 @@ categories:
   - title: '📖 Documentation'
     label: 'documentation'
 
+
+
+
+# ── Labels d'environnement (ignorés du changelog, utilisés par publish.yml) ──
+# Ces labels sont lus par publish.yml pour tagger l'image Docker.
+# Ils n'apparaissent pas dans les catégories ci-dessus intentionnellement.
+# Labels à créer sur le repo : env:dev, env:prd, env:pprd, env:test
+
+exclude-labels:
+  - 'env:dev'
+  - 'env:prd'
+  - 'env:pprd'
+  - 'env:test'
+
+# ── Résolution du bump via les labels ─────────────────────────────────────
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+      - 'breaking-change'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+      - 'chore'
+  default: patch
+
+# ── Template du corps de la release note ──────────────────────────────────
+
 change-template: '- $TITLE @$AUTHOR ([#${NUMBER}]($URL))'
 change-title-escapes: 'false' # Disable all escaping to allow full markdown in titles
 
@@ -30,6 +66,6 @@ template: |
   ## 📝 Changes
 
   $CHANGES
-  
+
   ---
-  🏷 **Version**: `$NEXT_TAG` 
+  **Full Changelog**: $PREVIOUS_TAG...$RESOLVED_VERSION

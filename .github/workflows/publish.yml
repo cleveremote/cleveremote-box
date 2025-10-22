@@ -1,0 +1,153 @@
+name: Release Publisher
+
+on:
+ 
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag Git à publier (ex: v1.2.3)'
+        required: true
+        type: string
+      environments:
+        description: 'Environnements cibles (virgule-séparés : dev,prd,pprd,test)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: read
+
+env:
+  AWS_REGION: eu-west-3
+  ECR_REPOSITORY: cleveremote/clv-box
+  CONTAINER_NAME: clv-box
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 — Résolution du tag et des envs cibles
+  # ─────────────────────────────────────────────
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      env_tags: ${{ steps.resolve.outputs.env_tags }}
+
+    steps:
+      - name: Checkout (pour accéder aux métadonnées du tag)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version & env tags
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Trigger A : tag pushé → on lit le tag depuis la ref
+            VERSION="${GITHUB_REF#refs/tags/}"
+
+            # On lit le tag Git pour retrouver les env labels associés au commit
+            # (stockés dans l'annotation du tag si créés par release-drafter.yml)
+            # Par convention on les récupère depuis la release GitHub via l'API
+            ENV_TAGS=$(gh api repos/${{ github.repository }}/releases/tags/$VERSION \
+              --jq '.body' 2>/dev/null \
+              | grep -oP '(?<=env:)[a-z]+' \
+              | jq -Rsc 'split("\n") | map(select(length>0))' || echo '[]')
+
+            # Fallback : si aucun env trouvé dans le body, on laisse vide
+            echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
+
+          else
+            # Trigger B : workflow_dispatch → inputs explicites
+            VERSION="${{ github.event.inputs.tag }}"
+
+            ENVS="${{ github.event.inputs.environments }}"
+            if [[ -z "$ENVS" ]]; then
+              ENV_TAGS='[]'
+            else
+              ENV_TAGS=$(echo "$ENVS" | tr ',' '\n' | jq -Rsc 'split("\n") | map(select(length>0))')
+            fi
+            echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION"
+          echo "Resolved env tags: $ENV_TAGS"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # JOB 2 — Publish the draft release
+  # Uniquement pour le trigger push tag
+  # ─────────────────────────────────────────────
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: resolve
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: release-drafter/release-drafter@v5
+        with:
+          disable-autolabeler: true
+          name: ${{ needs.resolve.outputs.version }}
+          tag: ${{ needs.resolve.outputs.version }}
+          version: ${{ needs.resolve.outputs.version }}
+          publish: true   # ← publie le DRAFT existant
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # JOB 3 — Build & push image Docker vers ECR
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Build & Push to ECR
+    runs-on: self-hosted
+    environment: production
+    needs: [resolve, publish-release]
+    if: |
+      always() &&
+      needs.resolve.result == 'success' &&
+      (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+
+      - name: Build & tag image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
+          ENV_TAGS: ${{ needs.resolve.outputs.env_tags }}
+        run: |
+          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          # Tag fixe : version sémantique
+          TAGS="-t $IMAGE_BASE:$IMAGE_TAG"
+
+          # Tags d'environnement (multi) depuis le JSON array
+          for ENV in $(echo "$ENV_TAGS" | jq -r '.[]'); do
+            TAGS="$TAGS -t $IMAGE_BASE:$ENV"
+            echo "Adding env tag: $ENV"
+          done
+
+          echo "Building with tags: $TAGS"
+          docker build $TAGS .
+
+      - name: Push all tags to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.resolve.outputs.version }}" >> $GITHUB_OUTPUT
