@@ -18,7 +18,7 @@ export class DbService {
         await this._initialiseDbAuth();
         await this._initialiseDbStructure();
         await this._initialiseDbValues();
-        await this._initialiseDbSensorData();
+        await this._initialiseDbSensorData(); 
 
     }
 

@@ -8,7 +8,7 @@ export class StructureEntity extends StructureModel {
         const struct: StructureModel = new StructureModel();
         struct.cycles = [];
         struct.sensors = [];
-
+        struct.values= [];
         structureEntity.sensors.forEach(sensorData => {
             struct.sensors.push(SensorEntity.mapToModel(sensorData));
         });

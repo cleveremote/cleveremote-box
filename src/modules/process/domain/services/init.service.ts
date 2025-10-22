@@ -6,10 +6,10 @@ import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
 import { DbService } from '@process/infrastructure/db/db.service';
 import { AuthenticationService } from './authentication.service';
-const network = require("node-network-manager");
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
+
 
 @Injectable()
 export class InitService {
@@ -26,7 +26,28 @@ export class InitService {
 
 
     public async initialize(): Promise<void> {
-        return this.dbService.initialize() 
+       
+        // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
+        // let compteurImpulsions = 0;
+        // gpioPin.watch((err, value) => {
+        //     if (err) {
+        //       console.error('Erreur dans la lecture du GPIO', err);
+        //       return;
+        //     }
+          
+        //     if (value === 1) {
+        //       // Lorsqu'une impulsion (flanc montant) est détectée
+        //       compteurImpulsions++;
+        //       console.log(`Impulsion détectée! Total des impulsions: ${compteurImpulsions}`);
+        //     }
+        //   });
+          
+        //   // Affiche le nombre d'impulsions toutes les secondes
+        //   setInterval(() => {
+        //     console.log(`Impulsions totales : ${compteurImpulsions}`); 
+        //   }, 1000);
+          
+        return this.dbService.initialize()
             .then(() => this._loadConfiguration())
             .then(() => this.bleService.initialize())
             .then(() => this.authenticationService.initAuthentication())
@@ -36,7 +57,7 @@ export class InitService {
             .then(() => this._resetAllModules())
             .then(() => this.scheduleService.restartAllSchedules())
             .then(() => this.sendReadySignal())
-            
+     
             .catch((error) => {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
@@ -57,7 +78,7 @@ export class InitService {
         if (Gpio.accessible) {
             if (Gpio.accessible) {
                 const gpio = await getGPIO(21);
-                const led = new Gpio(gpio, 'out','both',{reconfigureDirection:true,activeLow:false});
+                const led = new Gpio(gpio, 'out', 'both', { reconfigureDirection: true, activeLow: false });
                 led.writeSync(1);
                 await new Promise(r => setTimeout(r, 10));
                 led.writeSync(0);
@@ -69,7 +90,7 @@ export class InitService {
         }
     }
 
-    private _testAllModules(): Promise<void> { 
+    private _testAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes...', 'initialization');
         return this.processService.testAllModules()
@@ -78,7 +99,7 @@ export class InitService {
             })
     }
 
-    private _loadConfiguration(): Promise<void> { 
+    private _loadConfiguration(): Promise<void> {
 
         Logger.log('Start loading configuration...', 'initialization');
         return this.configurationService.getStructure()

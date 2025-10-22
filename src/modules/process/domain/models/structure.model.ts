@@ -5,7 +5,7 @@ import { SequenceModel } from './sequence.model';
 export class StructureModel {
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];
-
+    public values: any[] = [];
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];
         this.cycles.forEach((cycle) => {

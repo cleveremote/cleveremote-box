@@ -48,12 +48,12 @@ export class StructureService {
                 triggers = [...new Set([...triggers, ...cycle.triggers])];
             });
 
-            this.sequences = sequences; 
+            this.sequences = sequences;
             this.schedules = schedules;
-            this.triggers = triggers; 
-
+            this.triggers = triggers;
+            this.structure.values = [];
             return this.structure;
-        }); 
+        });
     }
 
     public async getConfigurationWithStatus(): Promise<StructureModel> {
@@ -81,7 +81,17 @@ export class StructureService {
                 }
             }
 
-        }); 
+        });
+
+        for (let index = 0; index < struc.sensors.length; index++) {
+            const element = struc.sensors[index];
+            const t = await this.valueRepository.getLastValue(element.id) 
+            if (t) {
+                struc.values.push(t);
+            }
+
+
+        }
         return struc;
     }
 

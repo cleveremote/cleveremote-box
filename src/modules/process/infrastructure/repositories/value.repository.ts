@@ -98,7 +98,11 @@ export class ValueRepository {
         const indexStartDate = resultArray.findIndex(x => x.date.getTime() >= startDate.getTime());
         const indexEndtDate = resultArray.findIndex(x => x.date.getTime() >= endDate.getTime());
 
-        return resultArray.slice(indexStartDate === -1 ? 0 : indexStartDate, indexEndtDate === -1 ? resultArray.length:indexEndtDate);
+        return resultArray.slice(indexStartDate === -1 ? 0 : indexStartDate, indexEndtDate === -1 ? resultArray.length : indexEndtDate);
+    }
+
+    public getLastValue(deviceId: string): Promise<DataModel> {
+        return this.dataRepository.getLast(deviceId);
     }
 
     public async getDeviceValue(deviceId: string): Promise<SensorValueModel | ProcessValueModel> {

@@ -10,9 +10,10 @@ export class SequenceModel {
     public name: string;
     public description: string;
     public mapSectionId: string;
-    public progression: { startedAt: Date; duration: number};
+    public progression: { startedAt: Date; duration: number };
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public maxDuration: number;
+    public vfd: number
     public conditions: ConditionModel[];
     public modules: ModuleModel[] = [];
 
