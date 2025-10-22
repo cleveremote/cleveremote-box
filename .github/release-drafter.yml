@@ -1,6 +1,6 @@
 # These will be overridden by the publish workflow and set to the new tag
-name-template: 'Next Release'
-tag-template: 'next'
+name-template: 'Release 'v$PREVIOUS_TAG''
+tag-template: ''v$PREVIOUS_TAG''
 
 # Optionally configure your categories and other templates
 categories:
@@ -13,13 +13,23 @@ categories:
       - 'fix'
       - 'bugfix'
       - 'bug'
+  - title: '💥 Breaking Changes'
+    labels:
+      - 'breaking'
+  - title: '🧰 Maintenance'
+    labels:
+      - 'chore'
+      - 'refactor'
   - title: '📖 Documentation'
     label: 'documentation'
 
-change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
-change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+change-template: '- $TITLE @$AUTHOR ([#${NUMBER}]($URL))'
+change-title-escapes: false # Disable all escaping to allow full markdown in titles
 
 template: |
-  ## Changes
+  ## 📝 Changes
 
-  $CHANGES 
+  $CHANGES
+  
+  ---
+  🏷 **Version**: `$RESOLVED_VERSION` 
