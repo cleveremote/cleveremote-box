@@ -1,16 +1,18 @@
 name: Release Drafter
 
 on:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
+    types:
+      - closed 
 
 permissions:
   contents: write
 
 jobs:
   update_release_draft:
+    # if: github.repository == 'myorg/reponame'  # Uncomment this and set the repo name to ensure releases are not created on forks
     permissions:
+      # Write permission is required to create a GitHub release
       contents: write
       pull-requests: read
     runs-on: ubuntu-latest
