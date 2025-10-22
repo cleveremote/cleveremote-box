@@ -72,5 +72,5 @@ jobs:
         run: |
           git config user.name "Nadime"
           git config user.email "cleveremote-tech@gmail.com"
-          git tag v${{ steps.new_version.outputs.new_version }}
-          git push origin v${{ steps.new_version.outputs.new_version }}
+          git tag ${{ steps.new_version.outputs.new_version }}
+          git push origin ${{ steps.new_version.outputs.new_version }}
