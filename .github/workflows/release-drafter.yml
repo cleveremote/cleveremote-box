@@ -1,9 +1,9 @@
 name: Release Drafter
 
 on:
-  pull_request:
-    types:
-      - closed 
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
