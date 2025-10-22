@@ -1,5 +1,5 @@
 # These will be overridden by the publish workflow and set to the new tag
-name-template: 'Release 'v$PREVIOUS_TAG'
+name-template: "Release v$PREVIOUS_TAG"
 tag-template: 'v$PREVIOUS_TAG'
 
 # Optionally configure your categories and other templates
