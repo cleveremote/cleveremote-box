@@ -23,7 +23,7 @@ categories:
   - title: '📖 Documentation'
     label: 'documentation'
 
-change-template: '- $TITLE @$AUTHOR ([#${NUMBER}]($URL))'
+change-template: '- $TITLE @$AUTHOR ([#$NUMBER]($URL))'
 change-title-escapes: 'false' # Disable all escaping to allow full markdown in titles
 
 template: |
