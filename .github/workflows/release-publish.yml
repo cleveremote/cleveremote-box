@@ -16,7 +16,7 @@ jobs:
   test123:
     runs-on: ubuntu-latest
     steps:
-      - name: Print release info
+      - name: Print release info 123
         run: |
           echo "Release tag: ${{ github.event.release.tag_name }}"
           echo "Release name: ${{ github.event.release.name }}"
