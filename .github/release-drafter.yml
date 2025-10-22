@@ -1,6 +1,6 @@
 # These will be overridden by the publish workflow and set to the new tag
-name-template: "Release v$PREVIOUS_TAG"
-tag-template: 'v$PREVIOUS_TAG'
+name-template: 'Release $NEXT_TAG'
+tag-template: '$NEXT_TAG'
 
 # Optionally configure your categories and other templates
 categories:
@@ -32,4 +32,4 @@ template: |
   $CHANGES
   
   ---
-  🏷 **Version**: `$RESOLVED_VERSION` 
+  🏷 **Version**: `$NEXT_TAG` 
