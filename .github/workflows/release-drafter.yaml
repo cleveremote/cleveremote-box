@@ -87,7 +87,9 @@ jobs:
     steps:
       - name: Set version env
         # Use a little bit of bash to extract the tag name from the GitHub ref
-        run: echo "RELEASE_VERSION=$(git tag --sort=-v:refname | head -n 1)" >> $GITHUB_ENV
+        run: | 
+          echo "RELEASE_VERSION=$(git tag --sort=-v:refname | head -n 1)" >> $GITHUB_ENV
+          echo "Release tag: $(git tag --sort=-v:refname | head -n 1)"
       - uses: release-drafter/release-drafter@v5
         with:
           disable-autolabeler: true
