@@ -86,6 +86,7 @@ jobs:
     needs: bump-version 
     steps:
       - name: Set version env
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Nécessaire pour récupérer les tags
         # Use a little bit of bash to extract the tag name from the GitHub ref
