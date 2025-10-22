@@ -85,10 +85,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: bump-version 
     steps:
-      - name: Set version env
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Nécessaire pour récupérer les tags
+      - name: Set version env
         # Use a little bit of bash to extract the tag name from the GitHub ref
         run: | 
           echo "RELEASE_VERSION=$(git tag --sort=-v:refname | head -n 1)" >> $GITHUB_ENV
