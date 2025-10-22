@@ -14,6 +14,7 @@ env:
                                               # containerDefinitions section of your task definition
 jobs:
   test123:
+  runs-on: ubuntu-latest
     steps:
       - name: Print release info
         run: |
