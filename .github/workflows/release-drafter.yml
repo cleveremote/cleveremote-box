@@ -1,84 +1,17 @@
 name: Release Drafter
 
 on:
-  pull_request:
-    types:
-      - closed 
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
-  bump-version:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Nécessaire pour récupérer les tags
-
-      - name: Get latest tag
-        id: get_tag
-        run: |
-          TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Determine bump type from source branch
-        id: get_bump
-        run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          echo "Merged branch: $BRANCH_NAME"
-
-          if [[ "$BRANCH_NAME" == fix/* ]]; then
-            echo "type=patch" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH_NAME" == feature/* ]]; then
-            echo "type=minor" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH_NAME" == new/* || "$BRANCH_NAME" == breaking/* ]]; then
-            echo "type=major" >> $GITHUB_OUTPUT
-          else
-            echo "type=patch" >> $GITHUB_OUTPUT  # par défaut
-          fi
-
-      - name: Calculate new version
-        id: new_version
-        run: |
-          OLD_VERSION="${{ steps.get_tag.outputs.tag }}"
-          VERSION=${OLD_VERSION#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-          TYPE="${{ steps.get_bump.outputs.type }}"
-
-          case "$TYPE" in
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-          esac
-
-          NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Git tag
-        run: |
-          git config user.name "Nadime"
-          git config user.email "cleveremote-tech@gmail.com"
-          git tag ${{ steps.new_version.outputs.new_version }}
-          git push origin ${{ steps.new_version.outputs.new_version }}
-
   update_release_draft:
     # if: github.repository == 'myorg/reponame'  # Uncomment this and set the repo name to ensure releases are not created on forks
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
-    permissions:
+   permissions:
       # Write permission is required to create a GitHub release
       contents: write
       pull-requests: read
