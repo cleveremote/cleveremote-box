@@ -26,7 +26,7 @@ sudo apt install awscli
 ```
 
 - **configuration**
-  - prepare your credentials as (admin) AWS, downloaded previously 
+  - prepare your credentials as (admin) AWS, downloaded previously   
  ```shell
 aws configure
 ```
