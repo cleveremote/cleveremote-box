@@ -101,7 +101,5 @@ jobs:
           name: ${{ env.RELEASE_VERSION }}
           tag: ${{ env.RELEASE_VERSION }}
           version: ${{ env.RELEASE_VERSION }}
-          # Publish the Release
-          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
