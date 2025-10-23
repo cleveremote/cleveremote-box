@@ -12,7 +12,7 @@ WORKDIR /usr/src/app
 # Copying this first prevents re-running npm install on every code change.
 COPY --chown=node:node package*.json ./
 
-RUN apk add --update python3 make g++\
+RUN apk add --update python3 make g++ linux-headers\
    && rm -rf /var/cache/apk/*
 
 # Install app dependencies using the `npm ci` command instead of `npm install`
@@ -42,7 +42,7 @@ COPY --chown=node:node . .
 # Run the build command which creates the production bundle
 RUN npm run build
 
-RUN apk add --update python3 make g++\
+RUN apk add --update python3 make g++ linux-headers\
    && rm -rf /var/cache/apk/*
 
 # Running `npm ci` removes the existing node_modules directory and passing in --only=production ensures that only the production dependencies are installed. This ensures that the node_modules directory is as optimized as possible
