@@ -1,0 +1,41 @@
+name: Auto label PR based on branch name
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR branch name
+        id: vars
+        run: echo "branch_name=${{ github.head_ref }}" >> $GITHUB_ENV
+
+      - name: Determine label
+        id: label
+        run: |
+          if [[ "${{ env.branch_name }}" == feature/* ]]; then
+            echo "label=feature" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.branch_name }}" == enhancement/* ]]; then
+            echo "label=enhancement" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.branch_name }}" == fix/* ]]; then
+            echo "label=fix" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.branch_name }}" == bugfix/* ]]; then
+            echo "label=bugfix" >> $GITHUB_OUTPUT 
+          elif [[ "${{ env.branch_name }}" == refactor/* ]]; then
+            echo "label=refactor" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.branch_name }}" == bugfix/* ]]; then
+            echo "label=bugfix" >> $GITHUB_OUTPUT                     
+          elif [[ "${{ env.branch_name }}" == documentation/* ]]; then
+            echo "label=documentation" >> $GITHUB_OUTPUT
+          else
+            echo "label=other" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add label to PR
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: ${{ steps.label.outputs.label }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
