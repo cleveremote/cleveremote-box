@@ -69,6 +69,12 @@ export class ConfigurationController {
         });
     }
 
+    @MessagePattern(['box/fetch/plan'])
+    public async getPlan(): Promise<string> {
+       const result = `svg`
+       return result;
+    }
+
     @MessagePattern(['box/fetch/status'])
     public async getStatus(@Payload() data: any): Promise<string> {
         const uc = new ValuesFetchUC(this._configurationService);

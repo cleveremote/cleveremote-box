@@ -150,7 +150,7 @@ export class BleService {
 
         // Add all records from the usage list
         alreadyConfiguredWifiNetworks.forEach(item => {
-            mergedMap.set(item.name, { ...item, isConfigured: false }); // Default `isConfigured` to false
+            mergedMap.set(item.name, { ...item, isConfigured: true }); // Default `isConfigured` to false
         });
 
         // Merge records from the configured list
