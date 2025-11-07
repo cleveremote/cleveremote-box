@@ -7,7 +7,7 @@ import { SocketIoClientStrategy } from './common/websocket/socket-io-client.stra
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create(AppModule,{ cors: true });
     const appConfig = app.get<ConfigService>(ConfigService);
     const socketIoClientProvider = app.get<SocketIoClientProvider>(
         SocketIoClientProvider
@@ -25,6 +25,10 @@ async function bootstrap(): Promise<void> {
     });
 
     await app.startAllMicroservices();
+
+    
+    app.enableCors();
+    console.log('🚀 Server listening on port 3000');
     await app.listen(appConfig.get('APP_PORT'));
 }
 bootstrap();

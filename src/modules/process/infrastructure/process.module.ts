@@ -28,6 +28,7 @@ import { DataRepository } from './repositories/data.repository';
 import { HttpModule } from '@nestjs/axios';
 import { BleService } from '@process/domain/services/ble.service';
 import { CtrlPwmService } from '@process/domain/services/pwm-ctrl.service';
+import { PingController } from './controllers/ping.controller';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -37,7 +38,8 @@ import { CtrlPwmService } from '@process/domain/services/pwm-ctrl.service';
     controllers: [
         ConfigurationController,
         ExecutionController,
-        AuthenticationController
+        AuthenticationController,
+        PingController
     ],
     providers: [
         DbService,
