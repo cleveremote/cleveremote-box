@@ -75,7 +75,7 @@ export class InitService {
     private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes 1 ...', 'initialization');
-        return this.processService.resetAllModules() 
+        return this.processService.resetAllModules()  
             .then(() => {
                 Logger.log('processes initialized', 'initialization');
 
