@@ -9,6 +9,7 @@ import { AuthenticationService } from './authentication.service';
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
+import { ModbusTaskService } from './modbus-task.service';
 
 
 @Injectable()
@@ -21,12 +22,13 @@ export class InitService {
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private bleService: BleService
+        private bleService: BleService,
+        private modBusService:ModbusTaskService
     ) { }
 
 
     public async initialize(): Promise<void> {
-       
+        
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
@@ -56,8 +58,12 @@ export class InitService {
             .then(() => this.sensorService.initialize()) // temps for test purpose
             .then(() => this._resetAllModules())
             .then(() => this.scheduleService.restartAllSchedules())
+            .then(() => this.sensorService.restartAllScheduledSensors())
             .then(() => this.sendReadySignal())
-     
+            // .then(()=> {
+            //     this.modBusService.execute("task-003");
+            // })
+      
             .catch((error) => {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
@@ -66,7 +72,7 @@ export class InitService {
     private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes 1 ...', 'initialization');
-        return this.processService.resetAllModules()
+        return this.processService.resetAllModules() 
             .then(() => {
                 Logger.log('processes initialized', 'initialization');
 

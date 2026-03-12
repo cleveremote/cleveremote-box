@@ -13,7 +13,8 @@ export class SequenceModel {
     public progression: { startedAt: Date; duration: number };
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public maxDuration: number;
-    public vfd: number
+    public vfd: number;
+    public taskId: string;
     public conditions: ConditionModel[];
     public modules: ModuleModel[] = [];
 

@@ -39,10 +39,11 @@ export class ScheduleService {
             const sunBehavior = schedule.cron.sunBehavior;
             const executionDate = sunBehavior ? (sunBehavior.sunState === SunState.SUNRISE ? getSunset(coord.lat, coord.long, new Date()) : getSunrise(coord.lat, coord.long, new Date())).getTime() + sunBehavior.time : null;
 
-            if (executionDate) {
+            if (executionDate) { 
                 job = new CronJob(new Date(executionDate), methode);
-            } else {
-                job = new CronJob(schedule.cron.pattern, methode);
+            } else {  
+                const now = new Date();
+                job = new CronJob(schedule.cron.pattern || new Date(now.getTime() + 10000), methode);
             }
 
             this.schedulerRegistry.addCronJob(schedule.id, job);
@@ -52,7 +53,7 @@ export class ScheduleService {
                 job.start();
             }
         } catch (e) {
-
+console.log("test"); 
         }
 
         return schedule;
@@ -81,7 +82,7 @@ export class ScheduleService {
             const index = this.configurationService.schedules.findIndex(x => x.id === schedule.id);
             this.configurationService.schedules.splice(index, 1);
             await this.deleteCronJob(schedule.id);
-            return schedule;
+            return schedule; 
         }
 
         this.configurationService.schedules.push(schedule);
@@ -139,6 +140,7 @@ export class ScheduleService {
     }
 
     public async clearAllSchedules(): Promise<void> {
+        // supprimer les job qui on terminer et quin e s'executeront plus par ecxample execution ponctuel a une date donnée
         const jobs = this.schedulerRegistry.getCronJobs();
         for await (const job of jobs.entries()) {
             const key = job[0],

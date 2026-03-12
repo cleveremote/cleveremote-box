@@ -70,19 +70,19 @@ export class TriggerService {
                 const triggers = this._getTriggerByElementId(element);
                 await this.dataRepository.save({ id: Math.random().toString(), deviceId: element.id, date: new Date(), type: "SENSOR",value:(element as SensorValueModel ).value.toString() }) 
                 for (const trigger of triggers) {
-                    this._checkTriggerConditions(trigger, element);
+                    this._checkTriggerConditions(trigger, element); 
                 }
             }
         })
     }
-
+   
     private _enqueueCheckTrigger(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): boolean {
-        if (trigger.isCheckInProgress) {
+        if (!!trigger.isCheckInProgress) {
             if (!this.triggerCheckQueue.find(x => x.trigger.id === trigger.id)) {
-                this.triggerCheckQueue.push({ trigger, data });
+                this.triggerCheckQueue.push({ trigger, data }); 
             }
-        }
-        return trigger.isCheckInProgress;
+        } 
+        return !!trigger.isCheckInProgress;
     }
 
     private async _saveIncommingValue(data: SensorValueModel | ProcessValueModel): Promise<void> {
@@ -118,12 +118,13 @@ export class TriggerService {
             const extractedVal = await this.valueRepository.getDeviceValue(condition.deviceId);
             const value = (extractedVal as SensorValueModel).value || (extractedVal as ProcessValueModel).status;
             if (!value) { return false; }
-            return parser.evaluate(`(${value} ${condition.operator} ${condition.value})`);
+            return parser.evaluate(`(${value} ${condition.operator} ${Number(condition.value)})`);
         });
 
         if (isVerified) {
-            await this.triggerRepository.save({ ...trigger, lastTriggeredAt: currentDate });
-            this._planifyExecution(trigger, data);
+            const trg = await this.triggerRepository.save({ ...trigger, lastTriggeredAt: currentDate })
+            this.triggers[this.triggers.findIndex(x=>x.id === trigger.id)] =  trg;
+            await this._planifyExecution(trg, data); 
             return;
         }
 
@@ -132,6 +133,7 @@ export class TriggerService {
     }
 
     private _getTriggerByElementId(element: SensorValueModel | ProcessValueModel): TriggerModel[] {
+         this.structureRepository.get();
         return this.triggers.filter(x => !!x.conditions.find(y => y.deviceId === element.id));
     }
 
@@ -140,7 +142,7 @@ export class TriggerService {
             const index = this.triggerCheckQueue.findIndex(x => x.trigger.id === value.trigger.id);
             this.triggerCheckQueue.splice(index, 1)
             if (value?.trigger && value?.data) {
-                this._checkTriggerConditions(value.trigger, value.data);
+                this._checkTriggerConditions(value.trigger, value.data); 
             }
         })
     }
@@ -164,7 +166,7 @@ export class TriggerService {
             await this.processService.execute({ ...process });
             trigger.isCheckInProgress = false;
             this.checkTriggerQueueProcess.next({ trigger, data })
-        };
+        }; 
 
         this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, ProcessType.FORCE, methode);
     }

@@ -18,18 +18,27 @@ import { TriggerRepository } from '@process/infrastructure/repositories/trigger.
 import { TriggerEntity } from '@process/infrastructure/entities/trigger.entity';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
+import { ModbusConnectionConfigModel } from '../models/modbusConnectionConfig.model';
+import { ModbusConnectionRepository } from '@process/infrastructure/repositories/modbusConnection.repository';
+import { ModbusTaskRepository } from '@process/infrastructure/repositories/modbusTask.repository';
+import { ModbusTaskConfigModel } from '../models/modbusTaskConfig.model';
+import { SensorType } from '../interfaces/sensor.interface';
+import { SensorService } from './sensor.service';
 
 @Injectable()
 export class SynchronizeService {
     public constructor(
         private structureRepository: StructureRepository,
+        private modbusConnectionRepository: ModbusConnectionRepository,
+        private modbusTaskRepository: ModbusTaskRepository,
         private cycleRepository: CycleRepository,
         private triggerRepository: TriggerRepository,
         private scheduleRepository: ScheduleRepository,
         private sensorRepository: SensorRepository,
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
-        private triggerService: TriggerService
+        private triggerService: TriggerService,
+        private sensorService: SensorService
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -53,9 +62,22 @@ export class SynchronizeService {
 
     public async synchronizeCycle(cycleModel: CycleModel): Promise<CycleModel> {
         const cycle = await this.cycleRepository.save(cycleModel);
-        await this.configurationService.getStructure(); 
+        await this.configurationService.getStructure();
         return cycle;
     }
+
+    public async synchronizeModbusConnection(modbusConnectionModel: ModbusConnectionConfigModel): Promise<ModbusConnectionConfigModel> {
+        const modbusConnection = await this.modbusConnectionRepository.save(modbusConnectionModel);
+        await this.configurationService.getStructure();
+        return modbusConnection;
+    }
+
+    public async synchronizeModbusTask(modbusConnectionModel: ModbusTaskConfigModel): Promise<ModbusTaskConfigModel> {
+        const modbusConnection = await this.modbusTaskRepository.save(modbusConnectionModel);
+        await this.configurationService.getStructure();
+        return modbusConnection;
+    }
+
 
     public async synchronizeTrigger(trigerModel: TriggerModel): Promise<TriggerModel> {
         const trigger = await this.triggerRepository.save(trigerModel);
@@ -68,15 +90,21 @@ export class SynchronizeService {
     }
 
     public async sychronizeSensor(sensorData: SensorModel): Promise<SensorModel> {
-        return await this.sensorRepository.save(sensorData);
+
+        const sensor = await this.sensorRepository.save(sensorData);
+        if (sensorData.type !== SensorType.SCHEDULED) {
+            return sensor;
+        } else {
+            return this.sensorService.initScheduledSensor(sensor || sensorData, !!this.sensorRepository.shouldDelete(sensor.id));
+        }
     }
 
     private _testNotification() {
         const serviceAccount =
             require('src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount)
-            });
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
     }
 
     // sendNotification() {

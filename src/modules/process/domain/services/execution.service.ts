@@ -12,10 +12,10 @@ import {
     ProcessMode,
     ProcessType
 } from '../interfaces/executable.interface';
-import { ModuleModel } from '../models/module.model';
+import { ModuleModel } from '../models/module.model'; 
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
-import { SchedulerRegistry } from '@nestjs/schedule';
+import { SchedulerRegistry } from '@nestjs/schedule'; 
 import { ScheduleModel } from '../models/schedule.model';
 import { CycleModel } from '../models/cycle.model';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
@@ -29,6 +29,7 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { DataRepository } from '@process/infrastructure/repositories/data.repository';
 import { CtrlPwmService } from './pwm-ctrl.service';
+import { ModbusTaskService } from './modbus-task.service';
 
 @Injectable()
 export class ProcessService {
@@ -42,7 +43,7 @@ export class ProcessService {
         private cycleRepository: CycleRepository,
         private valueRepository: ValueRepository,
         private dataRepository: DataRepository,
-        private ctrlPwmService: CtrlPwmService,
+        private modBusService: ModbusTaskService
 
     ) {
 
@@ -76,8 +77,8 @@ export class ProcessService {
         const cycles = await this.cycleRepository.get();
         for (const key in cycles) {
             if (Object.prototype.hasOwnProperty.call(cycles, key)) {
-                const cycleModel = CycleEntity.mapToModel(cycles[key]);
-                await this._initialReset(cycleModel);
+                const cycleModel = CycleEntity.mapToModel(cycles[key]); 
+                await this._initialReset(cycleModel); 
             }
         }
     }
@@ -390,11 +391,16 @@ export class ProcessService {
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         let data = { type, id, status, startedAt, duration, mapSectionId: seqFound?.mapSectionId };
         if (type === ExecutableType.SEQUENCE) {
-            this.ctrlPwmService.sendVoltage(action === ExecutableAction.ON ? seqFound.vfd : 0)
-            seqFound.status = status;
+            //zzz vfd execute task
+            ///this.ctrlPwmService.sendVoltage(action === ExecutableAction.ON ? seqFound.vfd : 0)
+            if (action === ExecutableAction.ON) {
+                 this.percentToFrequencyRegister(seqFound.taskId, seqFound.vfd)
+            }
+
+            seqFound.status = status; 
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
-        } else {
-            cycFound.status = status;
+        } else { 
+            cycFound.status = status; 
             let cycleDuration = 0;
             cycFound.sequences.forEach((x) => cycleDuration = cycleDuration + Number(x.maxDuration))
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
@@ -416,6 +422,22 @@ export class ProcessService {
             this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false).then(() => { });
             return 'sent';
         });
+    }
+    private percentToFrequencyRegister(taskId, percent) {
+        const MAX_HZ = 50;
+        const SCALE = 100; // 0.01 Hz
+
+        // sécurité
+        if (percent < 0) percent = 0;
+        if (percent > 100) percent = 100;
+
+        // calcul fréquence
+        const frequencyHz = (percent / 100) * MAX_HZ;
+
+        // valeur registre Modbus
+        const registerValue = Math.round(frequencyHz * SCALE);
+        this.modBusService.execute(taskId, { value: registerValue });
+
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {

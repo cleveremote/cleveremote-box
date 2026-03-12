@@ -41,15 +41,16 @@ export class CycleModel implements IExecutable {
         this.status = ExecutableStatus.STOPPED;
     }
 
-    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number, vfd: number }[] {
-        const executionLst: { sequenceId: string; portNums: number[]; duration: number, vfd: number }[] = [];
+    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string  }[] {
+        const executionLst: { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string }[] = [];
         const sequences: SequenceModel[] = this.sequences;
         sequences.forEach((sequence) => {
             const sequenceId = sequence.id;
             const portNums = sequence.modules.map((x) => x.portNum);
             const duration = overrideDuration || sequence.maxDuration;
-            const vfd = sequence.vfd
-            executionLst.push({ sequenceId, portNums, duration, vfd });
+            const vfd = sequence.vfd;
+            const taskId = sequence.taskId;
+            executionLst.push({ sequenceId, portNums, duration, vfd, taskId });
         });
         return executionLst;
     }

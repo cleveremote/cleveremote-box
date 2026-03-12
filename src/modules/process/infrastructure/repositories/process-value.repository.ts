@@ -48,7 +48,7 @@ export class ProcessValueRepository implements IRepository<ProcessValueEntity> {
     }
 
     public async update(entity: ProcessValueEntity): Promise<ProcessValueEntity> {
-        const index = await this.dbService.DB_VALUES.getIndex('/processes', entity.id);
+        const index = await this.dbService.DB_VALUES.getIndex('/processes', entity.id); 
         if (index !== -1) {
             await this.dbService.DB_VALUES.push(`/processes[${index}]`, entity);
             return await this.dbService.DB_VALUES.getObject<ProcessValueEntity>(`/processes[${index}]`);

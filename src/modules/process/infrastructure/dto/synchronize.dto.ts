@@ -6,13 +6,15 @@ import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
+import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
+import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDate, IsDefined, IsEnum, IsNotEmpty, IsNumber, IsString, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { IsArray, IsBoolean, IsDate, IsDefined, IsEnum, IsNotEmpty, IsNumber, IsString, Validate, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 export class SequenceSync {
     @IsString()
     @IsNotEmpty()
@@ -27,6 +29,8 @@ export class SequenceSync {
     public maxDuration: number;
     @IsNumber()
     public vfd: number;
+    @IsString()
+    public taskId: string;
     @IsArray()
     @Type(() => ModuleSync)
     public modules: ModuleSync[];
@@ -108,6 +112,7 @@ export class CycleSynchronizeDTO {
                 sequence.mapSectionId = sequenceSync.mapSectionId;
                 sequence.maxDuration = sequenceSync.maxDuration;
                 sequence.vfd = sequenceSync.vfd;
+                sequence.taskId = sequenceSync.taskId;
                 sequence.modules = [];
                 sequenceSync.modules?.forEach((moduleDto) => {
                     const module = new SynchronizeModuleModel();
@@ -395,11 +400,49 @@ export class SensorSynchronizeDTO {
     @IsNotEmpty()
     @ApiProperty()
     public type: SensorType;
+    @IsString()
+    public taskId: string;
+    @IsString()
+    public cronPattern: string;
+    
 
     public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
         const sensorModel = new SensorModel();
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.name = sensorSynchronizeDTO.name;
+        sensorModel.taskId = sensorSynchronizeDTO.taskId;
+        sensorModel.cronPattern = sensorSynchronizeDTO.cronPattern;
+        sensorModel.description = sensorSynchronizeDTO.description;
+        sensorModel.style = sensorSynchronizeDTO.style;
+        sensorModel.id = sensorSynchronizeDTO.id;
+        sensorModel.type = sensorSynchronizeDTO.type;
+        sensorModel.unit = sensorSynchronizeDTO.unit;
+        return sensorModel;
+    }
+}
+
+
+export class SynchronizeDTO {
+    @IsNotEmpty()
+    public id: string;
+    @IsString()
+    public name: string;
+    @IsString()
+    public unit: string;
+    @IsString()
+    public description: string;
+    @Type(() => Style)
+    public style?: Style;
+    @IsNotEmpty()
+    @ApiProperty()
+    public type: SensorType;
+
+    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
+        const sensorModel = new SensorModel();
+        sensorModel.id = sensorSynchronizeDTO.id;
+        sensorModel.name = sensorSynchronizeDTO.name;
+        sensorModel.taskId = sensorSynchronizeDTO.taskId;
+        sensorModel.cronPattern = sensorSynchronizeDTO.cronPattern;
         sensorModel.description = sensorSynchronizeDTO.description;
         sensorModel.style = sensorSynchronizeDTO.style;
         sensorModel.id = sensorSynchronizeDTO.id;
@@ -435,3 +478,128 @@ export class StructureSynchronizeDTO {
         return structureModel;
     }
 }
+
+
+
+export class ModbusConnectionConfigDTO {
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Identifiant unique de la connexion" })
+  public id: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Adresse IP de l'équipement" })
+  public ipAddress: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Protocole utilisé (0=RTU, 1=TCP, etc.)" })
+  public protocol: string;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Port TCP Modbus (502 par défaut)" })
+  public port: number;
+
+  @IsString()
+  @ApiProperty({ description: "si rtu chemin" })
+  public path: string;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+  public slaveId: number;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+  public timeout: number;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "baudrate" })
+  public baudrate: number;
+
+  // --- Méthode de mapping vers le modèle principal ---
+  public static mapToModbusConnectionConfigModel(dto: ModbusConnectionConfigDTO): ModbusConnectionConfigModel {
+    const model = new ModbusConnectionConfigModel();
+    model.id = dto.id;
+    model.ipAddress = dto.ipAddress;
+    model.protocol = dto.protocol;
+    model.port = dto.port;
+    model.slaveId = dto.slaveId;
+    model.timeout = dto.timeout;
+    model.path = dto.path;
+    model.baudrate = dto.baudrate;
+    return model;
+  }
+}
+
+export class ModbusTaskParams {
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
+  public length: number;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
+  public scale: number;
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
+  public unit: string;
+}
+
+export class ModbusTaskConfigDTO {
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Identifiant unique de la tâche" })
+  public id: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Identifiant de la connexion associée" })
+  public connectionId: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Identifiant de la connexion associée" })
+  public function: string;
+
+
+  @IsNotEmpty()
+  @IsString()
+  @ApiProperty({ description: "Nom lisible ou étiquette de la tâche" })
+  public label: string;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
+  public address: number;
+
+  @IsNotEmpty()
+  @ValidateNested()
+  @Type(() => ModbusTaskParams)
+  @ApiProperty({ description: "Paramètres de la tâche (longueur, échelle, unité)" })
+  public params: ModbusTaskParams;
+
+  // --- Méthode de mapping vers le modèle principal ---
+  public static mapToModbusTaskConfigModel(dto: ModbusTaskConfigDTO): ModbusTaskConfigModel {
+    const model = new ModbusTaskConfigModel();
+    model.id = dto.id;
+    model.connectionId = dto.connectionId;
+    model.function = dto.function;
+    model.label = dto.label;
+    model.address = dto.address;
+    model.params = {
+      length: dto.params.length,
+      scale: dto.params.scale,
+      unit: dto.params.unit
+    };
+    return model;
+  }
+}
+

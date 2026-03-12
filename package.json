@@ -50,6 +50,7 @@
     "lodash.debounce": "^4.0.8",
     "mathjs": "^12.4.1",
     "mcp3008.js": "^0.4.1",
+    "modbus-serial": "^8.0.23",
     "mqtt": "^5.6.1",
     "nats": "^2.26.0",
     "node-json-db": "^2.3.0",

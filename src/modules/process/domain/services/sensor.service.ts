@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { StructureService } from './configuration.service';
 import { BehaviorSubject, find, Observable } from 'rxjs';
 import { SynchronizeService } from './synchronize.service';
@@ -14,9 +14,11 @@ import { forEach } from 'mathjs';
 import { HttpService } from '@nestjs/axios';
 import { DbService } from '@process/infrastructure/db/db.service';
 import { SensorStreamer } from '../models/sensor-streamer.model';
-import { Cron } from '@nestjs/schedule';
+import { Cron, SchedulerRegistry } from '@nestjs/schedule';
 import { SensorValueRepository } from '@process/infrastructure/repositories/sensor-value.repository';
 import { SensorValueEntity } from '@process/infrastructure/entities/sensor-value.entity';
+import { CronJob } from 'cron';
+import { SensorEntity } from '@process/infrastructure/entities/sensor.entity';
 
 const { SHT31 } = require('sht31-node')
 @Injectable()
@@ -25,12 +27,13 @@ export class SensorService {
     public intervals = []
     private serialport;
     public constructor(
+        private schedulerRegistry: SchedulerRegistry, 
         private configurationService: StructureService,
         private triggerService: TriggerService,
         private wsService: SocketIoClientProxyService,
         private sensorRepository: SensorRepository,
         private sensorValueRepository: SensorValueRepository,
-        private readonly httpService: HttpService,
+        private readonly httpService: HttpService, 
         private dbService: DbService
     ) {
 
@@ -48,7 +51,7 @@ export class SensorService {
     private localTest(sensorType: SensorType) {
         const sht31 = new SHT31()
         sht31.readSensorData().then(async data => {
-            await this.test(sensorType, data)
+            await this.test(sensorType, data) 
         }).catch(console.log)
     }
 
@@ -60,16 +63,16 @@ export class SensorService {
     private valeurVersPourcentage(valeur) {
         const max = 820;
         const min = 360;
-      
+
         // Clamp la valeur entre min et max
         if (valeur > max) valeur = max;
         if (valeur < min) valeur = min;
-      
+
         // Calcul du pourcentage
         const pourcentage = ((max - valeur) / (max - min)) * 100;
-      
+
         return Math.round(pourcentage); // arrondi à l'entier le plus proche
-      }
+    }
 
     private async checkAndRunTaskIfNeeded() {
         const now = new Date();
@@ -133,14 +136,14 @@ export class SensorService {
             channel = 0;
 
 
-            setInterval(() => {
-                adc.read(channel,  (value) => {
-                    console.log('ADC value on channel ' + channel + ': ' + this.valeurVersPourcentage(value)+'%');
-                    
-                });
-                  }, 1000);
+        setInterval(() => {
+            adc.read(channel, (value) => {
+                //console.log('ADC value on channel ' + channel + ': ' + this.valeurVersPourcentage(value) + '%');
 
-       
+            });
+        }, 1000);
+
+
 
         ////////////////////////////////
         const portList = await SerialPort.list();
@@ -155,6 +158,10 @@ export class SensorService {
             this.test(null, data);
             console.log(data);
         });
+    }
+
+    public intScheduledSensor(taskId: string) {
+        // recuperer le taskId
     }
 
     private getWeather(): Observable<any> {
@@ -191,12 +198,12 @@ export class SensorService {
         const device = this.configurationService.deviceListeners.find(x => x.deviceId === id)
         if (!device) {
             const sensorModel = new SensorModel();
-            sensorModel.id = id;
+            sensorModel.id = id; 
             sensorModel.name = `New sensor ${id}`;
             sensorModel.description = "new sensor description";
             sensorModel.style = {
-                bgColor: "cyan.200",
-                fontColor: "blue.400",
+                bgColor: "cyan.200", 
+                fontColor: "blue.400", 
                 iconColor: { base: "blue", icon: "#60a5fa" }
             },
                 sensorModel.type = type;
@@ -213,7 +220,7 @@ export class SensorService {
             return sensorModel;
         }
         return this.configurationService.structure.sensors.find(x => x.id === device.deviceId);
-    }
+    } 
 
     //function used to emit value when intercepts sensor values. 
     public emitReceivedData(sensorModel: SensorModel, data: string): void {
@@ -274,7 +281,8 @@ export class SensorService {
                     const arr = tmpStr.split('_');
                     const id = arr[0];
                     if (arr[0] && arr[1] && arr[2]) {
-                        return this.pairingSensor(id, SensorType[arr[1]], arr[1] === 'T' ? '°' : '%');
+
+                        return this.pairingSensor(id, arr[1] as SensorType, arr[1] === 'T' ? '°' : '%');
                     }
                 }
                 return null;
@@ -285,6 +293,79 @@ export class SensorService {
         const sensorModel = await this.decodeData(type, data);
         this.emitReceivedData(sensorModel, data);
     }
+
+    private async deleteCronJob(sensorId: string): Promise<void> {
+        const isExists = this.schedulerRegistry.doesExist('cron', sensorId);
+        if (isExists) {
+            const job = this.schedulerRegistry.getCronJob(sensorId);
+            job.stop();
+            this.schedulerRegistry.deleteCronJob(sensorId);
+            const schedule = this.configurationService.structure.sensors.find(x => x.id === sensorId);
+            if (schedule) {
+                await this.sensorRepository.delete(sensorId);
+            }
+
+        }
+        Logger.warn(`job ${sensorId} deleted!`);
+    }
+
+
+    private createScheduledSensorEvent(sensor: SensorModel, methode: () => void): SensorModel {
+        let job;
+        const isExists = this.schedulerRegistry.doesExist('cron', sensor.id);
+        if (isExists) {
+            job = this.schedulerRegistry.getCronJob(sensor.id);
+            job.stop();
+            this.schedulerRegistry.deleteCronJob(sensor.id);
+        }
+        try {
+            job = new CronJob(sensor.cronPattern, methode);
+            this.schedulerRegistry.addCronJob(sensor.id, job);
+            job.start();
+        } catch (e) {
+
+        }
+
+        return sensor;
+
+    }
+
+    public async initScheduledSensor(sensor: SensorModel, isDeleted: boolean = false, overridedMethode?: () => void): Promise<SensorModel> {
+
+        if (isDeleted) {
+            const index = this.configurationService.schedules.findIndex(x => x.id === sensor.id);
+            this.configurationService.schedules.splice(index, 1);
+            await this.deleteCronJob(sensor.id);
+            return sensor;
+        }
+
+        this.configurationService.structure.sensors.push(sensor);
+
+        let methode = async (): Promise<void> => {
+            //// modbus read
+            const value = Math.round(Math.random() * 10);
+            this.emitReceivedData(sensor, value.toString());
+        };
+
+        return this.createScheduledSensorEvent(sensor, methode);
+    }
+
+    public async restartAllScheduledSensors(): Promise<void> {
+        const sensors = (await this.sensorRepository.get()) as Array<SensorEntity>;
+        const scheduledSensors = sensors.filter(x => x.type === SensorType.SCHEDULED);
+        for (const key in scheduledSensors) {
+            if (Object.hasOwnProperty.call(scheduledSensors, key)) {
+                const scheduledSensor = SensorEntity.mapToModel(scheduledSensors[key]);
+                const methode = async (): Promise<void> => {
+                    //// modbus read
+                    const value = Math.round(Math.random() * 10);
+                    this.emitReceivedData(scheduledSensor, value.toString());
+                };
+                this.createScheduledSensorEvent(scheduledSensor, methode);
+            }
+        }
+    }
+
 
 
 } 
