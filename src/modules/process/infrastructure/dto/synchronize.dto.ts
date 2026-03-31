@@ -370,14 +370,17 @@ export class TriggerSynchronizeDTO {
                 const condition = new SynchronizeConditionModel();
                 const splittedConditionId = conditionSync.id.split('_');
                 condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
-                condition.id = splittedConditionId[1] || splittedConditionId[0];
-                condition.parentId = triggerModel.id;
-                condition.name = conditionSync.name;
-                condition.description = conditionSync.name;
-                condition.deviceId = conditionSync.deviceId;
-                condition.operator = conditionSync.operator;
-                condition.value = conditionSync.value;
-                triggerModel.conditions.push(condition);
+                if (!condition.shouldDelete) {
+                    condition.id = splittedConditionId[1] || splittedConditionId[0];
+                    condition.parentId = triggerModel.id;
+                    condition.name = conditionSync.name;
+                    condition.description = conditionSync.name;
+                    condition.deviceId = conditionSync.deviceId;
+                    condition.operator = conditionSync.operator;
+                    condition.value = conditionSync.value;
+                    triggerModel.conditions.push(condition);
+                }
+
             });
         }
         triggerModel.isPaused = triggerSynchronizeDTO.isPaused;
@@ -404,7 +407,7 @@ export class SensorSynchronizeDTO {
     public taskId: string;
     @IsString()
     public cronPattern: string;
-    
+
 
     public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
         const sensorModel = new SensorModel();
@@ -482,124 +485,124 @@ export class StructureSynchronizeDTO {
 
 
 export class ModbusConnectionConfigDTO {
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Identifiant unique de la connexion" })
-  public id: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant unique de la connexion" })
+    public id: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Adresse IP de l'équipement" })
-  public ipAddress: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Adresse IP de l'équipement" })
+    public ipAddress: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Protocole utilisé (0=RTU, 1=TCP, etc.)" })
-  public protocol: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Protocole utilisé (0=RTU, 1=TCP, etc.)" })
+    public protocol: string;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Port TCP Modbus (502 par défaut)" })
-  public port: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Port TCP Modbus (502 par défaut)" })
+    public port: number;
 
-  @IsString()
-  @ApiProperty({ description: "si rtu chemin" })
-  public path: string;
+    @IsString()
+    @ApiProperty({ description: "si rtu chemin" })
+    public path: string;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
-  public slaveId: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+    public slaveId: number;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
-  public timeout: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+    public timeout: number;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "baudrate" })
-  public baudrate: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "baudrate" })
+    public baudrate: number;
 
-  // --- Méthode de mapping vers le modèle principal ---
-  public static mapToModbusConnectionConfigModel(dto: ModbusConnectionConfigDTO): ModbusConnectionConfigModel {
-    const model = new ModbusConnectionConfigModel();
-    model.id = dto.id;
-    model.ipAddress = dto.ipAddress;
-    model.protocol = dto.protocol;
-    model.port = dto.port;
-    model.slaveId = dto.slaveId;
-    model.timeout = dto.timeout;
-    model.path = dto.path;
-    model.baudrate = dto.baudrate;
-    return model;
-  }
+    // --- Méthode de mapping vers le modèle principal ---
+    public static mapToModbusConnectionConfigModel(dto: ModbusConnectionConfigDTO): ModbusConnectionConfigModel {
+        const model = new ModbusConnectionConfigModel();
+        model.id = dto.id;
+        model.ipAddress = dto.ipAddress;
+        model.protocol = dto.protocol;
+        model.port = dto.port;
+        model.slaveId = dto.slaveId;
+        model.timeout = dto.timeout;
+        model.path = dto.path;
+        model.baudrate = dto.baudrate;
+        return model;
+    }
 }
 
 export class ModbusTaskParams {
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
-  public length: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
+    public length: number;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
-  public scale: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
+    public scale: number;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
-  public unit: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
+    public unit: string;
 }
 
 export class ModbusTaskConfigDTO {
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Identifiant unique de la tâche" })
-  public id: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant unique de la tâche" })
+    public id: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Identifiant de la connexion associée" })
-  public connectionId: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant de la connexion associée" })
+    public connectionId: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Identifiant de la connexion associée" })
-  public function: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant de la connexion associée" })
+    public function: string;
 
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: "Nom lisible ou étiquette de la tâche" })
-  public label: string;
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Nom lisible ou étiquette de la tâche" })
+    public label: string;
 
-  @IsNotEmpty()
-  @IsNumber()
-  @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
-  public address: number;
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
+    public address: number;
 
-  @IsNotEmpty()
-  @ValidateNested()
-  @Type(() => ModbusTaskParams)
-  @ApiProperty({ description: "Paramètres de la tâche (longueur, échelle, unité)" })
-  public params: ModbusTaskParams;
+    @IsNotEmpty()
+    @ValidateNested()
+    @Type(() => ModbusTaskParams)
+    @ApiProperty({ description: "Paramètres de la tâche (longueur, échelle, unité)" })
+    public params: ModbusTaskParams;
 
-  // --- Méthode de mapping vers le modèle principal ---
-  public static mapToModbusTaskConfigModel(dto: ModbusTaskConfigDTO): ModbusTaskConfigModel {
-    const model = new ModbusTaskConfigModel();
-    model.id = dto.id;
-    model.connectionId = dto.connectionId;
-    model.function = dto.function;
-    model.label = dto.label;
-    model.address = dto.address;
-    model.params = {
-      length: dto.params.length,
-      scale: dto.params.scale,
-      unit: dto.params.unit
-    };
-    return model;
-  }
+    // --- Méthode de mapping vers le modèle principal ---
+    public static mapToModbusTaskConfigModel(dto: ModbusTaskConfigDTO): ModbusTaskConfigModel {
+        const model = new ModbusTaskConfigModel();
+        model.id = dto.id;
+        model.connectionId = dto.connectionId;
+        model.function = dto.function;
+        model.label = dto.label;
+        model.address = dto.address;
+        model.params = {
+            length: dto.params.length,
+            scale: dto.params.scale,
+            unit: dto.params.unit
+        };
+        return model;
+    }
 }
 
