@@ -7,6 +7,14 @@ export class SocketIoClientStrategy extends Server
         super();
     }
 
+    public on<EventKey extends string = string, EventCallback extends Function = Function>(event: EventKey, callback: EventCallback): void {
+        this.client.on(event, callback as never);
+    }
+
+    public unwrap<T>(): T {
+        return this.client as unknown as T;
+    }
+
     /**
      * This method is triggered when you run "app.listen()".
      */

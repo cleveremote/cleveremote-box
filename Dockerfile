@@ -2,7 +2,7 @@
 # BUILD FOR LOCAL DEVELOPMENT
 ###################
 
-FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As development
+FROM node:22-alpine As development
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -28,7 +28,7 @@ USER node
 # BUILD FOR PRODUCTION
 ###################
 
-FROM node@sha256:b5b9467fe7b33aad47f1ec3f6e0646a658f85f05c18d4243024212a91f3b7554 As build
+FROM node:22-alpine As build
 
 WORKDIR /usr/src/app
 
@@ -55,7 +55,7 @@ USER node
 ###################
 
 # need to be on node and not node:aline because we can't install needed packages for bluetooth on it
-FROM node:20 As production
+FROM node:22 As production
 
 # install needed packages for bluetooth to work ( musl-dev needed to build epoll on/off access lib )
 RUN apt-get update && apt-get install -y \
