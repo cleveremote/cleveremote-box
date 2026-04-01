@@ -18,7 +18,7 @@ export class DbService {
         await this._initialiseDbAuth();
         await this._initialiseDbStructure();
         await this._initialiseDbValues();
-        await this._initialiseDbSensorData(); 
+        await this._initialiseDbSensorData();
 
     }
 
@@ -80,7 +80,7 @@ export class DbService {
 
     private async _initialiseDbStructure(): Promise<void> {
         try {
-            console.log('db path',this._config.get('DB_PATH'));
+            console.log('db path', this._config.get('DB_PATH'));
             this.DB_STRUCTURE = new JsonDB(new Config(`${this._config.get('DB_PATH')}/DB_STRUCTURE`, true, true, '/'));
 
             if (!await this.DB_STRUCTURE.exists('/cycles')) {
@@ -89,6 +89,13 @@ export class DbService {
             if (!await this.DB_STRUCTURE.exists('/sensors')) {
                 await this.DB_STRUCTURE.push('/sensors', []);
             }
+            if (!await this.DB_STRUCTURE.exists('/modbusConnections')) {
+                await this.DB_STRUCTURE.push('/modbusConnections', []);
+            }
+            if (!await this.DB_STRUCTURE.exists('/modbusTasks')) {
+                await this.DB_STRUCTURE.push('/modbusTasks', []);
+            }
+
         } catch (error) {
             console.error('The file could not be copied');
             await this.executeBackUp('DB_STRUCTURE', 'RESTORE');
