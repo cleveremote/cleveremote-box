@@ -32,7 +32,6 @@ export class StructureService {
 
     public async getStructure(): Promise<StructureModel> {
         return this.structureRepository.get().then((data) => {
-            console.log('structureModel', data);
             const structureModel = StructureEntity.mapToModel(data);
             this.structure = structureModel;
             let sequences: SequenceModel[] = [];

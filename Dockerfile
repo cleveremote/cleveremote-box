@@ -2,7 +2,7 @@
 # BUILD FOR LOCAL DEVELOPMENT
 ###################
 
-FROM node@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf As development
+FROM node:22.22.1-alpine@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf AS development
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -28,7 +28,7 @@ USER node
 # BUILD FOR PRODUCTION
 ###################
 
-FROM node@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf As build
+FROM node:22.22.1-alpine@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf AS build
 
 WORKDIR /usr/src/app
 
@@ -55,7 +55,7 @@ USER node
 ###################
 
 # need to be on node and not node:aline because we can't install needed packages for bluetooth on it
-FROM node@sha256:51870906e4c02a9c8076848dfaca4fd2329630c945e81e06d1cb1a475c042919 As production
+FROM node:22.22.1-alpine@sha256:51870906e4c02a9c8076848dfaca4fd2329630c945e81e06d1cb1a475c042919 AS production
 
 # install needed packages for bluetooth to work + build tools to recompile native modules for glibc
 RUN apt-get update && apt-get install -y \
@@ -73,11 +73,11 @@ RUN apt-get update && apt-get install -y \
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1
 RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1
 
-ENV APP_PORT 3000
-ENV SOCKET_SERVER "http://ec2-35-180-231-37.eu-west-3.compute.amazonaws.com:5001"
-ENV SOCKET_SERVER_LOCAL "http://127.0.0.1:5001"
-ENV INITIAL_PASSWORD 'CLV_Box-121715!'
-ENV DB_PATH '/home/clv/db'
+ENV APP_PORT=3000
+ENV SOCKET_SERVER="http://ec2-35-180-231-37.eu-west-3.compute.amazonaws.com:5001"
+ENV SOCKET_SERVER_LOCAL="http://127.0.0.1:5001"
+ENV INITIAL_PASSWORD='CLV_Box-121715!'
+ENV DB_PATH='/home/clv/db'
 
 COPY --chown=node:node --from=build /usr/src/app/package*.json ./
 
@@ -90,11 +90,5 @@ RUN npm rebuild
 COPY ./ctrl-pwm.py /app/ctrl-pwm.py
 
 COPY entrypoint.sh .
-# create folder for data base db
-CMD ./entrypoint.sh
-
-
-CMD node dist/src/main.js
-
-# # Start the server using the production build
-# CMD [ "node", "dist/src/main.js" ]
+RUN chmod +x entrypoint.sh
+CMD ["./entrypoint.sh"]
