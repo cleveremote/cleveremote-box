@@ -115,8 +115,8 @@ jobs:
           # Tag fixe : version sémantique
           TAGS="-t $IMAGE_BASE:$IMAGE_TAG"
 
-          # Tags d'environnement (multi) depuis le JSON array
-          for ENV in $(echo "$ENV_TAGS" | jq -r '.[]'); do
+          # Tags d'environnement (multi) depuis le JSON array (sans jq)
+          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
             TAGS="$TAGS -t $IMAGE_BASE:$ENV"
             echo "Adding env tag: $ENV"
           done
@@ -136,8 +136,8 @@ jobs:
           # Push du tag version sémantique
           docker push "$IMAGE_BASE:$IMAGE_TAG"
 
-          # Push de chaque tag d'environnement
-          for ENV in $(echo "$ENV_TAGS" | jq -r '.[]'); do
+          # Push de chaque tag d'environnement (sans jq)
+          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
             echo "Pushing env tag: $ENV"
             docker push "$IMAGE_BASE:$ENV"
           done
