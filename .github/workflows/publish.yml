@@ -1,17 +1,17 @@
 name: Release Publisher
 
 on:
- 
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag Git à publier (ex: v1.2.3)'
-        required: true
+        description: 'Tag Git à publier (laisser vide pour utiliser le dernier tag)'
+        required: false
+        default: ''
         type: string
       environments:
         description: 'Environnements cibles (virgule-séparés : dev,prd,pprd,test)'
         required: false
-        default: ''
+        default: 'dev'
         type: string
 
 permissions:
@@ -43,33 +43,22 @@ jobs:
       - name: Resolve version & env tags
         id: resolve
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            # Trigger A : tag pushé → on lit le tag depuis la ref
-            VERSION="${GITHUB_REF#refs/tags/}"
-
-            # On lit le tag Git pour retrouver les env labels associés au commit
-            # (stockés dans l'annotation du tag si créés par release-drafter.yml)
-            # Par convention on les récupère depuis la release GitHub via l'API
-            ENV_TAGS=$(gh api repos/${{ github.repository }}/releases/tags/$VERSION \
-              --jq '.body' 2>/dev/null \
-              | grep -oP '(?<=env:)[a-z]+' \
-              | jq -Rsc 'split("\n") | map(select(length>0))' || echo '[]')
-
-            # Fallback : si aucun env trouvé dans le body, on laisse vide
-            echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
-
+          # Résolution du tag : input ou dernier tag GitHub
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          if [[ -z "$INPUT_TAG" ]]; then
+            VERSION=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')
           else
-            # Trigger B : workflow_dispatch → inputs explicites
-            VERSION="${{ github.event.inputs.tag }}"
-
-            ENVS="${{ github.event.inputs.environments }}"
-            if [[ -z "$ENVS" ]]; then
-              ENV_TAGS='[]'
-            else
-              ENV_TAGS=$(echo "$ENVS" | tr ',' '\n' | jq -Rsc 'split("\n") | map(select(length>0))')
-            fi
-            echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
+            VERSION="$INPUT_TAG"
           fi
+
+          # Résolution des environnements
+          ENVS="${{ github.event.inputs.environments }}"
+          if [[ -z "$ENVS" ]]; then
+            ENV_TAGS='["dev"]'
+          else
+            ENV_TAGS=$(echo "$ENVS" | tr ',' '\n' | jq -Rsc 'split("\n") | map(select(length>0))')
+          fi
+          echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Resolved version: $VERSION"

@@ -60,7 +60,7 @@ version-resolver:
 # ── Template du corps de la release note ──────────────────────────────────
 
 change-template: '- $TITLE @$AUTHOR ([#${NUMBER}]($URL))'
-change-title-escapes: 'false' # Disable all escaping to allow full markdown in titles
+change-title-escapes: ''
 
 template: |
   ## 📝 Changes
