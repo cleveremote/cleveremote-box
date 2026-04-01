@@ -86,8 +86,9 @@ jobs:
     if: github.event_name == 'push'
 
     steps:
-      - uses: release-drafter/release-drafter@v5
+      - uses: release-drafter/release-drafter@v6
         with:
+          config-name: release-drafter-config.yml
           disable-autolabeler: true
           name: ${{ needs.resolve.outputs.version }}
           tag: ${{ needs.resolve.outputs.version }}

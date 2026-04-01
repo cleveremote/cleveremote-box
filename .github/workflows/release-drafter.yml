@@ -94,8 +94,9 @@ jobs:
     needs: bump-version
 
     steps:
-      - uses: release-drafter/release-drafter@v5
+      - uses: release-drafter/release-drafter@v6
         with:
+          config-name: release-drafter-config.yml
           disable-autolabeler: true
           name: ${{ needs.bump-version.outputs.new_version }}
           tag: ${{ needs.bump-version.outputs.new_version }}
