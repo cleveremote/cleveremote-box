@@ -74,10 +74,15 @@ RUN apt-get update && apt-get install -y \
 RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1
 
 ENV APP_PORT=3000
-ENV SOCKET_SERVER="http://ec2-35-180-231-37.eu-west-3.compute.amazonaws.com:5001"
 ENV SOCKET_SERVER_LOCAL="http://127.0.0.1:5001"
-ENV INITIAL_PASSWORD='CLV_Box-121715!'
 ENV DB_PATH='/home/clv/db'
+
+# INITIAL_PASSWORD et SOCKET_SERVER injectés via docker-compose / .env
+ARG INITIAL_PASSWORD
+ARG SOCKET_SERVER
+ENV INITIAL_PASSWORD=${INITIAL_PASSWORD}
+ENV SOCKET_SERVER=${SOCKET_SERVER}
+
 
 COPY --chown=node:node --from=build /usr/src/app/package*.json ./
 
