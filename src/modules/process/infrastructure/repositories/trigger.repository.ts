@@ -26,7 +26,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         const idToDelete = this.shouldDelete(entity.id);
         if (idToDelete) {
             await this.delete(idToDelete, entity.cycleId);
-            result = entity;
+            return entity; 
         }
         const found = await this.get(entity.id, entity.cycleId);
         if (found) {

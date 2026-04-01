@@ -80,6 +80,7 @@ export class DbService {
 
     private async _initialiseDbStructure(): Promise<void> {
         try {
+            console.log('db path',this._config.get('DB_PATH'));
             this.DB_STRUCTURE = new JsonDB(new Config(`${this._config.get('DB_PATH')}/DB_STRUCTURE`, true, true, '/'));
 
             if (!await this.DB_STRUCTURE.exists('/cycles')) {

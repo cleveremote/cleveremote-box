@@ -9,6 +9,7 @@ import { AuthenticationService } from './authentication.service';
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
+import { ModbusTaskService } from './modbus-task.service';
 
 
 @Injectable()
@@ -21,12 +22,13 @@ export class InitService {
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private bleService: BleService
+        private bleService: BleService,
+        private modBusService:ModbusTaskService
     ) { }
 
 
     public async initialize(): Promise<void> {
-       
+        
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
@@ -47,17 +49,24 @@ export class InitService {
         //     console.log(`Impulsions totales : ${compteurImpulsions}`); 
         //   }, 1000);
           
-        return this.dbService.initialize()
-            .then(() => this._loadConfiguration())
-            .then(() => this.bleService.initialize())
-            .then(() => this.authenticationService.initAuthentication())
-            .then(() => this.triggerService.initilize())
-            .then(() => this.sensorService.initSensor())
-            .then(() => this.sensorService.initialize()) // temps for test purpose
-            .then(() => this._resetAllModules())
-            .then(() => this.scheduleService.restartAllSchedules())
-            .then(() => this.sendReadySignal())
-     
+        const wrap = (name: string, fn: () => Promise<any> | void) =>
+            Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
+
+        return wrap('DbService.initialize', () => this.dbService.initialize())
+            .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
+            .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
+            .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
+            .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
+            .then(() => wrap('SensorService.initSensor', () => this.sensorService.initSensor()))
+            .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
+            .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
+            .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
+            .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
+            .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
+            // .then(()=> {
+            //     this.modBusService.execute("task-003");
+            // })
+
             .catch((error) => {
                 Logger.error(`! initialization failed ${String(error)} `, 'initialization');
             })
@@ -66,7 +75,7 @@ export class InitService {
     private _resetAllModules(): Promise<void> {
 
         Logger.log('Start initialize processes 1 ...', 'initialization');
-        return this.processService.resetAllModules()
+        return this.processService.resetAllModules()  
             .then(() => {
                 Logger.log('processes initialized', 'initialization');
 

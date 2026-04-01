@@ -67,7 +67,7 @@ export class SensorRepository implements IRepository<SensorEntity> {
         throw new ElementNotFoundExeception(id, 'delete', 'sensor');
     }
 
-    public async get(id: string): Promise<SensorEntity | SensorEntity[]> {
+    public async get(id?: string): Promise<SensorEntity | SensorEntity[]> {
         if (!id) {
             return await this.dbService.DB_STRUCTURE.getObject<SensorEntity[]>('/sensors');
         }

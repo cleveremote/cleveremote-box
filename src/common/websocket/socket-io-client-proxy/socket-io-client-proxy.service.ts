@@ -38,6 +38,10 @@ export class SocketIoClientProxyService extends ClientProxy {
             })
         });
     }
+    public unwrap<T>(): T {
+        return this._client as unknown as T;
+    }
+
     /* istanbul ignore next */
     public publish<T>(
         packet: ReadPacket<T>,

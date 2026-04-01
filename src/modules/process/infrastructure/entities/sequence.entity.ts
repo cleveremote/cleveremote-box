@@ -20,6 +20,7 @@ export class SequenceEntity extends SequenceModel {
         sequence.status = sequenceEntity.status;
         sequence.maxDuration = sequenceEntity.maxDuration;
         sequence.vfd = sequenceEntity.vfd;
+        sequence.taskId = sequenceEntity.taskId;
         sequence.modules = [];
         sequenceEntity.modules.forEach(moduleData => {
             sequence.modules.push(ModuleEntity.mapToModel(moduleData));
@@ -43,6 +44,7 @@ export class SequenceEntity extends SequenceModel {
         sequence.status = sequenceModel.status;
         sequence.maxDuration = sequenceModel.maxDuration;
         sequence.vfd = sequenceModel.vfd;
+        sequence.taskId = sequenceModel.taskId;
         sequence.modules = [];
         sequenceModel.modules.forEach(moduleData => {
             sequence.modules.push(ModuleEntity.mapToEntity(moduleData));

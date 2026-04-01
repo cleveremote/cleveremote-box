@@ -7,6 +7,8 @@ export class SensorEntity extends SensorModel {
         const sensor = new SensorModel();
         sensor.id = sensorEntity.id;
         sensor.name = sensorEntity.name;
+        sensor.taskId = sensorEntity.taskId;
+        sensor.cronPattern = sensorEntity.cronPattern;
         sensor.description = sensorEntity.description;
         sensor.style = sensorEntity.style;
         sensor.id = sensorEntity.id;
@@ -19,6 +21,8 @@ export class SensorEntity extends SensorModel {
         const sensor = new SensorModel();
         sensor.id = sensorModel.id;
         sensor.name = sensorModel.name;
+        sensor.taskId = sensorModel.taskId;
+        sensor.cronPattern = sensorModel.cronPattern;
         sensor.description = sensorModel.description;
         sensor.style = sensorModel.style;
         sensor.id = sensorModel.id;

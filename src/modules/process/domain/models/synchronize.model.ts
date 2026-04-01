@@ -1,5 +1,7 @@
 import { ConditionModel } from './condition.model';
 import { CycleModel } from './cycle.model';
+import { ModbusConnectionConfigModel } from './modbusConnectionConfig.model';
+import { ModbusTaskConfigModel } from './modbusTaskConfig.model';
 import { ModuleModel } from './module.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
@@ -33,5 +35,13 @@ export class SynchronizeConditionModel extends ConditionModel {
 }
 
 export class SynchronizeSensorModel extends SensorModel {
+    public shouldDelete: boolean;
+}
+
+export class SynchronizeModbusConnectionConfigModel extends ModbusConnectionConfigModel {
+    public shouldDelete: boolean;
+}
+
+export class SynchronizeModbusTaskConfigModel extends ModbusTaskConfigModel {
     public shouldDelete: boolean;
 }

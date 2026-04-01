@@ -9,12 +9,16 @@ import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { CycleSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, ModbusConnectionConfigDTO, ModbusTaskConfigDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
+import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
+import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
+import { ModbusConnectionSynchronizeUC } from '@process/use-cases/modbusconnection-synchronize.uc';
+import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
 
 @Controller()
 export class ConfigurationController {
@@ -28,6 +32,20 @@ export class ConfigurationController {
     public async synchronise(@Payload() configurationSynchronizeDTO: StructureSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
         const input = StructureSynchronizeDTO.mapToStructureModel(configurationSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/modbusconnection'])
+    public async synchroniseModbusConnection(@Payload() modbusConnectionConfigDTO: ModbusConnectionConfigDTO): Promise<ModbusConnectionConfigModel> {
+        const uc = new ModbusConnectionSynchronizeUC(this._synchronizeService);
+        const input = ModbusConnectionConfigDTO.mapToModbusConnectionConfigModel(modbusConnectionConfigDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/modbustask'])
+    public async synchronisePModbusTask(@Payload() modbusTaskConfigDTO: ModbusTaskConfigDTO): Promise<ModbusTaskConfigModel> {
+        const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
+        const input = ModbusTaskConfigDTO.mapToModbusTaskConfigModel(modbusTaskConfigDTO);
         return uc.execute(input);
     }
 

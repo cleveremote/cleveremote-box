@@ -13,8 +13,6 @@ const HciErrors = NodeBleHost.HciErrors;
 const AttErrors = NodeBleHost.AttErrors;
 
 const deviceName = 'clv-ble';
-var transport = new HciSocket(); 
-var options = {};
 
 @Injectable()
 export class BleService {
@@ -27,7 +25,14 @@ export class BleService {
     }
 
     async initialize(): Promise<void> {
-        BleManager.create(transport, options, (err, manager) => {
+        let transport: any;
+        try {
+            transport = new HciSocket();
+        } catch (err) {
+            console.error('BleService: could not initialize HciSocket (Bluetooth unavailable):', err.message);
+            return;
+        }
+        BleManager.create(transport, {}, (err, manager) => {
             // err is either null or an Error object
             // if err is null, manager contains a fully initialized BleManager object
             if (err) {
