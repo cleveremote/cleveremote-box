@@ -99,6 +99,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Remove unsupported credsStore from Docker config
+        run: |
+          CONFIG=~/.docker/config.json
+          if [ -f "$CONFIG" ] && grep -q '"credsStore"' "$CONFIG"; then
+            python3 -c "
+          import json, sys
+          with open('$CONFIG') as f: cfg = json.load(f)
+          cfg.pop('credsStore', None)
+          with open('$CONFIG', 'w') as f: json.dump(cfg, f, indent=2)
+          "
+          fi
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
