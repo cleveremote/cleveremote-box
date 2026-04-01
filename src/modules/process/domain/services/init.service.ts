@@ -28,7 +28,7 @@ export class InitService {
 
 
     public async initialize(): Promise<void> {
-        
+        console.log('initialization started test reload');
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
