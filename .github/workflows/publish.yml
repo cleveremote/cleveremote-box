@@ -99,21 +99,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Remove unsupported credsStore from Docker config
-        run: |
-          CONFIG=~/.docker/config.json
-          if [ -f "$CONFIG" ] && grep -q '"credsStore"' "$CONFIG"; then
-            python3 -c "
-          import json, sys
-          with open('$CONFIG') as f: cfg = json.load(f)
-          cfg.pop('credsStore', None)
-          with open('$CONFIG', 'w') as f: json.dump(cfg, f, indent=2)
-          "
-          fi
-
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+
+          TEMP_DOCKER_CONFIG=$(mktemp -d)
+          echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
 
       - name: Build & tag image
         id: build-image
