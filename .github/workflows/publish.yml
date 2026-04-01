@@ -46,7 +46,7 @@ jobs:
           # Résolution du tag : input ou dernier tag GitHub
           INPUT_TAG="${{ github.event.inputs.tag }}"
           if [[ -z "$INPUT_TAG" ]]; then
-            VERSION=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')
+            VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
           else
             VERSION="$INPUT_TAG"
           fi
@@ -125,8 +125,21 @@ jobs:
           docker build $TAGS .
 
       - name: Push all tags to ECR
+        id: push-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
+          ENV_TAGS: ${{ needs.resolve.outputs.env_tags }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.resolve.outputs.version }}" >> $GITHUB_OUTPUT
+          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          # Push du tag version sémantique
+          docker push "$IMAGE_BASE:$IMAGE_TAG"
+
+          # Push de chaque tag d'environnement
+          for ENV in $(echo "$ENV_TAGS" | jq -r '.[]'); do
+            echo "Pushing env tag: $ENV"
+            docker push "$IMAGE_BASE:$ENV"
+          done
+
+          echo "image=$IMAGE_BASE:$IMAGE_TAG" >> $GITHUB_OUTPUT
