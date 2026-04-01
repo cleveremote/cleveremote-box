@@ -68,24 +68,16 @@ jobs:
 
   # ─────────────────────────────────────────────
   # JOB 2 — Publish the draft release
-  # Uniquement pour le trigger push tag
   # ─────────────────────────────────────────────
   publish-release:
     runs-on: ubuntu-latest
     needs: resolve
-    if: github.event_name == 'push'
 
     steps:
-      - uses: release-drafter/release-drafter@v6
-        with:
-          config-name: release-drafter-config.yml
-          disable-autolabeler: true
-          name: ${{ needs.resolve.outputs.version }}
-          tag: ${{ needs.resolve.outputs.version }}
-          version: ${{ needs.resolve.outputs.version }}
-          publish: true   # ← publie le DRAFT existant
+      - name: Publish draft release
+        run: gh release edit ${{ needs.resolve.outputs.version }} --draft=false --repo ${{ github.repository }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ─────────────────────────────────────────────
   # JOB 3 — Build & push image Docker vers ECR
@@ -95,10 +87,6 @@ jobs:
     runs-on: self-hosted
     environment: production
     needs: [resolve, publish-release]
-    if: |
-      always() &&
-      needs.resolve.result == 'success' &&
-      (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
 
     steps:
       - name: Checkout
