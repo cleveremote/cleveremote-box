@@ -28,7 +28,7 @@ export class InitService {
 
 
     public async initialize(): Promise<void> {
-        console.log('initialization started test reload');
+        console.log('patch/test-version-watchtowerd');
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
