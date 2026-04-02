@@ -27,7 +27,6 @@ import { AuthenticationController } from './controllers/authentication.controlle
 import { DataRepository } from './repositories/data.repository';
 import { HttpModule } from '@nestjs/axios';
 import { BleService } from '@process/domain/services/ble.service';
-import { CtrlPwmService } from '@process/domain/services/pwm-ctrl.service';
 import { PingController } from './controllers/ping.controller';
 import { ModbusConnectionRepository } from './repositories/modbusConnection.repository';
 import { ModbusTaskRepository } from './repositories/modbusTask.repository';
@@ -71,7 +70,6 @@ import { ModbusTaskService } from '@process/domain/services/modbus-task.service'
         TriggerService,
         SensorService,
         BleService,
-        CtrlPwmService,
         ModbusTaskService
     ],
     exports: [
