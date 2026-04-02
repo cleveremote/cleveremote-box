@@ -92,7 +92,6 @@ COPY --chown=node:node --from=build /usr/src/app/dist ./dist
 
 # Recompile native modules for glibc (production stage is Debian, build stage was Alpine/musl)
 RUN npm rebuild
-COPY ./ctrl-pwm.py /app/ctrl-pwm.py
 
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh

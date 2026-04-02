@@ -1,34 +1,6 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
-import { Injectable, Logger } from '@nestjs/common';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
-import { delayWhen, from, map, mergeMap, Observable, of, Subject, Subscription, takeLast, takeUntil, tap, timer } from 'rxjs';
-import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
-import { StructureInvalidError } from '../errors/structure-invalid.error';
-import {
-    ExecutableAction,
-    ExecutableStatus,
-    ProcessMode,
-    ProcessType
-} from '../interfaces/executable.interface';
-import { ModuleModel } from '../models/module.model';
-import { ProcessModel } from '../models/process.model';
-import { StructureService } from './configuration.service';
-import { SchedulerRegistry } from '@nestjs/schedule';
-import { ScheduleModel } from '../models/schedule.model';
-import { CycleModel } from '../models/cycle.model';
-import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
-import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
-import { ExecutableType } from '../models/value.model';
-import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
-import { ProcessValueEntity } from '@process/infrastructure/entities/process-value.entity';
-import { ProcessValueRepository } from '@process/infrastructure/repositories/process-value.repository';
-import { SensorValueModel } from '../models/sensor-value.model';
-import { ProcessValueModel } from '../models/proccess-value.model';
-import * as math from 'mathjs';
-import { DataRepository } from '@process/infrastructure/repositories/data.repository';
-import { CtrlPwmService } from './pwm-ctrl.service';
+import { Injectable } from '@nestjs/common';
 import { ModbusTaskRepository } from '@process/infrastructure/repositories/modbusTask.repository';
 import ModbusRTU from "modbus-serial";
 import { ModbusTaskConfigEntity } from '@process/infrastructure/entities/modbusTaskConfig.entity';

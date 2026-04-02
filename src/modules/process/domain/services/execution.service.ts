@@ -1,8 +1,7 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
 import { Injectable, Logger } from '@nestjs/common';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
-import { delayWhen, from, map, mergeMap, Observable, of, Subject, Subscription, takeLast, takeUntil, tap, timer } from 'rxjs';
+import { delayWhen, from, map, mergeMap, Observable, of, Subject, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
@@ -22,13 +21,11 @@ import { CycleRepository } from '@process/infrastructure/repositories/cycle.repo
 import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
 import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
-import { ProcessValueEntity } from '@process/infrastructure/entities/process-value.entity';
 import { ProcessValueRepository } from '@process/infrastructure/repositories/process-value.repository';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { DataRepository } from '@process/infrastructure/repositories/data.repository';
-import { CtrlPwmService } from './pwm-ctrl.service';
 import { ModbusTaskService } from './modbus-task.service';
 
 @Injectable()
@@ -391,8 +388,6 @@ export class ProcessService {
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         let data = { type, id, status, startedAt, duration, mapSectionId: seqFound?.mapSectionId };
         if (type === ExecutableType.SEQUENCE) {
-            //zzz vfd execute task
-            ///this.ctrlPwmService.sendVoltage(action === ExecutableAction.ON ? seqFound.vfd : 0)
             if (action === ExecutableAction.ON) {
                  this.percentToFrequencyRegister(seqFound.taskId, seqFound.vfd)
             }
