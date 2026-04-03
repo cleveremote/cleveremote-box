@@ -1,6 +1,7 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { CycleModel } from '../models/cycle.model';
 import { ScheduleModel } from '../models/schedule.model';
@@ -38,12 +39,12 @@ export class SynchronizeService {
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
-        private sensorService: SensorService
+        private sensorService: SensorService,
+        private readonly logger: Logger
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
-
-
+        this.logger.log('synchronizing structure');
         return this.structureRepository.save(structureModel).then((data) => {
             this.configurationService.structure = data;
 
@@ -80,11 +81,13 @@ export class SynchronizeService {
 
 
     public async synchronizeTrigger(trigerModel: TriggerModel): Promise<TriggerModel> {
+        this.logger.log({ triggerId: trigerModel.id }, 'synchronizing trigger');
         const trigger = await this.triggerRepository.save(trigerModel);
         return this.triggerService.initTrigger(trigger || trigerModel, !trigger);
     }
 
     public async synchronizeSchedule(scheduleModel: ScheduleModel): Promise<ScheduleModel> {
+        this.logger.log({ scheduleId: scheduleModel.id }, 'synchronizing schedule');
         const schedule = await this.scheduleRepository.save(scheduleModel);
         return this.scheduleService.initSchedule(schedule || scheduleModel, !!this.scheduleRepository.shouldDelete(schedule.id));
     }

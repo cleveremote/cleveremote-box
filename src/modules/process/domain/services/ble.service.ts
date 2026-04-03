@@ -1,5 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import * as fs from 'fs';
@@ -20,7 +21,8 @@ export class BleService {
     public constructor(
         private structureRepository: StructureRepository,
         private valueRepository: ValueRepository,
-        private authenticationService: AuthenticationService
+        private authenticationService: AuthenticationService,
+        private readonly logger: Logger
     ) {
     }
 
@@ -29,14 +31,14 @@ export class BleService {
         try {
             transport = new HciSocket();
         } catch (err) {
-            console.error('BleService: could not initialize HciSocket (Bluetooth unavailable):', err.message);
+            this.logger.error({ err: err.message }, 'BleService: could not initialize HciSocket (Bluetooth unavailable)');
             return;
         }
         BleManager.create(transport, {}, (err, manager) => {
             // err is either null or an Error object
             // if err is null, manager contains a fully initialized BleManager object
             if (err) {
-                console.error(err);
+                this.logger.error({ err }, 'BleManager creation failed');
                 return;
             }
 

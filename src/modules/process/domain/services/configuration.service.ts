@@ -1,5 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { SequenceModel } from '../models/sequence.model';
@@ -26,13 +27,14 @@ export class StructureService {
 
     public constructor(
         private structureRepository: StructureRepository,
-        private valueRepository: ValueRepository
+        private valueRepository: ValueRepository,
+        private readonly logger: Logger
     ) {
     }
 
     public async getStructure(): Promise<StructureModel> {
         return this.structureRepository.get().then((data) => {
-            console.log('structureModel', data);
+            this.logger.debug({ structureModel: data }, 'structure loaded');
             const structureModel = StructureEntity.mapToModel(data);
             this.structure = structureModel;
             let sequences: SequenceModel[] = [];

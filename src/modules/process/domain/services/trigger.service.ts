@@ -1,6 +1,7 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
 import { StructureService } from './configuration.service';
 import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
@@ -41,8 +42,8 @@ export class TriggerService {
         private sensorValueRepository: SensorValueRepository,
         private dataRepository: DataRepository,
         private valueRepository: ValueRepository,
-        private processService: ProcessService
-
+        private processService: ProcessService,
+        private readonly logger: Logger
     ) {
     }
 
@@ -53,6 +54,7 @@ export class TriggerService {
     }
 
     public async initTrigger(trigger: TriggerModel, isDeleted: boolean = false): Promise<TriggerModel> {
+        this.logger.log({ triggerId: trigger.id, isDeleted }, 'initTrigger');
         const index = this.triggers.findIndex(x => x.id === trigger.id);
         if (isDeleted && index !== -1) {
             this.triggers.splice(index, 1);
@@ -122,6 +124,7 @@ export class TriggerService {
         });
 
         if (isVerified) {
+            this.logger.log({ triggerId: trigger.id }, 'trigger conditions verified, planifying execution');
             const trg = await this.triggerRepository.save({ ...trigger, lastTriggeredAt: currentDate })
             this.triggers[this.triggers.findIndex(x=>x.id === trigger.id)] =  trg;
             await this._planifyExecution(trg, data); 

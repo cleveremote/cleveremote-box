@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { delayWhen, from, map, mergeMap, Observable, of, Subject, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
@@ -40,8 +41,8 @@ export class ProcessService {
         private cycleRepository: CycleRepository,
         private valueRepository: ValueRepository,
         private dataRepository: DataRepository,
-        private modBusService: ModbusTaskService
-
+        private modBusService: ModbusTaskService,
+        private readonly logger: Logger
     ) {
 
     }
@@ -216,7 +217,7 @@ export class ProcessService {
                     await this.dataRepository.save({ id: Math.random().toString(), deviceId: process.cycle.id, date: new Date(), type: process.mode, value: "OFF" })
                 },
                 error: async (_err) => {
-                    Logger.debug(_err, 'execution');
+                    this.logger.error({ err: _err }, 'execution error');
                     await this.reset(process);
                 }
             }
@@ -368,7 +369,7 @@ export class ProcessService {
                 const mod = modules.find(x => x.portNum === dataPin);
                 await mod.execute(action);
             } catch (error) {
-                Logger.warn(error, 'execution module pornum: ' + dataPin);
+                this.logger.warn({ error, portNum: dataPin }, 'execution module error');
             }
         }
 
