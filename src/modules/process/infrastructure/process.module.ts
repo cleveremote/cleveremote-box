@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
 import { ProcessService } from '@process/domain/services/execution.service';
@@ -31,11 +32,15 @@ import { PingController } from './controllers/ping.controller';
 import { ModbusConnectionRepository } from './repositories/modbusConnection.repository';
 import { ModbusTaskRepository } from './repositories/modbusTask.repository';
 import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
+import { AuthenticationGateway } from './gateways/authentication.gateway';
+import { ConfigurationGateway } from './gateways/configuration.gateway';
+import { ExecutionGateway } from './gateways/execution.gateway';
 @Module({
     imports: [
         ConfigModule.forRoot(),
         ScheduleModule.forRoot(),
-        HttpModule
+        HttpModule,
+        JwtModule.register({}),
     ],
     controllers: [
         ConfigurationController,
@@ -70,7 +75,10 @@ import { ModbusTaskService } from '@process/domain/services/modbus-task.service'
         TriggerService,
         SensorService,
         BleService,
-        ModbusTaskService
+        ModbusTaskService,
+        AuthenticationGateway,
+        ConfigurationGateway,
+        ExecutionGateway,
     ],
     exports: [
         ProcessService,
