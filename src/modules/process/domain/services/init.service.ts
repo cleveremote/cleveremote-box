@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { StructureService } from './configuration.service';
 import { ProcessService } from './execution.service';
 import { ScheduleService } from './schedule.service';
@@ -23,12 +24,13 @@ export class InitService {
         private triggerService: TriggerService,
         private sensorService: SensorService,
         private bleService: BleService,
-        private modBusService:ModbusTaskService
+        private modBusService: ModbusTaskService,
+        private readonly logger: Logger
     ) { }
 
 
     public async initialize(): Promise<void> {
-        console.log('patch/test-version-watchtowerd');
+        this.logger.log('patch/test-version-watchtowerd');
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
@@ -68,17 +70,16 @@ export class InitService {
             // })
 
             .catch((error) => {
-                Logger.error(`! initialization failed ${String(error)} `, 'initialization');
+                this.logger.error({ error }, 'initialization failed');
             })
     }
 
     private _resetAllModules(): Promise<void> {
 
-        Logger.log('Start initialize processes 1 ...', 'initialization');
-        return this.processService.resetAllModules()  
+        this.logger.log('Start initialize processes 1 ...');
+        return this.processService.resetAllModules()
             .then(() => {
-                Logger.log('processes initialized', 'initialization');
-
+                this.logger.log('processes initialized');
             })
     }
 
@@ -101,19 +102,19 @@ export class InitService {
 
     private _testAllModules(): Promise<void> {
 
-        Logger.log('Start initialize processes...', 'initialization');
+        this.logger.log('Start initialize processes...');
         return this.processService.testAllModules()
             .then(() => {
-                Logger.log('processes initialized', 'initialization');
+                this.logger.log('processes initialized');
             })
     }
 
     private _loadConfiguration(): Promise<void> {
 
-        Logger.log('Start loading configuration...', 'initialization');
+        this.logger.log('Start loading configuration...');
         return this.configurationService.getStructure()
             .then(() => {
-                Logger.log('configuration loaded', 'initialization');
+                this.logger.log('configuration loaded');
             });
     }
 

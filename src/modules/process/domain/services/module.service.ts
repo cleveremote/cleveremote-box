@@ -1,5 +1,6 @@
 
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { BinaryValue, Gpio } from 'onoff';
 import { NotSwitchError } from '../errors/not-switch.error';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.interface';
@@ -7,6 +8,8 @@ import { FakeGpio, ModuleModel } from '../models/module.model';
 
 @Injectable()
 export class ModuleService {
+
+    public constructor(private readonly logger: Logger) {}
 
     public configure(moduleModel: ModuleModel): Gpio | FakeGpio {
         /* istanbul ignore next */
@@ -19,6 +22,7 @@ export class ModuleService {
             try {
                 return new Gpio(moduleModel.portNum, moduleModel.direction, moduleModel.edge, gpioOptions);
             } catch (error) {
+                this.logger.warn({ error, portNum: moduleModel.portNum }, 'GPIO init failed, using fake instance');
                 return this._getFakeInstance(moduleModel);
             }
         } else {

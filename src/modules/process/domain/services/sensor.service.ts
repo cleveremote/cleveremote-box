@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { StructureService } from './configuration.service';
 import { BehaviorSubject, find, Observable } from 'rxjs';
 import { SynchronizeService } from './synchronize.service';
@@ -33,8 +34,9 @@ export class SensorService {
         private wsService: SocketIoClientProxyService,
         private sensorRepository: SensorRepository,
         private sensorValueRepository: SensorValueRepository,
-        private readonly httpService: HttpService, 
-        private dbService: DbService
+        private readonly httpService: HttpService,
+        private dbService: DbService,
+        private readonly logger: Logger
     ) {
 
 
@@ -44,7 +46,7 @@ export class SensorService {
 
     @Cron('0 0 * * *')
     async handleMidnightTask() {
-        console.log('🎯 Exécution planifiée à minuit');
+        this.logger.log('midnight task triggered');
         await this.runTask();
     }
 
@@ -56,7 +58,7 @@ export class SensorService {
     }
 
     private async onModuleInit1() {
-        console.log('🚀 Application démarrée, vérification de la tâche...');
+        this.logger.log('application started, checking scheduled task...');
         await this.checkAndRunTaskIfNeeded();
     }
 
@@ -86,7 +88,7 @@ export class SensorService {
     }
 
     private async runTask() {
-        console.log('🛠️ Exécution de la tâche principale...');
+        this.logger.log('running main weather task');
 
         // ➔ Ici ton vrai traitement
         // Par exemple : sauvegarder, appeler une API, etc.
@@ -96,9 +98,7 @@ export class SensorService {
 
         this.getWeather().subscribe(async (response) => {
             const today = response.data.daily;
-            console.log('Prévisions météo :');
-            console.log(`Température Max : ${today.temperature_2m_max[1]}°C`);
-            console.log(`Température Min : ${today.temperature_2m_min[1]}°C`);
+            this.logger.log({ tempMax: today.temperature_2m_max[1], tempMin: today.temperature_2m_min[1] }, 'weather forecast received');
             await this.test(SensorType.FORCAST_TEMPERATURE_MAX, today.temperature_2m_max[1]);
             await this.test(SensorType.FORCAST_TEMPERATURE_MIN, today.temperature_2m_min[1]);
         })
@@ -155,8 +155,8 @@ export class SensorService {
         const parser = new ReadlineParser()
         this.serialport.pipe(parser);
         parser.on('data', (data) => {
+            this.logger.debug({ data }, 'serial data received');
             this.test(null, data);
-            console.log(data);
         });
     }
 
@@ -277,7 +277,7 @@ export class SensorService {
             default:
                 const tmpStr = data.split('i').pop().split('e')[0];
                 if (tmpStr) {
-                    console.log(tmpStr);
+                    this.logger.debug({ tmpStr }, 'decoded sensor string');
                     const arr = tmpStr.split('_');
                     const id = arr[0];
                     if (arr[0] && arr[1] && arr[2]) {
@@ -306,7 +306,7 @@ export class SensorService {
             }
 
         }
-        Logger.warn(`job ${sensorId} deleted!`);
+        this.logger.warn({ sensorId }, 'sensor cron job deleted');
     }
 
 

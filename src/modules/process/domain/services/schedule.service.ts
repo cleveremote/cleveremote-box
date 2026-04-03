@@ -1,6 +1,7 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { CronJob } from 'cron';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
@@ -22,7 +23,8 @@ export class ScheduleService {
         private configurationService: StructureService,
         private processService: ProcessService,
         private cycleRepository: CycleRepository,
-        private scheduleRepository: ScheduleRepository
+        private scheduleRepository: ScheduleRepository,
+        private readonly logger: Logger
     ) {
     }
 
@@ -53,7 +55,7 @@ export class ScheduleService {
                 job.start();
             }
         } catch (e) {
-console.log("test"); 
+            this.logger.error({ error: e }, 'createSchedule failed');
         }
 
         return schedule;
@@ -72,7 +74,7 @@ console.log("test");
             }
 
         }
-        Logger.warn(`job ${scheduleId} deleted!`);
+        this.logger.warn({ scheduleId }, 'cron job deleted');
     }
 
     public async initSchedule(schedule: ScheduleModel, isDeleted: boolean = false,

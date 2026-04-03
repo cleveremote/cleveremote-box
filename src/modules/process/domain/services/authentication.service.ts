@@ -1,5 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
 import { AuthenticationModel } from '../models/authentication.model';
 import * as bcrypt from "bcrypt";
@@ -12,7 +13,8 @@ import { ConfigService } from '@nestjs/config';
 export class AuthenticationService {
     public constructor(
         private authenticationRepository: AuthenticationRepository,
-        private readonly _config: ConfigService
+        private readonly _config: ConfigService,
+        private readonly logger: Logger
     ) {
     }
 
@@ -34,15 +36,20 @@ export class AuthenticationService {
 
     public async initAuthentication(): Promise<boolean> {
         const exists = await this.authenticationRepository.get();
-        if (!(exists.login || exists.password) ) {
+        if (!(exists.login || exists.password)) {
+            this.logger.log('no credentials found, initializing authentication');
             const model = await this._managePassword();
-            return !! await this.authenticationRepository.update(model);
+            return !!await this.authenticationRepository.update(model);
         }
+        this.logger.log('authentication already initialized');
         return true;
     }
 
     public async checkPassword(data: AuthenticationModel): Promise<boolean> {
-        const model = await this.authenticationRepository.get();
-        return await bcrypt.compare(data.password, model.password);
+        const result = await bcrypt.compare(data.password, (await this.authenticationRepository.get()).password);
+        if (!result) {
+            this.logger.warn({ login: data.login }, 'authentication failed');
+        }
+        return result;
     }
 }
