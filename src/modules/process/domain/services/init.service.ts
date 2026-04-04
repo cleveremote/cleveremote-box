@@ -30,7 +30,7 @@ export class InitService {
 
 
     public async initialize(): Promise<void> {
-        this.logger.log('patch/test-version-watchtowerd');
+        this.logger.log('patch/test-version-watchtowerd1234');
         // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
         // let compteurImpulsions = 0;
         // gpioPin.watch((err, value) => {
