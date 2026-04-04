@@ -73,6 +73,7 @@ RUN apt-get update && apt-get install -y \
 # RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-armv7.so.1
 RUN ln -s /usr/lib/aarch64-linux-musl/libc.so /lib/libc.musl-aarch64.so.1
 
+ENV NODE_ENV=production
 ENV APP_PORT=3000
 ENV SOCKET_SERVER_LOCAL="http://127.0.0.1:5001"
 ENV DB_PATH='/home/clv/db'
