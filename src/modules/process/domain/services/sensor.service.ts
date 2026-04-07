@@ -96,12 +96,17 @@ export class SensorService {
         // Ensuite enregistrer la date d'exécution
 
 
-        this.getWeather().subscribe(async (response) => {
-            const today = response.data.daily;
-            this.logger.log({ tempMax: today.temperature_2m_max[1], tempMin: today.temperature_2m_min[1] }, 'weather forecast received');
-            await this.test(SensorType.FORCAST_TEMPERATURE_MAX, today.temperature_2m_max[1]);
-            await this.test(SensorType.FORCAST_TEMPERATURE_MIN, today.temperature_2m_min[1]);
-        })
+        this.getWeather().subscribe({
+            next: async (response) => {
+                const today = response.data.daily;
+                this.logger.log({ tempMax: today.temperature_2m_max[1], tempMin: today.temperature_2m_min[1] }, 'weather forecast received');
+                await this.test(SensorType.FORCAST_TEMPERATURE_MAX, today.temperature_2m_max[1]);
+                await this.test(SensorType.FORCAST_TEMPERATURE_MIN, today.temperature_2m_min[1]);
+            },
+            error: (err) => {
+                this.logger.error({ status: err?.response?.status, message: err?.message }, 'weather API call failed');
+            }
+        });
     }
 
     public async initSensor(): Promise<void> {
