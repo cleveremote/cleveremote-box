@@ -49,7 +49,7 @@ export class DataRepository implements IRepository<DataEntity> {
             const all = await this.dbService.DB_SENSOR_VALUE[Object.keys(this.dbService.DB_SENSOR_VALUE)[index]].getObject<DataEntity[]>('/data');
             const exists = all.find((x: DataEntity) => x.deviceId === deviceId); 
             if (exists) { 
-                return exists ;
+                return exists ; 
             }
         }
         return null

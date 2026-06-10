@@ -13,7 +13,7 @@ export class ModbusTaskConfigEntity extends ModbusTaskConfigModel {
         modbusTaskConfigModel.label=modbusTaskConfigEntity.label;
         modbusTaskConfigModel.address=modbusTaskConfigEntity.address;
         modbusTaskConfigModel.params=modbusTaskConfigEntity.params;
-        return modbusTaskConfigModel;
+        return modbusTaskConfigModel; 
     }
 
     public static mapToEntity(modbusTaskConfigModel: ModbusTaskConfigModel): ModbusTaskConfigEntity {

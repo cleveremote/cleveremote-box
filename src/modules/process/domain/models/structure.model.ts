@@ -4,11 +4,13 @@ import { ModbusTaskConfigModel } from './modbusTaskConfig.model';
 import { ModuleModel } from './module.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
+import { InverterModel } from './inverter.model';
 export class StructureModel {
     public modbusConnections: ModbusConnectionConfigModel[] = [];
     public modbusTasks: ModbusTaskConfigModel[] = [];
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];
+    public inverters: InverterModel[] = [];
     public values: any[] = [];
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];
