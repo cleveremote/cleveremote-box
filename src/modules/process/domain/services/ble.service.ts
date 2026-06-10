@@ -58,15 +58,25 @@ export class BleService {
                             uuid: '22222222-3333-4444-5555-666666666668',
                             properties: ['read'],
                             onRead: async (connection, callback) => {
-                                const t = await this.getWifiNetworks();
-                                callback(AttErrors.SUCCESS, JSON.stringify(t));
+                                try {
+                                    const t = await this.getWifiNetworks();
+                                    callback(AttErrors.SUCCESS, JSON.stringify(t));
+                                } catch (err) {
+                                    this.logger.error({ err: err?.message ?? String(err) }, 'BleService: getWifiNetworks failed');
+                                    callback(AttErrors.UNLIKELY_ERROR, JSON.stringify([]));
+                                }
                             }
                         },
                         {
                             uuid: '22222222-3333-4444-5555-666666666669',
                             properties: ['write'],
                             onWrite: async (connection, needsResponse, value, callback) => {
-                                callback(await this.buildContenteConfigFile(JSON.parse(value.toString()))); // actually only needs to be called when needsResponse is true
+                                try {
+                                    callback(await this.buildContenteConfigFile(JSON.parse(value.toString()))); // actually only needs to be called when needsResponse is true
+                                } catch (err) {
+                                    this.logger.error({ err: err?.message ?? String(err) }, 'BleService: buildContenteConfigFile failed');
+                                    callback(AttErrors.UNLIKELY_ERROR);
+                                }
                             }
                         },
                         notificationCharacteristic = {

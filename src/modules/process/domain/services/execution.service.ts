@@ -12,10 +12,10 @@ import {
     ProcessMode,
     ProcessType
 } from '../interfaces/executable.interface';
-import { ModuleModel } from '../models/module.model'; 
+import { ModuleModel } from '../models/module.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
-import { SchedulerRegistry } from '@nestjs/schedule'; 
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
 import { CycleModel } from '../models/cycle.model';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
@@ -27,7 +27,7 @@ import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { DataRepository } from '@process/infrastructure/repositories/data.repository';
-import { ModbusTaskService } from './modbus-task.service';
+import { type InverterConfigParam, ModbusTaskService } from './modbus-task.service';
 
 @Injectable()
 export class ProcessService {
@@ -68,6 +68,9 @@ export class ProcessService {
                 }
             }
         }
+        setTimeout(() => {
+            this.modBusService.execute("task-1234", { value: 300 });
+        }, 20000);
 
     }
 
@@ -75,8 +78,8 @@ export class ProcessService {
         const cycles = await this.cycleRepository.get();
         for (const key in cycles) {
             if (Object.prototype.hasOwnProperty.call(cycles, key)) {
-                const cycleModel = CycleEntity.mapToModel(cycles[key]); 
-                await this._initialReset(cycleModel); 
+                const cycleModel = CycleEntity.mapToModel(cycles[key]);
+                await this._initialReset(cycleModel);
             }
         }
     }
@@ -241,11 +244,14 @@ export class ProcessService {
         const conflictedExecutable: ProcessModel[] = [];
         const modules = process.cycle.getModules();
         modules.forEach((module) => {
-            this.processList.forEach((proc) => { // and not in confirmation state
-                if ((process.type !== ProcessType.CONFIRMATION) && proc.type !== ProcessType.CONFIRMATION && proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id) && process.action !== 'OFF') { //&& (proc.cycle.id !== process.cycle.id)
-                    conflictedExecutable.push(proc);
-                }
-            })
+            if (module.portNum !== 23) {
+                this.processList.forEach((proc) => { // and not in confirmation state
+                    if ((process.type !== ProcessType.CONFIRMATION) && proc.type !== ProcessType.CONFIRMATION && proc.cycle.exists(module) && !conflictedExecutable.find((x) => x.cycle.id === proc.cycle.id) && process.action !== 'OFF') { //&& (proc.cycle.id !== process.cycle.id)
+                        conflictedExecutable.push(proc);
+                    }
+                })
+            }
+
         });
 
         return conflictedExecutable;
@@ -364,15 +370,22 @@ export class ProcessService {
 
     private async _switchModule(dataPins: number[], modules: ModuleModel[], action: number): Promise<void> {
 
-        for (const dataPin of dataPins) {
+        await Promise.all(dataPins.map(async (dataPin) => {
+            const mod = modules.find(x => x.portNum === dataPin);
+            const waitBefore = action === 1 ? mod?.waitBeforeExec : mod?.waitBeforeExecOff;
+            const waitAfter = action === 1 ? mod?.waitAfterExec : mod?.waitAfterExecOff;
+            if (waitBefore > 0) {
+                await new Promise(resolve => setTimeout(resolve, waitBefore));
+            }
             try {
-                const mod = modules.find(x => x.portNum === dataPin);
                 await mod.execute(action);
             } catch (error) {
                 this.logger.warn({ error, portNum: dataPin }, 'execution module error');
             }
-        }
-
+            if (waitAfter > 0) {
+                await new Promise(resolve => setTimeout(resolve, waitAfter));
+            }
+        }));
 
     }
 
@@ -390,13 +403,14 @@ export class ProcessService {
         let data = { type, id, status, startedAt, duration, mapSectionId: seqFound?.mapSectionId };
         if (type === ExecutableType.SEQUENCE) {
             if (action === ExecutableAction.ON) {
-                 this.percentToFrequencyRegister(seqFound.taskId, seqFound.vfd)
+                this.modBusService.execute("task-1234", { value: 96});
+                //this.percentToFrequencyRegister(seqFound.taskId, seqFound.vfd)
             }
 
-            seqFound.status = status; 
+            seqFound.status = status;
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
-        } else { 
-            cycFound.status = status; 
+        } else {
+            cycFound.status = status;
             let cycleDuration = 0;
             cycFound.sequences.forEach((x) => cycleDuration = cycleDuration + Number(x.maxDuration))
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
@@ -419,6 +433,10 @@ export class ProcessService {
             return 'sent';
         });
     }
+    public async applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
+        return this.modBusService.applyInverterConfig(inverterId, params);
+    }
+
     private percentToFrequencyRegister(taskId, percent) {
         const MAX_HZ = 50;
         const SCALE = 100; // 0.01 Hz

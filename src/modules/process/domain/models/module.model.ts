@@ -18,8 +18,12 @@ export class ModuleModel {
     public activeLow: boolean = false;
     // eslint-disable-next-line @typescript-eslint/naming-convention
     public reconfigureDirection: boolean = true;
+    public waitBeforeExec: number = 0;
+    public waitAfterExec: number = 0;
+    public waitBeforeExecOff: number = 0;
+    public waitAfterExecOff: number = 0;
 
-    public async configure(): Promise<void> {
+    public async configure(): Promise<void> { 
         if (this.instance) {
             this.instance.unexport();
         }

@@ -40,14 +40,12 @@
     "bcrypt": "^6.0.0",
     "ble-host": "^1.0.3",
     "class-transformer": "^0.5.1",
-    "class-transformer-storage": "^2.0.6",
     "class-validator": "^0.14.1",
     "firebase-admin": "^13.7.0",
     "generate-password": "^1.7.1",
     "hci-socket": "^1.0.0",
     "ioredis": "^5.4.1",
     "kafkajs": "^2.2.4",
-    "lodash.debounce": "^4.0.8",
     "mathjs": "^12.4.1",
     "mcp3008.js": "^0.4.1",
     "modbus-serial": "^8.0.23",
@@ -69,7 +67,8 @@
   "overrides": {
     "path-to-regexp": "8.4.1",
     "picomatch": "4.0.4",
-    "@tootallnate/once": "3.0.1"
+    "@tootallnate/once": "3.0.1",
+    "lodash": "4.18.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.17",

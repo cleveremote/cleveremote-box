@@ -10,6 +10,10 @@ export class ModuleEntity extends ModuleModel {
         module.portNum = moduleEntity.portNum;
         module.direction = moduleEntity.direction;
         module.edge = moduleEntity.edge;
+        module.waitBeforeExec = moduleEntity.waitBeforeExec ?? 0;
+        module.waitAfterExec = moduleEntity.waitAfterExec ?? 0;
+        module.waitBeforeExecOff = moduleEntity.waitBeforeExecOff ?? 0;
+        module.waitAfterExecOff = moduleEntity.waitAfterExecOff ?? 0;
         return module;
     }
 
@@ -20,6 +24,10 @@ export class ModuleEntity extends ModuleModel {
         module.portNum = moduleModel.portNum;
         module.direction = moduleModel.direction;
         module.edge = moduleModel.edge;
+        module.waitBeforeExec = moduleModel.waitBeforeExec ?? 0;
+        module.waitAfterExec = moduleModel.waitAfterExec ?? 0;
+        module.waitBeforeExecOff = moduleModel.waitBeforeExecOff ?? 0;
+        module.waitAfterExecOff = moduleModel.waitAfterExecOff ?? 0;
         return module;
     }
 

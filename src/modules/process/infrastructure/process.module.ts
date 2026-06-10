@@ -31,6 +31,7 @@ import { PingController } from './controllers/ping.controller';
 import { ModbusConnectionRepository } from './repositories/modbusConnection.repository';
 import { ModbusTaskRepository } from './repositories/modbusTask.repository';
 import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
+import { InverterRepository } from './repositories/inverter.repository';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -58,6 +59,7 @@ import { ModbusTaskService } from '@process/domain/services/modbus-task.service'
         DataRepository,
         ModbusConnectionRepository,
         ModbusTaskRepository,
+        InverterRepository,
         //---------------------//
         AuthenticationService,
         StructureService,
