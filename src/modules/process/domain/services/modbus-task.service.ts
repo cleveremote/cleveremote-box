@@ -35,7 +35,7 @@ export class ModbusTaskService {
         private modbusTaskRepository: ModbusTaskRepository,
         private inverterRepository: InverterRepository,
         private readonly logger: Logger
-    ) {}
+    ) { }
 
     public execute(taskId: string, param?: { value: number }): Promise<void> {
         return new Promise<void>((resolve, reject) => {
@@ -45,22 +45,22 @@ export class ModbusTaskService {
     }
 
     public applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => { 
             this._queue.push({ inverterConfig: { inverterId, params }, resolve, reject });
             if (!this._isProcessing) this._processQueue();
         });
-    }
+    } 
 
     private async _processQueue(): Promise<void> {
         if (this._isProcessing || this._queue.length === 0) return;
-        this._isProcessing = true;
+        this._isProcessing = true; 
         while (this._queue.length > 0) {
             const entry = this._queue.shift();
             try {
-                if (entry.inverterConfig) { 
+                if (entry.inverterConfig) {
                     await this._applyInverterConfig(entry.inverterConfig.inverterId, entry.inverterConfig.params);
                 } else {
-                    await this._executeTask(entry.taskId, entry.param); 
+                    await this._executeTask(entry.taskId, entry.param);
                 }
                 entry.resolve();
             } catch (err) {
@@ -69,6 +69,53 @@ export class ModbusTaskService {
         }
         this._isProcessing = false;
     }
+
+
+    /**
+     * Décode tous les flottants IEEE754 (single precision) contenus dans
+     * un tableau de registres Modbus, à partir d'une adresse de départ,
+     * et applique un facteur d'échelle (scale) sur chaque valeur.
+     *
+     * Ordre utilisé : low word first, low byte first
+     * (selon doc compteur ultrasonique)
+     *
+     * @param {number[]} registers - Tableau des registres lus (data.data)
+     * @param {number} startAddress - Adresse du premier registre lu (ex: 1447)
+     * @param {number} length - Nombre de registres lus (ex: 2)
+     * @param {number} scale - Facteur d'échelle à appliquer (ex: 1, 0.001, etc.)
+     * @returns {Object} Map { adresse: valeurFlottante }
+     */
+    private decodeFloats(registers, startAddress, length, scale = 1, wordSwap = false) {
+        if (registers.length !== length) {
+            throw new Error(
+                `Le tableau de registres (${registers.length}) ne correspond pas au length (${length})`
+            );
+        }
+
+        const result = {};
+
+        for (let i = 0; i + 1 < length; i += 2) {
+            let reg1 = registers[i];
+            let reg2 = registers[i + 1];
+
+            if (wordSwap) {
+                [reg1, reg2] = [reg2, reg1];
+            }
+
+            const buf = Buffer.alloc(4);
+            buf[0] = reg1 & 0xFF;
+            buf[1] = (reg1 >> 8) & 0xFF;
+            buf[2] = reg2 & 0xFF;
+            buf[3] = (reg2 >> 8) & 0xFF;
+
+            const address = startAddress + i;
+            result[address] = buf.readFloatLE(0) * scale;
+        }
+
+        return result;
+    }
+
+
 
     private async _executeTask(taskId: string, param?: { value: number }): Promise<void> {
         if (!taskId) {
@@ -81,7 +128,7 @@ export class ModbusTaskService {
         }
 
         const connConfig = await this.modbusConnectionRepository.get(taskModel.connectionId);
-        const connConfigModel = ModbusConnectionConfigEntity.mapToModel((connConfig as ModbusConnectionConfigEntity ));
+        const connConfigModel = ModbusConnectionConfigEntity.mapToModel((connConfig as ModbusConnectionConfigEntity));
         if (!connConfigModel) {
             this.logger.error({ connectionId: taskModel.connectionId }, 'no modbus connection config found');
         }
@@ -92,15 +139,16 @@ export class ModbusTaskService {
         try {
             // --- Connexion ---
             if (connConfigModel.protocol === "tcp") {
-              await client.connectTCP(connConfigModel.ipAddress, { port: connConfigModel.port });
+                await client.connectTCP(connConfigModel.ipAddress, { port: connConfigModel.port });
             } else if (connConfigModel.protocol === "rtu") {
-              await client.connectRTUBuffered(connConfigModel.path, { baudRate: connConfigModel.baudrate || 9600 });
+                await client.connectRTUBuffered(connConfigModel.path, { baudRate: connConfigModel.baudrate || 9600 });
             } else {
-              throw new Error(`Protocole inconnu: ${connConfigModel.protocol}`);
+                throw new Error(`Protocole inconnu: ${connConfigModel.protocol}`);
             }
 
             client.setID(connConfigModel.slaveId);
             client.setTimeout(connConfigModel.timeout || 2000);
+            client.setTimeout(2000);
 
             this.logger.log({ connectionId: connConfigModel.id, ip: connConfigModel.ipAddress, port: connConfigModel.port }, 'modbus connected');
             this.logger.log({ task: taskModel.label }, 'executing modbus task');
@@ -114,39 +162,37 @@ export class ModbusTaskService {
 
             // --- Lecture ---
             if (fn.startsWith("read")) {
-              const length = params.length || 1;
-              result = await client[fn](addr, length);
-              if (!result?.data) throw new Error("Aucune donnée reçue");
+                const length = params.length || 1;  
+                result = await client[fn](addr, length); 
+                if (!result?.data) throw new Error("Aucune donnée reçue");
 
-              const raw = result.data;
-              let value = raw[0];
-              if (length === 2 && Array.isArray(raw)) value = (raw[0] << 16) | raw[1];
-              if (params.scale) value *= params.scale;
+                const values = this.decodeFloats(result.data, addr, length, params.scale,true);
+    
 
-              this.logger.log({ label: taskModel.label, value, unit: params.unit || '' }, 'modbus read result');
+                this.logger.log({ label: taskModel.label, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
-              if (param.value === undefined) throw new Error("Aucune valeur spécifiée pour l'écriture");
-              await client[fn](addr, param.value);
-              this.logger.log({ label: taskModel.label, value: param.value }, 'modbus write done');
+                if (param.value === undefined) throw new Error("Aucune valeur spécifiée pour l'écriture");
+                await client[fn](addr, param.value);
+                this.logger.log({ label: taskModel.label, value: param.value }, 'modbus write done');
             }
 
             // --- Fonction non supportée ---
             else {
-              throw new Error(`Type de fonction non supporté: ${fn}`);
+                throw new Error(`Type de fonction non supporté: ${fn}`);
             }
 
-          } catch (err) {
+        } catch (err) {
             this.logger.error({ taskId, err: err.message }, 'modbus task error');
             const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
             if (err.modbusCode !== undefined) return;
             if (!networkCodes.includes(err.code)) {
-              throw err;
+                throw err;
             }
-          } finally {
+        } finally { 
             client.close(() => this.logger.log({ taskId }, 'modbus connection closed'));
-          }
+        }
     }
 
     private async _applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {

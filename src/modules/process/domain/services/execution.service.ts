@@ -405,6 +405,13 @@ export class ProcessService {
             if (action === ExecutableAction.ON) {
                 this.modBusService.execute("task-1234", { value: 96});
                 //this.percentToFrequencyRegister(seqFound.taskId, seqFound.vfd)
+                this.modBusService.applyInverterConfig("inverter-001", [
+                    
+                     { "param": "F00.11", "value": 4200,persist:true }, 
+                    
+
+
+                ])
             }
 
             seqFound.status = status;

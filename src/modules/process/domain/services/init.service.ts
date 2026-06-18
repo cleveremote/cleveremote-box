@@ -131,20 +131,20 @@ export class InitService {
                     
                     
                 
-                        { "param": "F11.08", "value": 750,persist:true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
+                        { "param": "F11.08", "value": 700,persist:true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
                         { "param": "F11.09", "value": 300,persist:true }, //avant que le pid ne prenne la main
                     
 
 
-                     { "param": "F00.11", "value": 4500,persist:true },
+                     { "param": "F00.11", "value": 4000,persist:true },
                      { "param": "F00.12", "value": 3000,persist:true },
-                     { "param": "F00.14", "value": 1500,persist:true },
-                     { "param": "F00.15", "value": 1500,persist:true }, 
+                     { "param": "F00.14", "value": 2500,persist:true },
+                     { "param": "F00.15", "value": 2500,persist:true }, 
 
                      { "param": "F11.17", "value": 2, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
                      { "param": "F11.18", "value": 10, persist: true }, //avant que le pid ne prenne la main
                      { "param": "F11.19", "value": 300, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-                     { "param": "F11.11", "value": 1500, persist: true }, //avant que le pid ne prenne la main
+                     { "param": "F11.11", "value": 3000, persist: true }, //avant que le pid ne prenne la main
                      { "param": "F11.12", "value": 30, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
                      { "param": "F11.13", "value": 0, persist: true }, //avant que le pid ne prenne la main
                      { "param": "F11.14", "value": 1500, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
@@ -160,8 +160,16 @@ export class InitService {
 
             })
             .then(() => {
-                //this.modBusService.execute("task-1234",{ value: 100 }); 
+                this.modBusService.execute("task-002-bis");
                 this.modBusService.execute("task-1234", { value: 330 });
+                this._processService.applyInverterConfig("inverter-001", [
+                    
+                    { "param": "F00.11", "value": 4200,persist:true },
+                    
+
+
+                ])
+                 
             })
 
             .catch((error) => {
