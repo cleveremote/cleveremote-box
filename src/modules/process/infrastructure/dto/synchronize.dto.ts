@@ -1,7 +1,7 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable max-lines */
 import { ApiProperty } from '@nestjs/swagger';
-import { ExecutableAction, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { ExecutableAction, ExecutableType, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
@@ -60,6 +60,8 @@ export class CycleSynchronizeDTO {
     public id: string;
     @IsString()
     public name?: string;
+    @IsEnum(ExecutableType)
+    public type: ExecutableType;
     @IsString()
     public description: string;
     @IsString()
@@ -83,9 +85,10 @@ export class CycleSynchronizeDTO {
         const cycle = new CycleModel();
         cycle.id = cycleSynchronizeDTO.id;
         cycle.name = cycleSynchronizeDTO.name;
+        cycle.type = cycleSynchronizeDTO.type;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
-        cycle.mapSectionId = cycleSynchronizeDTO.mapSectionId;
+        cycle.mapSectionId = cycleSynchronizeDTO.mapSectionId; 
 
         cycle.modePriority = [];
         if (cycleSynchronizeDTO.modePriority) {

@@ -64,6 +64,10 @@ export class SynchronizeService {
     public async synchronizeCycle(cycleModel: CycleModel): Promise<CycleModel> {
         const cycle = await this.cycleRepository.save(cycleModel);
         await this.configurationService.getStructure();
+        for (let index = 0; index < cycle.schedules.length; index++) {
+            const schedule = cycle.schedules[index];
+            await this.synchronizeSchedule(schedule)
+        }
         return cycle;
     }
 

@@ -13,6 +13,11 @@ export enum ExecutableAction {
     OFF = 'OFF'
 }
 
+export enum ExecutableType {
+    CYCLE = 'CYCLE',
+    MODULE = 'MODULE'
+}
+
 export enum ProcessMode {
     SCHEDULED = 'SCHEDULE',
     MANUAL = 'MANUAL',
@@ -38,6 +43,7 @@ export enum TASK {
 export interface IExecutable {
     id: string;
     name: string;
+    type:ExecutableType;
     status: ExecutableStatus;
     sequences: SequenceModel[];
     modePriority: { mode: ProcessMode; priority: number }[];

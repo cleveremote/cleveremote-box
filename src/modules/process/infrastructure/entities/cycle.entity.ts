@@ -17,8 +17,9 @@ export class CycleEntity extends CycleModel {
         cycle.id = cycleEntity.id;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleEntity.name;
+        cycle.type = cycleEntity.type;
         cycle.description = cycleEntity.description;
-       cycle.mapSectionId = cycleEntity.mapSectionId;
+        cycle.mapSectionId = cycleEntity.mapSectionId;
         cycle.style = cycleEntity.style;
         cycle.modePriority = [];
         cycleEntity.modePriority.forEach((mode) => {
@@ -45,6 +46,7 @@ export class CycleEntity extends CycleModel {
         cycle.id = cycleModel.id;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleModel.name;
+        cycle.type = cycleModel.type;
         cycle.description = cycleModel.description;
         cycle.mapSectionId = cycleModel.mapSectionId;
         cycle.style = cycleModel.style;

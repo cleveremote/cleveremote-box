@@ -1,5 +1,6 @@
 import {
     ExecutableStatus,
+    ExecutableType,
     IExecutable,
     ProcessMode
 } from '../interfaces/executable.interface';
@@ -11,6 +12,7 @@ import { TriggerModel } from './trigger.model';
 export class CycleModel implements IExecutable {
     public id: string;
     public name: string;
+    public type: ExecutableType = ExecutableType.CYCLE;
     public style: { bgColor: string; fontColor: string; iconColor: string };
     public description: string;
     public mapSectionId: string;
@@ -41,8 +43,8 @@ export class CycleModel implements IExecutable {
         this.status = ExecutableStatus.STOPPED;
     }
 
-    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string  }[] {
-        const executionLst: { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string }[] = [];
+    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number, vfd: number, taskId: string }[] {
+        const executionLst: { sequenceId: string; portNums: number[]; duration: number, vfd: number, taskId: string }[] = [];
         const sequences: SequenceModel[] = this.sequences;
         sequences.forEach((sequence) => {
             const sequenceId = sequence.id;
