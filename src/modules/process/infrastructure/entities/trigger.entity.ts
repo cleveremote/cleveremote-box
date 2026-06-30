@@ -9,6 +9,7 @@ export class TriggerEntity extends TriggerModel {
         trigger.id = triggerEntity.id;
         trigger.action = triggerEntity.action;
         trigger.cycleId = triggerEntity.cycleId;
+        trigger.taskId = triggerEntity.taskId;
         trigger.name = triggerEntity.name;
         trigger.description = triggerEntity.description;
         trigger.trigger = { timeAfter: triggerEntity.trigger.timeAfter, sunBehavior: triggerEntity.trigger.sunBehavior };
@@ -28,6 +29,7 @@ export class TriggerEntity extends TriggerModel {
         const trigger = new TriggerEntity();
         trigger.id = triggerModel.id;
         trigger.cycleId = triggerModel.cycleId;
+        trigger.taskId = triggerModel.taskId;
         trigger.name = triggerModel.name;
         trigger.description = triggerModel.description;
         trigger.trigger = { timeAfter: triggerModel.trigger.timeAfter, sunBehavior: triggerModel.trigger.sunBehavior };

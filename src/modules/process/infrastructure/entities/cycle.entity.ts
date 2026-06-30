@@ -15,6 +15,7 @@ export class CycleEntity extends CycleModel {
     public static mapToModel(cycleEntity: CycleEntity): CycleModel {
         const cycle = new CycleModel();
         cycle.id = cycleEntity.id;
+        cycle.taskId = cycleEntity.taskId;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleEntity.name;
         cycle.type = cycleEntity.type;
@@ -44,6 +45,7 @@ export class CycleEntity extends CycleModel {
     public static mapToEntity(cycleModel: CycleModel): CycleEntity {
         const cycle = new CycleEntity();
         cycle.id = cycleModel.id;
+        cycle.taskId = cycleModel.taskId;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleModel.name;
         cycle.type = cycleModel.type;

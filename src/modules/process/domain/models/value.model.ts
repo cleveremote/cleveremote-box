@@ -4,7 +4,8 @@ import { SensorValueModel } from './sensor-value.model';
 
 export enum ExecutableType {
     CYCLE = 'CYCLE',
-    SEQUENCE = 'SEQUENCE'
+    SEQUENCE = 'SEQUENCE',
+    TASK = 'TASK'
 }
 
 export enum ReadableType {

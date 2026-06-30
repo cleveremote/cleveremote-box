@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { delayWhen, from, map, mergeMap, Observable, of, Subject, tap } from 'rxjs';
 import { SocketIoClientProxyService } from '../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
@@ -28,6 +28,7 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { DataRepository } from '@process/infrastructure/repositories/data.repository';
 import { type InverterConfigParam, ModbusTaskService } from './modbus-task.service';
+import { TaskService } from './task.service';
 
 @Injectable()
 export class ProcessService {
@@ -42,6 +43,7 @@ export class ProcessService {
         private valueRepository: ValueRepository,
         private dataRepository: DataRepository,
         private modBusService: ModbusTaskService,
+        @Inject(forwardRef(() => TaskService)) private taskService: TaskService,
         private readonly logger: Logger
     ) {
 
@@ -66,6 +68,9 @@ export class ProcessService {
                 if (state[0]?.status !== ExecutableStatus.STOPPED) {
                     await this._processProgress(sequence.id, ExecutableAction.OFF).then(() => true);
                 }
+            }
+            if (process.cycle.taskId) {
+                await this.taskService.deactivateIfAllCyclesStopped(process.cycle.taskId);
             }
         }
         setTimeout(() => {

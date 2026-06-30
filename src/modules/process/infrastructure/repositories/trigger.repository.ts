@@ -25,10 +25,10 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         const entity = TriggerEntity.mapToEntity(model);
         const idToDelete = this.shouldDelete(entity.id);
         if (idToDelete) {
-            await this.delete(idToDelete, entity.cycleId);
-            return entity; 
+            await this.delete(idToDelete, entity.cycleId, entity.taskId);
+            return entity;
         }
-        const found = await this.get(entity.id, entity.cycleId);
+        const found = await this.get(entity.id, entity.cycleId, entity.taskId);
         if (found) {
             result = await this.update(entity);
         } else {
@@ -39,7 +39,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
     }
 
     public async create(entity: TriggerEntity): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId);
+        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
         await this.dbService.DB_STRUCTURE.push(`${parentNode}/triggers[]`, entity);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, entity.id);
         const found = index !== -1 ? await this.dbService.DB_STRUCTURE.getObject<TriggerEntity>(`${parentNode}/triggers[${index}]`) : null;
@@ -50,7 +50,7 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
     }
 
     public async update(entity: TriggerEntity): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId);
+        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, entity.id);
         if (index !== -1) {
             await this.dbService.DB_STRUCTURE.push(`${parentNode}/triggers[${index}]`, entity);
@@ -59,8 +59,8 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         throw new ElementNotFoundExeception(entity.id, 'update', 'trigger');
     }
 
-    public async delete(id: string, parentId: string): Promise<boolean> {
-        const parentNode = await this._getParentNode(parentId);
+    public async delete(id: string, parentId: string, taskId?: string): Promise<boolean> {
+        const parentNode = await this._getParentNode(parentId, taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, id);
         if (index !== -1) {
             await this.dbService.DB_STRUCTURE.delete(`${parentNode}/triggers[${index}]`);
@@ -69,8 +69,8 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         throw new ElementNotFoundExeception(id, 'delete', 'trigger');
     }
 
-    public async get(id: string, parentId: string): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(parentId);
+    public async get(id: string, parentId: string, taskId?: string): Promise<TriggerEntity> {
+        const parentNode = await this._getParentNode(parentId, taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, id);
         if (index !== -1) {
             return await this.dbService.DB_STRUCTURE.getObject<TriggerEntity>(`${parentNode}/triggers[${index}]`);
@@ -78,9 +78,20 @@ export class TriggerRepository implements IRepository<TriggerEntity> {
         return null;
     }
 
-    private async _getParentNode(parentId: string): Promise<string> {
-        const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', parentId); 
-        return cycleIndex !== -1 ? `/cycles[${cycleIndex}]` : null;
+    private async _getParentNode(cycleId?: string, taskId?: string): Promise<string> {
+        if (cycleId) {
+            const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', cycleId);
+            if (cycleIndex !== -1) {
+                return `/cycles[${cycleIndex}]`;
+            }
+        }
+        if (taskId) {
+            const taskIndex = await this.dbService.DB_STRUCTURE.getIndex('/tasks', taskId);
+            if (taskIndex !== -1) {
+                return `/tasks[${taskIndex}]`;
+            }
+        }
+        return null;
     }
 
 }

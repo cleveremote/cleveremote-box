@@ -11,6 +11,8 @@ import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.m
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { TaskModel } from '@process/domain/models/task.model';
+import { ValveConfigModel } from '@process/domain/models/valve.model';
 import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { Type } from 'class-transformer';
@@ -60,6 +62,8 @@ export class CycleSynchronizeDTO {
     public id: string;
     @IsString()
     public name?: string;
+    @IsString()
+    public taskId?: string;
     @IsEnum(ExecutableType)
     public type: ExecutableType;
     @IsString()
@@ -85,6 +89,7 @@ export class CycleSynchronizeDTO {
         const cycle = new CycleModel();
         cycle.id = cycleSynchronizeDTO.id;
         cycle.name = cycleSynchronizeDTO.name;
+        cycle.taskId = cycleSynchronizeDTO.taskId;
         cycle.type = cycleSynchronizeDTO.type;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
@@ -223,6 +228,50 @@ export class CycleSynchronizeDTO {
     }
 
 }
+
+export class TaskSynchronizeDTO {
+    @IsString()
+    public id: string;
+    @IsString()
+    public name?: string;
+    @IsString()
+    public description: string;
+    @IsString()
+    public mapSectionId?: string;
+    @Type(() => Style)
+    public style?: Style;
+    @IsArray()
+    @Type(() => TriggerSynchronizeDTO)
+    public triggers?: TriggerSynchronizeDTO[];
+    @IsArray()
+    @Type(() => ScheduleSynchronizeDTO)
+    public schedules?: ScheduleSynchronizeDTO[];
+
+    public static mapToTaskModel(taskSynchronizeDTO: TaskSynchronizeDTO): TaskModel {
+        const task = new TaskModel();
+        task.id = taskSynchronizeDTO.id;
+        task.name = taskSynchronizeDTO.name;
+        task.description = taskSynchronizeDTO.description;
+        task.mapSectionId = taskSynchronizeDTO.mapSectionId;
+        task.style = taskSynchronizeDTO.style;
+
+        task.triggers = [];
+        taskSynchronizeDTO.triggers?.forEach(triggerSync => {
+            const trigger = TriggerSynchronizeDTO.mapToTriggerModel(triggerSync);
+            trigger.taskId = taskSynchronizeDTO.id;
+            task.triggers.push(trigger);
+        });
+
+        task.schedules = [];
+        taskSynchronizeDTO.schedules?.forEach(scheduleSync => {
+            const schedule = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSync);
+            schedule.taskId = taskSynchronizeDTO.id;
+            task.schedules.push(schedule);
+        });
+
+        return task;
+    }
+}
 export class SunBehavior {
     @IsEnum(SunState)
     @IsNotEmpty()
@@ -257,8 +306,9 @@ export class ScheduleSynchronizeDTO {
     @IsString()
     public description: string;
     @IsString()
-    @IsNotEmpty()
-    public cycleId: string;
+    public cycleId?: string;
+    @IsString()
+    public taskId?: string;
     @Type(() => CronSync)
     public cron: CronSync;
     @IsBoolean()
@@ -271,6 +321,7 @@ export class ScheduleSynchronizeDTO {
         const scheduleModel = new ScheduleModel();
         scheduleModel.id = scheduleSynchronizeDTO.id;
         scheduleModel.cycleId = scheduleSynchronizeDTO.cycleId;
+        scheduleModel.taskId = scheduleSynchronizeDTO.taskId;
         scheduleModel.name = scheduleSynchronizeDTO.name;
         scheduleModel.description = scheduleSynchronizeDTO.description;
         scheduleModel.cron = new CronSync();
@@ -331,8 +382,9 @@ export class TriggerSynchronizeDTO {
     @IsString()
     public description: string;
     @IsString()
-    @IsNotEmpty()
-    public cycleId: string;
+    public cycleId?: string;
+    @IsString()
+    public taskId?: string;
     @IsEnum(ExecutableAction)
     @IsNotEmpty()
     @ApiProperty()
@@ -361,6 +413,7 @@ export class TriggerSynchronizeDTO {
         triggerModel.delay = triggerSynchronizeDTO.delay;
         triggerModel.action = triggerSynchronizeDTO.action;
         triggerModel.cycleId = triggerSynchronizeDTO.cycleId;
+        triggerModel.taskId = triggerSynchronizeDTO.taskId;
 
         if (triggerSynchronizeDTO.trigger?.sunBehavior) {
             triggerModel.trigger.sunBehavior = new SunBehavior();
@@ -428,6 +481,53 @@ export class SensorSynchronizeDTO {
 }
 
 
+export class ValveSynchronizeDTO {
+    @IsNotEmpty()
+    public id: string;
+    @IsString()
+    public name: string;
+    @IsString()
+    public description: string;
+    @IsString()
+    public connectionId: string;
+    @IsNumber()
+    public channel: number;
+    @IsString()
+    public flowMeterId: string;
+    @IsNumber()
+    public maxFlowRate?: number;
+    @IsNumber()
+    public kP?: number;
+    @IsNumber()
+    public minOpening?: number;
+    @IsNumber()
+    public maxOpening?: number;
+    @IsNumber()
+    public tolerance?: number;
+    @IsNumber()
+    public maxIterations?: number;
+    @IsNumber()
+    public iterationDelayMs?: number;
+
+    public static mapToValveModel(valveSynchronizeDTO: ValveSynchronizeDTO): ValveConfigModel {
+        const valveModel = new ValveConfigModel();
+        valveModel.id = valveSynchronizeDTO.id;
+        valveModel.name = valveSynchronizeDTO.name;
+        valveModel.description = valveSynchronizeDTO.description;
+        valveModel.connectionId = valveSynchronizeDTO.connectionId;
+        valveModel.channel = valveSynchronizeDTO.channel;
+        valveModel.flowMeterId = valveSynchronizeDTO.flowMeterId;
+        if (valveSynchronizeDTO.maxFlowRate !== undefined) valveModel.maxFlowRate = valveSynchronizeDTO.maxFlowRate;
+        if (valveSynchronizeDTO.kP !== undefined) valveModel.kP = valveSynchronizeDTO.kP;
+        if (valveSynchronizeDTO.minOpening !== undefined) valveModel.minOpening = valveSynchronizeDTO.minOpening;
+        if (valveSynchronizeDTO.maxOpening !== undefined) valveModel.maxOpening = valveSynchronizeDTO.maxOpening;
+        if (valveSynchronizeDTO.tolerance !== undefined) valveModel.tolerance = valveSynchronizeDTO.tolerance;
+        if (valveSynchronizeDTO.maxIterations !== undefined) valveModel.maxIterations = valveSynchronizeDTO.maxIterations;
+        if (valveSynchronizeDTO.iterationDelayMs !== undefined) valveModel.iterationDelayMs = valveSynchronizeDTO.iterationDelayMs;
+        return valveModel;
+    }
+}
+
 export class SynchronizeDTO {
     @IsNotEmpty()
     public id: string;
@@ -464,6 +564,9 @@ export class StructureSynchronizeDTO {
     @Type(() => CycleSynchronizeDTO)
     public cycles: CycleSynchronizeDTO[];
     @IsArray()
+    @Type(() => TaskSynchronizeDTO)
+    public tasks?: TaskSynchronizeDTO[];
+    @IsArray()
     @Type(() => SensorSynchronizeDTO)
     public sensors: SensorSynchronizeDTO[];
 
@@ -471,10 +574,15 @@ export class StructureSynchronizeDTO {
 
         const structureModel = new StructureModel();
         structureModel.cycles = [];
+        structureModel.tasks = [];
         structureModel.sensors = [];
 
         structureSynchronizeDTO.cycles.forEach(cycle => {
             structureModel.cycles.push(CycleSynchronizeDTO.mapToCycleModel(cycle));
+        });
+
+        structureSynchronizeDTO.tasks?.forEach(task => {
+            structureModel.tasks.push(TaskSynchronizeDTO.mapToTaskModel(task));
         });
 
         structureSynchronizeDTO.sensors.forEach(cycle => {

@@ -51,6 +51,11 @@ export class StructureService {
                 triggers = [...new Set([...triggers, ...cycle.triggers])];
             });
 
+            this.structure.tasks.forEach((task) => {
+                triggers = triggers.concat(task.triggers);
+                triggers = [...new Set([...triggers, ...task.triggers])];
+            });
+
             this.sequences = sequences;
             this.schedules = schedules;
             this.triggers = triggers;
@@ -63,6 +68,7 @@ export class StructureService {
         const struc = await this.getStructure();
         const sequencesProc: ProcessValueEntity[] = await this.valueRepository.getValues('SEQUENCE') as ProcessValueEntity[];
         const cyclesProc: ProcessValueEntity[] = await this.valueRepository.getValues('CYCLE') as ProcessValueEntity[];
+        const tasksProc: ProcessValueEntity[] = await this.valueRepository.getValues('TASK') as ProcessValueEntity[];
 
         cyclesProc?.forEach(cycle => {
             const structCycle = struc.cycles.find((x) => x.id === cycle.id);
@@ -71,6 +77,13 @@ export class StructureService {
                 if (structCycle.status === ExecutableStatus.IN_PROCCESS) {
                     structCycle.progression = { duration: cycle.duration, startedAt: cycle.startedAt };
                 }
+            }
+        });
+
+        tasksProc?.forEach(task => {
+            const structTask = struc.tasks.find((x) => x.id === task.id);
+            if (structTask) {
+                structTask.isActive = ExecutableStatus[task.status] === ExecutableStatus.IN_PROCCESS;
             }
         });
 

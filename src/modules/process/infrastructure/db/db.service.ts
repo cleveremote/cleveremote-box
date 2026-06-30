@@ -99,6 +99,9 @@ export class DbService {
             if (!await this.DB_STRUCTURE.exists('/modbusTasks')) {
                 await this.DB_STRUCTURE.push('/modbusTasks', []);
             }
+            if (!await this.DB_STRUCTURE.exists('/valves')) {
+                await this.DB_STRUCTURE.push('/valves', []);
+            }
 
         } catch (error) {
             this.logger.error({ error }, 'DB_STRUCTURE could not be loaded, restoring from backup');

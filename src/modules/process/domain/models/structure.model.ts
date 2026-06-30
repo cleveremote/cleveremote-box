@@ -5,12 +5,17 @@ import { ModuleModel } from './module.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
 import { InverterModel } from './inverter.model';
+import { TaskModel } from './task.model';
+import { ValveConfigModel } from './valve.model';
 export class StructureModel {
     public modbusConnections: ModbusConnectionConfigModel[] = [];
     public modbusTasks: ModbusTaskConfigModel[] = [];
+    public devices: ModbusTaskConfigModel[] = [];
     public cycles: CycleModel[] = [];
+    public tasks: TaskModel[] = [];
     public sensors: SensorModel[] = [];
     public inverters: InverterModel[] = [];
+    public valves: ValveConfigModel[] = [];
     public values: any[] = [];
     public getModules(): ModuleModel[] {
         let modules: ModuleModel[] = [];

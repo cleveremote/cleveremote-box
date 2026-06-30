@@ -12,6 +12,7 @@ import { TriggerModel } from './trigger.model';
 export class CycleModel implements IExecutable {
     public id: string;
     public name: string;
+    public taskId?: string;
     public type: ExecutableType = ExecutableType.CYCLE;
     public style: { bgColor: string; fontColor: string; iconColor: string };
     public description: string;

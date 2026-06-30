@@ -1,8 +1,9 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
+import { TaskService } from './task.service';
 import { StructureService } from './configuration.service';
 import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
@@ -42,7 +43,8 @@ export class TriggerService {
         private sensorValueRepository: SensorValueRepository,
         private dataRepository: DataRepository,
         private valueRepository: ValueRepository,
-        private processService: ProcessService,
+        @Inject(forwardRef(() => ProcessService)) private processService: ProcessService,
+        @Inject(forwardRef(() => TaskService)) private taskService: TaskService,
         private readonly logger: Logger
     ) {
     }
@@ -159,17 +161,32 @@ export class TriggerService {
 
         const scheduleModel = new ScheduleModel();
         scheduleModel.cycleId = trigger.cycleId;
+        scheduleModel.taskId = trigger.taskId;
         scheduleModel.id = 'trigger_' + math.random();
         scheduleModel.cron = { date: new Date(executionDate) };
         scheduleModel.shouldConfirmation = trigger.shouldConfirmation;
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
-        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
-        const methode = async (): Promise<void> => {
-            await this.scheduleService.clearAllSchedules();
-            await this.processService.execute({ ...process });
-            trigger.isCheckInProgress = false;
-            this.checkTriggerQueueProcess.next({ trigger, data })
-        }; 
+
+        let methode: () => Promise<void>;
+        if (trigger.taskId) {
+            methode = async (): Promise<void> => {
+                await this.scheduleService.clearAllSchedules();
+                const task = this.configurationService.structure.tasks.find(t => t.id === trigger.taskId);
+                if (task) {
+                    await this.taskService.setActive(task, trigger.action);
+                }
+                trigger.isCheckInProgress = false;
+                this.checkTriggerQueueProcess.next({ trigger, data });
+            };
+        } else {
+            const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
+            methode = async (): Promise<void> => {
+                await this.scheduleService.clearAllSchedules();
+                await this.processService.execute({ ...process });
+                trigger.isCheckInProgress = false;
+                this.checkTriggerQueueProcess.next({ trigger, data })
+            };
+        }
 
         this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, ProcessType.FORCE, methode);
     }

@@ -4,6 +4,7 @@ import { StructureService } from './configuration.service';
 import { ProcessService } from './execution.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerService } from './trigger.service';
+import { TaskService } from './task.service';
 import { SensorService } from './sensor.service';
 import { DbService } from '@process/infrastructure/db/db.service';
 import { AuthenticationService } from './authentication.service';
@@ -11,6 +12,8 @@ import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
 import { ModbusTaskService } from './modbus-task.service';
+import { ValveRepository } from '@process/infrastructure/repositories/valve.repository';
+import { ValveConfigModel } from '../models/valve.model';
 
 
 @Injectable()
@@ -22,9 +25,11 @@ export class InitService {
         private processService: ProcessService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
+        private taskService: TaskService,
         private sensorService: SensorService,
         private bleService: BleService,
         private modBusService: ModbusTaskService,
+        private valveRepository: ValveRepository,
         private readonly logger: Logger,
         private readonly _processService: ProcessService
     ) { }
@@ -57,13 +62,16 @@ export class InitService {
 
         return wrap('DbService.initialize', () => this.dbService.initialize())
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
+            .then(() => wrap('InitService.seedDefaultValves', () => this._seedDefaultValves()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
+            .then(() => wrap('TaskService.initialize', () => this.taskService.initialize()))
             .then(() => wrap('SensorService.initSensor', () => this.sensorService.initSensor()))
             .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
             .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
+            .then(() => wrap('TaskService.restartAllTaskSchedules', () => this.taskService.restartAllTaskSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
             .then(() => {
@@ -210,6 +218,28 @@ export class InitService {
             .then(() => {
                 this.logger.log('processes initialized');
             })
+    }
+
+    private async _seedDefaultValves(): Promise<void> {
+        const defaultValves: { id: string; name: string; description: string; channel: number }[] = [
+            { id: 'venturi-valve-1', name: 'Injection Venturi Valve 1', description: 'Vanne proportionnelle de régulation du débit d\'injection Venturi - voie 1', channel: 1 },
+            { id: 'venturi-valve-2', name: 'Injection Venturi Valve 2', description: 'Vanne proportionnelle de régulation du débit d\'injection Venturi - voie 2', channel: 2 }
+        ];
+
+        for (const defaultValve of defaultValves) {
+            const alreadyExists = this.configurationService.structure.valves?.some(valve => valve.id === defaultValve.id);
+            if (alreadyExists) continue;
+
+            const valve = new ValveConfigModel();
+            valve.id = defaultValve.id;
+            valve.name = defaultValve.name;
+            valve.description = defaultValve.description;
+            valve.channel = defaultValve.channel;
+            await this.valveRepository.save(valve);
+            this.logger.log({ valveId: valve.id, name: valve.name }, 'default valve seeded');
+        }
+
+        await this._loadConfiguration();
     }
 
     private _loadConfiguration(): Promise<void> {

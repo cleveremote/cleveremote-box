@@ -9,16 +9,20 @@ import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { CycleSynchronizeDTO, ModbusConnectionConfigDTO, ModbusTaskConfigDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, ModbusConnectionConfigDTO, ModbusTaskConfigDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TaskSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
+import { TaskModel } from '@process/domain/models/task.model';
 import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
 import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
 import { ModbusConnectionSynchronizeUC } from '@process/use-cases/modbusconnection-synchronize.uc';
 import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
+import { TaskSynchronizeUC } from '@process/use-cases/task-synchronize.uc';
+import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
+import { ValveConfigModel } from '@process/domain/models/valve.model';
 
 @Controller()
 export class ConfigurationController {
@@ -70,10 +74,25 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
+    @MessagePattern(['box/synchronize/task'])
+    public async synchroniseTask(@Payload() taskSynchronizeDTO: TaskSynchronizeDTO): Promise<TaskModel> {
+        const uc = new TaskSynchronizeUC(this._synchronizeService);
+        const input = TaskSynchronizeDTO.mapToTaskModel(taskSynchronizeDTO);
+        return uc.execute(input);
+    }
+
     @MessagePattern(['box/synchronize/sensor'])
     public async synchroniseSensor(@Payload() sensorSynchronizeDTO: SensorSynchronizeDTO): Promise<SensorModel> {
         const uc = new SensorSynchronizeUC(this._synchronizeService);
         const input = SensorSynchronizeDTO.mapToSensorModel(sensorSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @UsePipes(ValidationPipe)
+    @MessagePattern(['box/synchronize/valve'])
+    public async synchroniseValve(@Payload() valveSynchronizeDTO: ValveSynchronizeDTO): Promise<ValveConfigModel> {
+        const uc = new ValveSynchronizeUC(this._synchronizeService);
+        const input = ValveSynchronizeDTO.mapToValveModel(valveSynchronizeDTO);
         return uc.execute(input);
     }
 

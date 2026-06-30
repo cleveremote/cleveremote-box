@@ -23,10 +23,10 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
         let result: ScheduleEntity;
         const idToDelete = this.shouldDelete(entity.id)
         if (idToDelete) {
-            await this.delete(idToDelete, entity.cycleId);
+            await this.delete(idToDelete, entity.cycleId, entity.taskId);
             return entity;
         }
-        const found = await this.get(entity.id, entity.cycleId);
+        const found = await this.get(entity.id, entity.cycleId, entity.taskId);
         if (found) {
             result = await this.update(entity);
         } else {
@@ -37,7 +37,7 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
     }
 
     public async create(entity: ScheduleEntity): Promise<ScheduleEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId);
+        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
         await this.dbService.DB_STRUCTURE.push(`${parentNode}/schedules[]`, entity);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/schedules`, entity.id);
         const found = index !== -1 ? await this.dbService.DB_STRUCTURE.getObject<ScheduleEntity>(`${parentNode}/schedules[${index}]`) : null;
@@ -48,7 +48,7 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
     }
 
     public async update(entity: ScheduleEntity): Promise<ScheduleEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId);
+        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/schedules`, entity.id);
         if (index !== -1) {
             await this.dbService.DB_STRUCTURE.push(`${parentNode}/schedules[${index}]`, entity);
@@ -57,8 +57,8 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
         throw new ElementNotFoundExeception(entity.id, 'update', 'schedule');
     }
 
-    public async delete(id: string, parentId: string): Promise<boolean> {
-        const parentNode = await this._getParentNode(parentId);
+    public async delete(id: string, parentId: string, taskId?: string): Promise<boolean> {
+        const parentNode = await this._getParentNode(parentId, taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/schedules`, id);
         if (index !== -1) {
             await this.dbService.DB_STRUCTURE.delete(`${parentNode}/schedules[${index}]`);
@@ -67,8 +67,8 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
         throw new ElementNotFoundExeception(id, 'delete', 'schedule');
     }
 
-    public async get(id: string, parentId: string): Promise<ScheduleEntity> {
-        const parentNode = await this._getParentNode(parentId);
+    public async get(id: string, parentId: string, taskId?: string): Promise<ScheduleEntity> {
+        const parentNode = await this._getParentNode(parentId, taskId);
         const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/schedules`, id);
         if (index !== -1) {
             return await this.dbService.DB_STRUCTURE.getObject<ScheduleEntity>(`${parentNode}/schedules[${index}]`);
@@ -76,9 +76,20 @@ export class ScheduleRepository implements IRepository<ScheduleEntity> {
         return null;
     }
 
-    private async _getParentNode(parentId: string): Promise<string> {
-        const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', parentId);
-        return cycleIndex !== -1 ? `/cycles[${cycleIndex}]` : null;
+    private async _getParentNode(cycleId?: string, taskId?: string): Promise<string> {
+        if (cycleId) {
+            const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', cycleId);
+            if (cycleIndex !== -1) {
+                return `/cycles[${cycleIndex}]`;
+            }
+        }
+        if (taskId) {
+            const taskIndex = await this.dbService.DB_STRUCTURE.getIndex('/tasks', taskId);
+            if (taskIndex !== -1) {
+                return `/tasks[${taskIndex}]`;
+            }
+        }
+        return null;
     }
 
 }

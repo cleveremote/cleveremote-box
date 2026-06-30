@@ -15,8 +15,10 @@ import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
 import { DbService } from './db/db.service';
 import { CycleRepository } from './repositories/cycle.repository';
+import { TaskRepository } from './repositories/task.repository';
 import { TriggerRepository } from './repositories/trigger.repository';
 import { ScheduleRepository } from './repositories/schedule.repository';
+import { TaskService } from '@process/domain/services/task.service';
 import { SensorRepository } from './repositories/sensor.repository';
 import { ProcessValueRepository } from './repositories/process-value.repository';
 import { SensorValueRepository } from './repositories/sensor-value.repository';
@@ -32,6 +34,8 @@ import { ModbusConnectionRepository } from './repositories/modbusConnection.repo
 import { ModbusTaskRepository } from './repositories/modbusTask.repository';
 import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
 import { InverterRepository } from './repositories/inverter.repository';
+import { ValveControlService } from '@process/domain/services/valve-control.service';
+import { ValveRepository } from './repositories/valve.repository';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -49,6 +53,7 @@ import { InverterRepository } from './repositories/inverter.repository';
         //----Repositories------//
         AuthenticationRepository,
         CycleRepository,
+        TaskRepository,
         TriggerRepository,
         ScheduleRepository,
         StructureRepository,
@@ -60,6 +65,7 @@ import { InverterRepository } from './repositories/inverter.repository';
         ModbusConnectionRepository,
         ModbusTaskRepository,
         InverterRepository,
+        ValveRepository,
         //---------------------//
         AuthenticationService,
         StructureService,
@@ -70,9 +76,11 @@ import { InverterRepository } from './repositories/inverter.repository';
         SynchronizeService,
         ScheduleService,
         TriggerService,
+        TaskService,
         SensorService,
         BleService,
-        ModbusTaskService
+        ModbusTaskService,
+        ValveControlService
     ],
     exports: [
         ProcessService,

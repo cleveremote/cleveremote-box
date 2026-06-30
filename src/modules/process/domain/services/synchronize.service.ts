@@ -25,6 +25,12 @@ import { ModbusTaskRepository } from '@process/infrastructure/repositories/modbu
 import { ModbusTaskConfigModel } from '../models/modbusTaskConfig.model';
 import { SensorType } from '../interfaces/sensor.interface';
 import { SensorService } from './sensor.service';
+import { TaskModel } from '../models/task.model';
+import { TaskService } from './task.service';
+import { TaskRepository } from '@process/infrastructure/repositories/task.repository';
+import { ExecutableAction } from '../interfaces/executable.interface';
+import { ValveConfigModel } from '../models/valve.model';
+import { ValveRepository } from '@process/infrastructure/repositories/valve.repository';
 
 @Injectable()
 export class SynchronizeService {
@@ -36,10 +42,13 @@ export class SynchronizeService {
         private triggerRepository: TriggerRepository,
         private scheduleRepository: ScheduleRepository,
         private sensorRepository: SensorRepository,
+        private taskRepository: TaskRepository,
+        private valveRepository: ValveRepository,
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
+        private taskService: TaskService,
         private readonly logger: Logger
     ) { }
 
@@ -56,6 +65,7 @@ export class SynchronizeService {
                 sequences = [...new Set([...sequences, ...cycle.sequences])];
             });
             this.configurationService.sequences = sequences;
+            this.taskService.tasks = this.configurationService.structure.tasks;
 
             return data;
         });
@@ -69,6 +79,12 @@ export class SynchronizeService {
             await this.synchronizeSchedule(schedule)
         }
         return cycle;
+    }
+
+    public async synchronizeValve(valveModel: ValveConfigModel): Promise<ValveConfigModel> {
+        const valve = await this.valveRepository.save(valveModel);
+        await this.configurationService.getStructure();
+        return valve;
     }
 
     public async synchronizeModbusConnection(modbusConnectionModel: ModbusConnectionConfigModel): Promise<ModbusConnectionConfigModel> {
@@ -93,7 +109,33 @@ export class SynchronizeService {
     public async synchronizeSchedule(scheduleModel: ScheduleModel): Promise<ScheduleModel> {
         this.logger.log({ scheduleId: scheduleModel.id }, 'synchronizing schedule');
         const schedule = await this.scheduleRepository.save(scheduleModel);
-        return this.scheduleService.initSchedule(schedule || scheduleModel, !!this.scheduleRepository.shouldDelete(schedule.id));
+        const isDeleted = !!this.scheduleRepository.shouldDelete(schedule.id);
+        if (scheduleModel.taskId) {
+            const methode = async (): Promise<void> => {
+                setTimeout(async () => {
+                    await this.scheduleService.clearAllSchedules();
+                    const task = this.configurationService.structure.tasks.find(t => t.id === scheduleModel.taskId);
+                    if (task && !schedule.isPaused) {
+                        await this.taskService.setActive(task, ExecutableAction.ON);
+                    }
+                }, schedule.cron.sunBehavior ? 0 : schedule.cron.after);
+            };
+            return this.scheduleService.initSchedule(schedule || scheduleModel, isDeleted, undefined, undefined, methode);
+        }
+        return this.scheduleService.initSchedule(schedule || scheduleModel, isDeleted);
+    }
+
+    public async synchronizeTask(taskModel: TaskModel): Promise<TaskModel> {
+        const task = await this.taskRepository.save(taskModel);
+        await this.configurationService.getStructure();
+        for (const schedule of task.schedules) {
+            await this.synchronizeSchedule(schedule);
+        }
+        for (const trigger of task.triggers) {
+            await this.synchronizeTrigger(trigger);
+        }
+        this.taskService.initTask(task, false);
+        return task;
     }
 
     public async sychronizeSensor(sensorData: SensorModel): Promise<SensorModel> {

@@ -5,6 +5,7 @@ import { ExecutableAction } from '../interfaces/executable.interface';
 export class TriggerModel {
     public id: string;
     public cycleId: string;
+    public taskId?: string;
     public name: string;
     public description: string;
     public conditions: ConditionModel[];

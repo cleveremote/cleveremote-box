@@ -157,6 +157,9 @@ export class SensorService {
             ttys = portList.find((x) => x.path === "/dev/ttyAMA0");
         }
         this.serialport = new SerialPort({ path: ttys.path, baudRate: 9600 })
+        this.serialport.on('error', (err) => {
+            this.logger.error({ err, path: ttys.path }, 'serial port error');
+        });
         const parser = new ReadlineParser()
         this.serialport.pipe(parser);
         parser.on('data', (data) => {

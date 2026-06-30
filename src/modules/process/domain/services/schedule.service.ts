@@ -1,6 +1,6 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable no-empty */
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { CronJob } from 'cron';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -21,7 +21,7 @@ export class ScheduleService {
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
         private configurationService: StructureService,
-        private processService: ProcessService,
+        @Inject(forwardRef(() => ProcessService)) private processService: ProcessService,
         private cycleRepository: CycleRepository,
         private scheduleRepository: ScheduleRepository,
         private readonly logger: Logger

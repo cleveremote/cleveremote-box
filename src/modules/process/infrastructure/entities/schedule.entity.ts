@@ -7,6 +7,7 @@ export class ScheduleEntity extends ScheduleModel {
         const schedule = new ScheduleModel();
         schedule.id = scheduleEntity.id;
         schedule.cycleId = scheduleEntity.cycleId;
+        schedule.taskId = scheduleEntity.taskId;
         schedule.name = scheduleEntity.name;
         schedule.description = scheduleEntity.description;
         schedule.cron = scheduleEntity.cron;
@@ -22,6 +23,7 @@ export class ScheduleEntity extends ScheduleModel {
         const schedule = new ScheduleEntity();
         schedule.id = scheduleModel.id;
         schedule.cycleId = scheduleModel.cycleId;
+        schedule.taskId = scheduleModel.taskId;
         schedule.name = scheduleModel.name;
         schedule.description = scheduleModel.description;
         schedule.cron = scheduleModel.cron;

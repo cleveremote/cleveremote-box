@@ -2,7 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ProcessModel } from '@process/domain/models/process.model';
-import { IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { ExecutableType } from '@process/domain/models/value.model';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 
 export enum USER_ENS_TYPE {
@@ -22,23 +23,30 @@ export class ProcessExecuteDTO {
     @ApiProperty()
     public action: ExecutableAction;
 
+    @IsEnum(ExecutableType)
+    @IsOptional()
+    @ApiProperty({ enum: ExecutableType, required: false, default: ExecutableType.CYCLE })
+    public executableType?: ExecutableType;
+
     @IsEnum(ProcessType)
-    @IsNotEmpty()
-    @ApiProperty()
-    public type: ProcessType;
+    @IsOptional()
+    @ApiProperty({ required: false })
+    public type?: ProcessType;
 
     @IsEnum(ProcessMode)
-    @IsNotEmpty()
-    @ApiProperty()
-    public mode: ProcessMode;
+    @IsOptional()
+    @ApiProperty({ required: false })
+    public mode?: ProcessMode;
 
     @IsString()
-    @ApiProperty()
-    public function: string;
+    @IsOptional()
+    @ApiProperty({ required: false })
+    public function?: string;
 
     @IsNumber()
-    @ApiProperty()
-    public duration: number;
+    @IsOptional()
+    @ApiProperty({ required: false })
+    public duration?: number;
 
     public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();

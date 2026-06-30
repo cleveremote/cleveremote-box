@@ -56,6 +56,14 @@ export class ValueRepository {
                     result = [res]
                 }
                 break;
+            case 'TASK':
+                res = await this.processValueRepository.get(id);
+                if (Array.isArray(res)) {
+                    result = res.filter(x => x.type === 'TASK');
+                } else {
+                    result = [res]
+                }
+                break;
             default:
                 result = await this.dbService.DB_VALUES.getObject<ValueEntity>('/');
                 break;
