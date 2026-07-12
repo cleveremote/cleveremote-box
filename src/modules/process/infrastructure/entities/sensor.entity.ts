@@ -1,35 +1,38 @@
-/* eslint-disable max-lines-per-function */
-import { SensorModel } from '@process/domain/models/sensor.model';
+import { ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
+import { SensorType } from '@process/domain/interfaces/sensor.interface';
 
 export class SensorEntity extends SensorModel {
 
     public static mapToModel(sensorEntity: SensorEntity): SensorModel {
-        const sensor = new SensorModel();
-        sensor.id = sensorEntity.id;
-        sensor.name = sensorEntity.name;
-        sensor.taskId = sensorEntity.taskId;
-        sensor.cronPattern = sensorEntity.cronPattern;
-        sensor.description = sensorEntity.description;
-        sensor.style = sensorEntity.style;
-        sensor.id = sensorEntity.id;
-        sensor.type = sensorEntity.type;
-        sensor.unit = sensorEntity.unit;
-        return sensor;
+        const model = new SensorModel();
+        model.id = sensorEntity.id;
+        model.name = sensorEntity.name;
+        model.description = sensorEntity.description;
+        model.style = sensorEntity.style;
+        model.type = sensorEntity.type;
+        model.config = SensorEntity._copyConfig(sensorEntity.type, sensorEntity.config);
+        return model;
     }
 
     public static mapToEntity(sensorModel: SensorModel): SensorEntity {
-        const sensor = new SensorModel();
-        sensor.id = sensorModel.id;
-        sensor.name = sensorModel.name;
-        sensor.taskId = sensorModel.taskId;
-        sensor.cronPattern = sensorModel.cronPattern;
-        sensor.description = sensorModel.description;
-        sensor.style = sensorModel.style;
-        sensor.id = sensorModel.id;
-        sensor.type = sensorModel.type;
-        sensor.unit = sensorModel.unit;
-        return sensor;
+        const entity = new SensorEntity();
+        entity.id = sensorModel.id;
+        entity.name = sensorModel.name;
+        entity.description = sensorModel.description;
+        entity.style = sensorModel.style;
+        entity.type = sensorModel.type;
+        entity.config = SensorEntity._copyConfig(sensorModel.type, sensorModel.config);
+        return entity;
+    }
+
+    private static _copyConfig(
+        type: SensorType,
+        config: ForcastSensorConfigModel | ComSensorConfigModel
+    ): ForcastSensorConfigModel | ComSensorConfigModel {
+        if (type === SensorType.FORCAST) {
+            return Object.assign(new ForcastSensorConfigModel(), config as ForcastSensorConfigModel);
+        }
+        return Object.assign(new ComSensorConfigModel(), config as ComSensorConfigModel);
     }
 
 }
-

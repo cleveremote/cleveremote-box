@@ -1,15 +1,15 @@
 import { MockClass } from '@framework/utils/test.utils';
-import { SynchronizeCycleModel, SynchronizeScheduleModel } from '@process/domain/models/synchronize.model';
+import { SynchronizeScheduleModel } from '@process/domain/models/synchronize.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ScheduleSynchronizeUC } from './schedule-synchronize.uc';
 describe('Process use case test', () => {
     it('Should execute schedule sync and return a response dto', async () => {
         // GIVEN
         const synchronizeService = MockClass(SynchronizeService);
-        jest.spyOn(synchronizeService, 'sychronizeSchedule')
+        jest.spyOn(synchronizeService, 'synchronizeSchedule')
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            .mockImplementation((_process: SynchronizeScheduleModel): Promise<SynchronizeCycleModel> =>
-                Promise.resolve().then(() => new SynchronizeCycleModel()));
+            .mockImplementation((_process: SynchronizeScheduleModel): Promise<SynchronizeScheduleModel> =>
+                Promise.resolve().then(() => new SynchronizeScheduleModel()));
         const synchronizeScheduleModel = new SynchronizeScheduleModel();
 
         // WHEN
@@ -17,8 +17,8 @@ describe('Process use case test', () => {
         await uc.execute(synchronizeScheduleModel);
 
         // THEN
-        expect(synchronizeService.sychronizeSchedule).toHaveBeenLastCalledWith(synchronizeScheduleModel);
-        expect(synchronizeService.sychronizeSchedule).toBeTruthy();
-        expect(synchronizeService.sychronizeSchedule).toHaveBeenCalledTimes(1);
+        expect(synchronizeService.synchronizeSchedule).toHaveBeenLastCalledWith(synchronizeScheduleModel);
+        expect(synchronizeService.synchronizeSchedule).toBeTruthy();
+        expect(synchronizeService.synchronizeSchedule).toHaveBeenCalledTimes(1);
     });
 });

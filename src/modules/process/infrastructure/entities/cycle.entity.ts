@@ -2,7 +2,6 @@
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { ConditionModel } from '@process/domain/models/condition.model';
 import { CycleModel } from '@process/domain/models/cycle.model';
-import { ModuleModel } from '@process/domain/models/module.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
@@ -14,13 +13,11 @@ export class CycleEntity extends CycleModel {
 
     public static mapToModel(cycleEntity: CycleEntity): CycleModel {
         const cycle = new CycleModel();
-        cycle.id = cycleEntity.id;
-        cycle.taskId = cycleEntity.taskId;
+        cycle._id = cycleEntity._id;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleEntity.name;
         cycle.type = cycleEntity.type;
         cycle.description = cycleEntity.description;
-        cycle.mapSectionId = cycleEntity.mapSectionId;
         cycle.style = cycleEntity.style;
         cycle.modePriority = [];
         cycleEntity.modePriority.forEach((mode) => {
@@ -44,13 +41,11 @@ export class CycleEntity extends CycleModel {
 
     public static mapToEntity(cycleModel: CycleModel): CycleEntity {
         const cycle = new CycleEntity();
-        cycle.id = cycleModel.id;
-        cycle.taskId = cycleModel.taskId;
+        cycle._id = cycleModel._id;
         cycle.status = ExecutableStatus.STOPPED;
         cycle.name = cycleModel.name;
         cycle.type = cycleModel.type;
         cycle.description = cycleModel.description;
-        cycle.mapSectionId = cycleModel.mapSectionId;
         cycle.style = cycleModel.style;
         cycle.modePriority = [];
         cycleModel.modePriority.forEach((mode) => {

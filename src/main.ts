@@ -10,6 +10,16 @@ import { SocketIoClientStrategy } from './common/websocket/socket-io-client.stra
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(AppModule, { cors: true, bufferLogs: true });
     app.useLogger(app.get(Logger));
+    const logger = app.get(Logger);
+    // filet de securite : une rejection de promesse non geree (ex: sendMessage() fire-and-forget
+    // sans .catch()) tue le process par defaut depuis Node 15 ; on log au lieu de crasher pour ne
+    // pas faire tomber le controle de l'irrigation pour une erreur de synchro websocket non critique.
+    process.on('unhandledRejection', (reason) => {
+        logger.error({ err: reason }, 'unhandled promise rejection');
+    });
+    process.on('uncaughtException', (err) => {
+        logger.error({ err }, 'uncaught exception');
+    });
     const appConfig = app.get<ConfigService>(ConfigService);
     const socketIoClientProvider = app.get<SocketIoClientProvider>(
         SocketIoClientProvider

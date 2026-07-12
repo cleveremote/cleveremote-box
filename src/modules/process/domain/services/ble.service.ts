@@ -1,8 +1,6 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
-import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import * as fs from 'fs';
 import * as HciSocket from 'hci-socket';
 import { AuthenticationService } from './authentication.service';
@@ -19,8 +17,6 @@ const deviceName = 'clv-ble';
 export class BleService {
 
     public constructor(
-        private structureRepository: StructureRepository,
-        private valueRepository: ValueRepository,
         private authenticationService: AuthenticationService,
         private readonly logger: Logger
     ) {
@@ -175,7 +171,7 @@ export class BleService {
             if (mergedMap.has(item.name)) {
                 mergedMap.set(item.name, { ...mergedMap.get(item.name), ...item });
             } else {
-                mergedMap.set(item.name, { ...item, "in-use": false }); // Default `in-use` to false
+                mergedMap.set(item.name, { 'in-use': false, ...item }); // Default `in-use` to false, but keep the scan's own value if present
             }
         });
 

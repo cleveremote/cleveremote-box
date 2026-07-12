@@ -3,3 +3,9 @@ export class ElementNotFoundExeception extends Error {
         super(`cannot perform ${action} => element ${id} type of ${entityName} not found`);
     }
 }
+
+export class InvalidIdException extends Error {
+    public constructor(id: string, entityName: string) {
+        super(`invalid id "${id}" for ${entityName}: expected a valid uuid`);
+    }
+}

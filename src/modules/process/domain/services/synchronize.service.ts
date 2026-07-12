@@ -4,173 +4,175 @@ import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { CycleModel } from '../models/cycle.model';
+import {
+    SynchronizeActuatorModel,
+    SynchronizeComRequestModel,
+    SynchronizeCycleModel,
+    SynchronizeDeviceModel,
+    SynchronizeScheduleModel,
+    SynchronizeSensorModel,
+    SynchronizeTriggerModel
+} from '../models/synchronize.model';
 import { ScheduleModel } from '../models/schedule.model';
-import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
 import { StructureService } from './configuration.service';
 import { ScheduleService } from './schedule.service';
-import * as admin from 'firebase-admin';
 import { TriggerModel } from '../models/trigger.model';
 import { TriggerService } from './trigger.service';
 import { SensorModel } from '../models/sensor.model';
-import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { TriggerRepository } from '@process/infrastructure/repositories/trigger.repository';
-import { TriggerEntity } from '@process/infrastructure/entities/trigger.entity';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
+import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
-import { ModbusConnectionConfigModel } from '../models/modbusConnectionConfig.model';
-import { ModbusConnectionRepository } from '@process/infrastructure/repositories/modbusConnection.repository';
-import { ModbusTaskRepository } from '@process/infrastructure/repositories/modbusTask.repository';
-import { ModbusTaskConfigModel } from '../models/modbusTaskConfig.model';
-import { SensorType } from '../interfaces/sensor.interface';
+import { DeviceModel } from '../models/device.model';
+import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
+import { ComRequestModel } from '../models/com-request.model';
 import { SensorService } from './sensor.service';
-import { TaskModel } from '../models/task.model';
-import { TaskService } from './task.service';
-import { TaskRepository } from '@process/infrastructure/repositories/task.repository';
-import { ExecutableAction } from '../interfaces/executable.interface';
-import { ValveConfigModel } from '../models/valve.model';
-import { ValveRepository } from '@process/infrastructure/repositories/valve.repository';
+import { ActuatorModel } from '../models/actuator.model';
+import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 
 @Injectable()
 export class SynchronizeService {
     public constructor(
         private structureRepository: StructureRepository,
-        private modbusConnectionRepository: ModbusConnectionRepository,
-        private modbusTaskRepository: ModbusTaskRepository,
+        private deviceRepository: DeviceRepository,
+        private modbusTaskRepository: ComRequestRepository,
         private cycleRepository: CycleRepository,
+        private sequenceRepository: SequenceRepository,
         private triggerRepository: TriggerRepository,
         private scheduleRepository: ScheduleRepository,
         private sensorRepository: SensorRepository,
-        private taskRepository: TaskRepository,
-        private valveRepository: ValveRepository,
+        private actuatorRepository: ActuatorRepository,
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private taskService: TaskService,
         private readonly logger: Logger
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
         this.logger.log('synchronizing structure');
-        return this.structureRepository.save(structureModel).then((data) => {
-            this.configurationService.structure = data;
+        // toute la structure est persistee dans Mongo (remplacement complet par collection) ;
+        // structureRepository (json-db) ne garde plus qu'un squelette vide, immediatement ecrase
+        const incoming = {
+            // structureModel.cycles proviennent de StructureSynchronizeDTO.mapToStructureModel(), donc
+            // reellement des SynchronizeCycleModel (avec sequences: SynchronizeSequenceModel[])
+            cycles: structureModel.cycles as SynchronizeCycleModel[],
+            sensors: structureModel.sensors,
+            modbusTasks: structureModel.modbusTasks
+        };
+        structureModel.cycles = [];
+        structureModel.sensors = [];
+        structureModel.modbusTasks = [];
+        const data = await this.structureRepository.save(structureModel);
+        data.cycles = await this.cycleRepository.replaceAll(incoming.cycles);
+        data.sensors = await this.sensorRepository.replaceAll(incoming.sensors ?? []);
+        data.modbusTasks = await this.modbusTaskRepository.replaceAll(incoming.modbusTasks ?? []);
+        this.configurationService.structure = data;
 
-            const cycles = this.configurationService.structure.cycles;
-
-            let sequences: SequenceModel[] = [];
-            cycles.forEach((cycle) => {
-                sequences = sequences.concat(cycle.sequences);
-                sequences = [...new Set([...sequences, ...cycle.sequences])];
-            });
-            this.configurationService.sequences = sequences;
-            this.taskService.tasks = this.configurationService.structure.tasks;
-
-            return data;
-        });
+        return data;
     }
 
-    public async synchronizeCycle(cycleModel: CycleModel): Promise<CycleModel> {
+    public async synchronizeCycle(cycleModel: SynchronizeCycleModel): Promise<CycleModel> {
+        if (cycleModel.delete) {
+            await this._deleteCycle(cycleModel._id);
+            return { ...cycleModel, deletedAt: new Date() } as CycleModel;
+        }
         const cycle = await this.cycleRepository.save(cycleModel);
+        cycle.sequences = await this.sequenceRepository.replaceForCycle(cycle._id, cycleModel.sequences ?? []);
+        cycle.schedules = await this.scheduleRepository.replaceForCycle(cycle._id, cycleModel.schedules ?? []);
+        cycle.triggers = await this.triggerRepository.replaceForCycle(cycle._id, cycleModel.triggers ?? []);
         await this.configurationService.getStructure();
-        for (let index = 0; index < cycle.schedules.length; index++) {
-            const schedule = cycle.schedules[index];
-            await this.synchronizeSchedule(schedule)
+        for (const schedule of cycle.schedules) {
+            await this.scheduleService.initSchedule(schedule, false);
         }
         return cycle;
     }
 
-    public async synchronizeValve(valveModel: ValveConfigModel): Promise<ValveConfigModel> {
-        const valve = await this.valveRepository.save(valveModel);
+    // cascade deja geree par cycleRepository.delete() (soft-delete des sequences/schedules/triggers
+    // du cycle avant le cycle lui-meme) : ne pas retraiter les enfants du payload dans ce cas.
+    private async _deleteCycle(id: string): Promise<void> {
+        await this.cycleRepository.delete(id);
+        await this.configurationService.getStructure();
+    }
+
+    public async synchronizeValve(valveModel: SynchronizeActuatorModel): Promise<ActuatorModel> {
+        if (valveModel.delete) {
+            await this._deleteValve(valveModel._id);
+            return { ...valveModel, deletedAt: new Date() } as ActuatorModel;
+        }
+        const valve = await this.actuatorRepository.save(valveModel);
         await this.configurationService.getStructure();
         return valve;
     }
 
-    public async synchronizeModbusConnection(modbusConnectionModel: ModbusConnectionConfigModel): Promise<ModbusConnectionConfigModel> {
-        const modbusConnection = await this.modbusConnectionRepository.save(modbusConnectionModel);
+    private async _deleteValve(id: string): Promise<void> {
+        await this.actuatorRepository.delete(id);
         await this.configurationService.getStructure();
-        return modbusConnection;
     }
 
-    public async synchronizeModbusTask(modbusConnectionModel: ModbusTaskConfigModel): Promise<ModbusTaskConfigModel> {
-        const modbusConnection = await this.modbusTaskRepository.save(modbusConnectionModel);
-        await this.configurationService.getStructure();
-        return modbusConnection;
+    public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {
+        return this.actuatorRepository.saveMany(actuatorModels);
     }
 
+    public async synchronizeDeviceList(deviceModels: SynchronizeDeviceModel[]): Promise<DeviceModel[]> {
+        const devices = await this.deviceRepository.saveMany(deviceModels);
+        await this.configurationService.getStructure();
+        return devices;
+    }
 
-    public async synchronizeTrigger(trigerModel: TriggerModel): Promise<TriggerModel> {
+    public async synchronizeModbusTaskList(modbusTaskModels: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
+        const modbusTasks = await this.modbusTaskRepository.saveMany(modbusTaskModels);
+        await this.configurationService.getStructure();
+        return modbusTasks;
+    }
+
+    public async synchronizeTrigger(trigerModel: SynchronizeTriggerModel): Promise<TriggerModel> {
+        if (trigerModel.delete) {
+            await this._deleteTrigger(trigerModel.id);
+            return { ...trigerModel, deletedAt: new Date() } as TriggerModel;
+        }
         this.logger.log({ triggerId: trigerModel.id }, 'synchronizing trigger');
         const trigger = await this.triggerRepository.save(trigerModel);
-        return this.triggerService.initTrigger(trigger || trigerModel, !trigger);
+        return this.triggerService.initTrigger(trigger || trigerModel, false);
     }
 
-    public async synchronizeSchedule(scheduleModel: ScheduleModel): Promise<ScheduleModel> {
-        this.logger.log({ scheduleId: scheduleModel.id }, 'synchronizing schedule');
+    private async _deleteTrigger(id: string): Promise<void> {
+        this.logger.log({ triggerId: id }, 'deleting trigger');
+        await this.triggerRepository.delete(id);
+        await this.triggerService.initTrigger({ id } as TriggerModel, true);
+    }
+
+    public async synchronizeSchedule(scheduleModel: SynchronizeScheduleModel): Promise<ScheduleModel> {
+        if (scheduleModel.delete) {
+            await this._deleteSchedule(scheduleModel._id);
+            return { ...scheduleModel, deletedAt: new Date() } as ScheduleModel;
+        }
+        this.logger.log({ scheduleId: scheduleModel._id }, 'synchronizing schedule');
         const schedule = await this.scheduleRepository.save(scheduleModel);
-        const isDeleted = !!this.scheduleRepository.shouldDelete(schedule.id);
-        if (scheduleModel.taskId) {
-            const methode = async (): Promise<void> => {
-                setTimeout(async () => {
-                    await this.scheduleService.clearAllSchedules();
-                    const task = this.configurationService.structure.tasks.find(t => t.id === scheduleModel.taskId);
-                    if (task && !schedule.isPaused) {
-                        await this.taskService.setActive(task, ExecutableAction.ON);
-                    }
-                }, schedule.cron.sunBehavior ? 0 : schedule.cron.after);
-            };
-            return this.scheduleService.initSchedule(schedule || scheduleModel, isDeleted, undefined, undefined, methode);
-        }
-        return this.scheduleService.initSchedule(schedule || scheduleModel, isDeleted);
+        return this.scheduleService.initSchedule(schedule || scheduleModel, false);
     }
 
-    public async synchronizeTask(taskModel: TaskModel): Promise<TaskModel> {
-        const task = await this.taskRepository.save(taskModel);
-        await this.configurationService.getStructure();
-        for (const schedule of task.schedules) {
-            await this.synchronizeSchedule(schedule);
-        }
-        for (const trigger of task.triggers) {
-            await this.synchronizeTrigger(trigger);
-        }
-        this.taskService.initTask(task, false);
-        return task;
+    private async _deleteSchedule(id: string): Promise<void> {
+        this.logger.log({ scheduleId: id }, 'deleting schedule');
+        await this.scheduleRepository.delete(id);
+        await this.scheduleService.initSchedule({ _id: id } as ScheduleModel, true);
     }
 
-    public async sychronizeSensor(sensorData: SensorModel): Promise<SensorModel> {
-
+    public async sychronizeSensor(sensorData: SynchronizeSensorModel): Promise<SensorModel> {
+        if (sensorData.delete) {
+            await this._deleteSensor(sensorData.id);
+            return { ...sensorData, deletedAt: new Date() } as SensorModel;
+        }
         const sensor = await this.sensorRepository.save(sensorData);
-        if (sensorData.type !== SensorType.SCHEDULED) {
-            return sensor;
-        } else {
-            return this.sensorService.initScheduledSensor(sensor || sensorData, !!this.sensorRepository.shouldDelete(sensor.id));
-        }
+        return this.sensorService.initScheduledSensor(sensor || sensorData, false);
     }
 
-    private _testNotification() {
-        const serviceAccount =
-            require('src/modules/process/domain/interfaces/cleverapp-1ea3e-firebase-adminsdk-87jpt-fc18e22031.json');
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
+    private async _deleteSensor(id: string): Promise<void> {
+        await this.sensorRepository.delete(id);
+        await this.sensorService.initScheduledSensor({ id } as SensorModel, true);
     }
-
-    // sendNotification() {
-    //     console.log('configuration', configuration);
-    //     const message = {
-    //         notification: {
-    //             title: 'test title',
-    //             body: 'this is test body'
-    //         },
-    //         token: 'c7yPELY5Rra0sHw6Fpq1Kn:APA91bFLtT1CSjQrt-boVHapdlZapc585f0Sll0fwNQAew7s1Sa8SNadYTkqvYjfpCkkgtgkerytnCmnzdQ9zdVJjQIcd8awiL6wDZykoXDNfkqrafEGT2kEUOH001u1TvZ-B-oRLZpM'
-    //     }; //token c'est le token recuperer depuis l'application
-
-    //     admin.messaging().send(message).then((response) => {
-    //         console.log('message envoyé ');
-    //     }).catch((error) => {
-    //         console.log('message envoyé ', error);
-    //     })
-    // }
 
 }

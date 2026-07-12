@@ -1,97 +1,60 @@
-/* eslint-disable max-lines-per-function */
-import {
-    IRepository
-} from '@process/domain/interfaces/structure-repository.interface';
 import { Injectable } from '@nestjs/common';
-import { DbService } from '../db/db.service';
-import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
-import { TriggerEntity } from '../entities/trigger.entity';
 import { TriggerModel } from '@process/domain/models/trigger.model';
+import { SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
+import { InvalidIdException } from '@process/domain/errors/db-errors';
+import { isValidUuid } from '@process/domain/utils/id.util';
+import { TriggerMongooseRepository } from './trigger-mongoose.repository';
 
 @Injectable()
-export class TriggerRepository implements IRepository<TriggerEntity> {
+export class TriggerRepository {
 
-    public constructor(private dbService: DbService) { }
-    public shouldDelete(id: string): string {
-        const splittedCycleId = id.split('_');
-        if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
-            return splittedCycleId[1];
-        }
-        return null;
-    }
+    public constructor(private triggerMongooseRepository: TriggerMongooseRepository) { }
 
     public async save(model: TriggerModel): Promise<TriggerModel> {
-        let result: TriggerEntity;
-        const entity = TriggerEntity.mapToEntity(model);
-        const idToDelete = this.shouldDelete(entity.id);
-        if (idToDelete) {
-            await this.delete(idToDelete, entity.cycleId, entity.taskId);
-            return entity;
-        }
-        const found = await this.get(entity.id, entity.cycleId, entity.taskId);
-        if (found) {
-            result = await this.update(entity);
-        } else {
-            result = await this.create(entity);
-        }
-        this.dbService.executeBackUp('DB_STRUCTURE');
-        return TriggerEntity.mapToModel(result);
-    }
-
-    public async create(entity: TriggerEntity): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
-        await this.dbService.DB_STRUCTURE.push(`${parentNode}/triggers[]`, entity);
-        const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, entity.id);
-        const found = index !== -1 ? await this.dbService.DB_STRUCTURE.getObject<TriggerEntity>(`${parentNode}/triggers[${index}]`) : null;
-        if (found) {
-            return found;
-        }
-        throw new ElementNotFoundExeception(entity.id, 'create', 'trigger');
-    }
-
-    public async update(entity: TriggerEntity): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(entity.cycleId, entity.taskId);
-        const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, entity.id);
-        if (index !== -1) {
-            await this.dbService.DB_STRUCTURE.push(`${parentNode}/triggers[${index}]`, entity);
-            return await this.dbService.DB_STRUCTURE.getObject<TriggerEntity>(`${parentNode}/triggers[${index}]`);
-        }
-        throw new ElementNotFoundExeception(entity.id, 'update', 'trigger');
-    }
-
-    public async delete(id: string, parentId: string, taskId?: string): Promise<boolean> {
-        const parentNode = await this._getParentNode(parentId, taskId);
-        const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, id);
-        if (index !== -1) {
-            await this.dbService.DB_STRUCTURE.delete(`${parentNode}/triggers[${index}]`);
-            return true;
-        }
-        throw new ElementNotFoundExeception(id, 'delete', 'trigger');
-    }
-
-    public async get(id: string, parentId: string, taskId?: string): Promise<TriggerEntity> {
-        const parentNode = await this._getParentNode(parentId, taskId);
-        const index = await this.dbService.DB_STRUCTURE.getIndex(`${parentNode}/triggers`, id);
-        if (index !== -1) {
-            return await this.dbService.DB_STRUCTURE.getObject<TriggerEntity>(`${parentNode}/triggers[${index}]`);
-        }
-        return null;
-    }
-
-    private async _getParentNode(cycleId?: string, taskId?: string): Promise<string> {
-        if (cycleId) {
-            const cycleIndex = await this.dbService.DB_STRUCTURE.getIndex('/cycles', cycleId);
-            if (cycleIndex !== -1) {
-                return `/cycles[${cycleIndex}]`;
+        if (model.id) {
+            if (!isValidUuid(model.id)) {
+                throw new InvalidIdException(model.id, 'trigger');
             }
+            return this.triggerMongooseRepository.upsert(model.id, model);
         }
-        if (taskId) {
-            const taskIndex = await this.dbService.DB_STRUCTURE.getIndex('/tasks', taskId);
-            if (taskIndex !== -1) {
-                return `/tasks[${taskIndex}]`;
+        return this.triggerMongooseRepository.create(model);
+    }
+
+    public async delete(id: string): Promise<boolean> {
+        return this.triggerMongooseRepository.delete(id);
+    }
+
+    public async findByCycleId(cycleId: string): Promise<TriggerModel[]> {
+        return this.triggerMongooseRepository.findByCycleId(cycleId);
+    }
+
+    // cascade utilisee par CycleRepository.delete() : soft-supprime tous les triggers
+    // d'un cycle, independamment de tout flag `delete` (le cycle parent disparait entierement).
+    public async deleteForCycle(cycleId: string): Promise<void> {
+        const existing = await this.triggerMongooseRepository.findByCycleId(cycleId);
+        for (const trigger of existing) {
+            await this.triggerMongooseRepository.delete(trigger.id);
+        }
+    }
+
+    public async get(id?: string): Promise<TriggerModel | TriggerModel[]> {
+        if (!id) {
+            return this.triggerMongooseRepository.findAll();
+        }
+        return this.triggerMongooseRepository.findById(id);
+    }
+
+    // un trigger n'est soft-supprime que s'il est explicitement marque `delete: true` dans
+    // `models` ; un trigger absent de `models` reste inchange.
+    public async replaceForCycle(cycleId: string, models: SynchronizeTriggerModel[]): Promise<TriggerModel[]> {
+        for (const model of models) {
+            if (model.delete) {
+                await this.triggerMongooseRepository.delete(model.id);
+                continue;
             }
+            await this.save({ ...model, cycleId });
         }
-        return null;
+        return this.triggerMongooseRepository.findByCycleId(cycleId);
     }
 
 }

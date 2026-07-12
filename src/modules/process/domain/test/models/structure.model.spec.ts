@@ -1,110 +1,162 @@
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
+import { IActuatorModule, ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
-import { ModuleModel } from '@process/domain/models/module.model';
-import { SequenceModel } from '@process/domain/models/sequence.model';
+import { ActuatorModel, RpiActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { SequenceModel, SequenceModuleRef } from '@process/domain/models/sequence.model';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { RpiActuatorStrategy } from '@process/domain/services/actuator-strategies/rpi-actuator.strategy';
+
+const rpiActuatorStrategy = new RpiActuatorStrategy({ warn: jest.fn() } as any);
+
+function CreateActuatorRpiModel(): ActuatorModel & { config: RpiActuatorConfigModel } {
+    const actuator = new ActuatorModel();
+    actuator.type = ActuatorType.RPI;
+    actuator.config = new RpiActuatorConfigModel();
+    return actuator as ActuatorModel & { config: RpiActuatorConfigModel };
+}
+
+function toModuleConfigs(actuators: ActuatorModel[]): SequenceModuleRef[] {
+    return actuators.map((actuator) => ({
+        moduleId: actuator._id,
+        configTiming: { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 }
+    }));
+}
 
 describe('StructureModel model', () => {
-    it('Should create a new structure Model', () => {
+    it('Should create a new structure Model', async () => {
         //declare modules ///////////////
-        const pump = new ModuleModel();
+        const pump = CreateActuatorRpiModel();
+        pump._id = 'pump';
         pump.status = ModuleStatus.OFF;
-        pump.portNum = 16;
-        pump.direction = GPIODirection.OUT;
-        pump.edge = GPIOEdge.BOTH;
-        pump.configure();
-        expect(pump.instance).toBeDefined();
-        //mod1.debounceTimeout: number = undefined;
-        //mod1.activeLow: boolean = false;
-        //mod1.reconfigureDirection: boolean = true;
+        pump.name = '16';
+        pump.config.direction = GPIODirection.OUT;
+        pump.config.edge = GPIOEdge.BOTH;
+        await rpiActuatorStrategy.configure(pump);
+        expect(pump.config.instance).toBeDefined();
+        //mod1.config.debounceTimeout: number = undefined;
+        //mod1.config.activeLow: boolean = false;
+        //mod1.config.reconfigureDirection: boolean = true;
 
-        const valve1 = new ModuleModel();
+        const valve1 = CreateActuatorRpiModel();
+        valve1._id = 'valve1';
         valve1.status = ModuleStatus.OFF;
-        valve1.portNum = 26;
-        valve1.direction = GPIODirection.OUT;
-        valve1.edge = GPIOEdge.BOTH;
-        //mod1.debounceTimeout: number = undefined;
-        //mod1.activeLow: boolean = false;
-        //mod1.reconfigureDirection: boolean = true;
-        valve1.configure();
-        expect(valve1.instance).toBeDefined();
+        valve1.name = '26';
+        valve1.config.direction = GPIODirection.OUT;
+        valve1.config.edge = GPIOEdge.BOTH;
+        //mod1.config.debounceTimeout: number = undefined;
+        //mod1.config.activeLow: boolean = false;
+        //mod1.config.reconfigureDirection: boolean = true;
+        await rpiActuatorStrategy.configure(valve1);
+        expect(valve1.config.instance).toBeDefined();
 
-        const valve2 = new ModuleModel();
+        const valve2 = CreateActuatorRpiModel();
+        valve2._id = 'valve2';
         valve2.status = ModuleStatus.OFF;
-        valve2.portNum = 19;
-        valve2.direction = GPIODirection.OUT;
-        valve2.edge = GPIOEdge.BOTH;
-        //mod1.debounceTimeout: number = undefined;
-        //mod1.activeLow: boolean = false;
-        //mod1.reconfigureDirection: boolean = true;
-        valve2.configure();
-        expect(valve2.instance).toBeDefined();
+        valve2.name = '19';
+        valve2.config.direction = GPIODirection.OUT;
+        valve2.config.edge = GPIOEdge.BOTH;
+        //mod1.config.debounceTimeout: number = undefined;
+        //mod1.config.activeLow: boolean = false;
+        //mod1.config.reconfigureDirection: boolean = true;
+        await rpiActuatorStrategy.configure(valve2);
+        expect(valve2.config.instance).toBeDefined();
 
-        const valve3 = new ModuleModel();
+        const valve3 = CreateActuatorRpiModel();
+        valve3._id = 'valve3';
         valve3.status = ModuleStatus.OFF;
-        valve3.portNum = 21;
-        valve3.direction = GPIODirection.OUT;
-        valve3.edge = GPIOEdge.BOTH;
-        //mod1.debounceTimeout: number = undefined;
-        //mod1.activeLow: boolean = false;
-        //mod1.reconfigureDirection: boolean = true;
-        valve3.configure();
-        expect(valve3.instance).toBeDefined();
+        valve3.name = '21';
+        valve3.config.direction = GPIODirection.OUT;
+        valve3.config.edge = GPIOEdge.BOTH;
+        //mod1.config.debounceTimeout: number = undefined;
+        //mod1.config.activeLow: boolean = false;
+        //mod1.config.reconfigureDirection: boolean = true;
+        await rpiActuatorStrategy.configure(valve3);
+        expect(valve3.config.instance).toBeDefined();
 
-        const valve4 = new ModuleModel();
+        const valve4 = CreateActuatorRpiModel();
+        valve4._id = 'valve4';
         valve4.status = ModuleStatus.OFF;
-        valve4.portNum = 20;
-        valve4.direction = GPIODirection.OUT;
-        valve4.edge = GPIOEdge.BOTH;
-        //mod1.debounceTimeout: number = undefined;
-        //mod1.activeLow: boolean = false;
-        //mod1.reconfigureDirection: boolean = true;
-        valve4.configure();
-        expect(valve4.instance).toBeDefined();
+        valve4.name = '20';
+        valve4.config.direction = GPIODirection.OUT;
+        valve4.config.edge = GPIOEdge.BOTH;
+        //mod1.config.debounceTimeout: number = undefined;
+        //mod1.config.activeLow: boolean = false;
+        //mod1.config.reconfigureDirection: boolean = true;
+        await rpiActuatorStrategy.configure(valve4);
+        expect(valve4.config.instance).toBeDefined();
+
+        const registry = new Map<string, IActuatorModule>(
+            [pump, valve1, valve2, valve3, valve4].map((actuator) => [actuator._id, actuator])
+        );
 
         /////////////////////////////////
 
         const irrigationSecteur1 = new SequenceModel();
-        irrigationSecteur1.id = '11';
+        irrigationSecteur1._id = '11';
         irrigationSecteur1.status = ExecutableStatus.STOPPED;
-        irrigationSecteur1.maxDuration = 10; //3 secondes
-        irrigationSecteur1.modules = [pump, valve1];
+        irrigationSecteur1.securityConfig.maxDuration = 10; //3 secondes
+        irrigationSecteur1.moduleConfigs = toModuleConfigs([pump, valve1]);
 
         const irrigationSecteur2 = new SequenceModel();
-        irrigationSecteur2.id = '12';
+        irrigationSecteur2._id = '12';
         irrigationSecteur2.status = ExecutableStatus.STOPPED;
-        irrigationSecteur2.maxDuration = 10; //3 secondes
-        irrigationSecteur2.modules = [pump, valve2];
+        irrigationSecteur2.securityConfig.maxDuration = 10; //3 secondes
+        irrigationSecteur2.moduleConfigs = toModuleConfigs([pump, valve2]);
 
         const irrigationSecteur3 = new SequenceModel();
-        irrigationSecteur3.id = '13';
+        irrigationSecteur3._id = '13';
         irrigationSecteur3.status = ExecutableStatus.STOPPED;
-        irrigationSecteur3.maxDuration = 10; //3 secondes
-        irrigationSecteur3.modules = [pump, valve3];
+        irrigationSecteur3.securityConfig.maxDuration = 10; //3 secondes
+        irrigationSecteur3.moduleConfigs = toModuleConfigs([pump, valve3]);
 
         const irrigationSecteur4 = new SequenceModel();
-        irrigationSecteur4.id = '13';
+        irrigationSecteur4._id = '13';
         irrigationSecteur4.status = ExecutableStatus.STOPPED;
-        irrigationSecteur4.maxDuration = 10; //3 secondes
-        irrigationSecteur4.modules = [pump, valve4];
+        irrigationSecteur4.securityConfig.maxDuration = 10; //3 secondes
+        irrigationSecteur4.moduleConfigs = toModuleConfigs([pump, valve4]);
 
         const cycle = new CycleModel();
-        cycle.id = '1';
+        cycle._id = '1';
         cycle.status = ExecutableStatus.STOPPED;
         cycle.sequences = [irrigationSecteur1, irrigationSecteur2];
 
         const cycle2 = new CycleModel();
-        cycle2.id = '2';
+        cycle2._id = '2';
         cycle2.status = ExecutableStatus.STOPPED;
         cycle2.sequences = [irrigationSecteur3, irrigationSecteur4];
 
         const structure = new StructureModel();
         structure.cycles = [cycle, cycle2];
 
-        const modules = structure.getModules();
+        const modules = structure.getModules(registry);
         expect(modules).toBeDefined();
         expect(modules).toHaveLength(5);
 
+    });
+
+    it('should collect the module ids and sequences of every cycle', () => {
+        const zeroedCfg = { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 };
+        const sequenceA = new SequenceModel();
+        sequenceA._id = 'seq-a';
+        sequenceA.moduleConfigs = [{ moduleId: 'module-a', configTiming: zeroedCfg }];
+
+        const sequenceB = new SequenceModel();
+        sequenceB._id = 'seq-b';
+        sequenceB.moduleConfigs = [{ moduleId: 'module-b', configTiming: zeroedCfg }];
+
+        const cycleA = new CycleModel();
+        cycleA._id = 'cycle-a';
+        cycleA.sequences = [sequenceA];
+
+        const cycleB = new CycleModel();
+        cycleB._id = 'cycle-b';
+        cycleB.sequences = [sequenceB];
+
+        const structure = new StructureModel();
+        structure.cycles = [cycleA, cycleB];
+
+        expect(structure.getModuleIds().sort()).toEqual(['module-a', 'module-b']);
+        expect(structure.getSequences()).toEqual([sequenceA, sequenceB]);
     });
 });

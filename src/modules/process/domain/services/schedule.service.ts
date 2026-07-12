@@ -10,7 +10,7 @@ import { StructureService } from './configuration.service';
 import { ExecutableAction, ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { ProcessService } from './execution.service';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
-import { CycleEntity } from '@process/infrastructure/entities/cycle.entity';
+import { CycleModel } from '../models/cycle.model';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
 import { getSunrise, getSunset } from 'sunrise-sunset-js'
 import { SunState } from '../interfaces/schedule.interface';
@@ -30,11 +30,11 @@ export class ScheduleService {
 
     public createSchedule(schedule: ScheduleModel, methode: () => void): ScheduleModel {
         let job;
-        const isExists = this.schedulerRegistry.doesExist('cron', schedule.id);
+        const isExists = this.schedulerRegistry.doesExist('cron', schedule._id);
         if (isExists) {
-            job = this.schedulerRegistry.getCronJob(schedule.id);
+            job = this.schedulerRegistry.getCronJob(schedule._id);
             job.stop();
-            this.schedulerRegistry.deleteCronJob(schedule.id);
+            this.schedulerRegistry.deleteCronJob(schedule._id);
         }
         try {
             const coord = { lat: 34.100780850096896, long: -6.4666017095313935 }
@@ -48,7 +48,7 @@ export class ScheduleService {
                 job = new CronJob(schedule.cron.pattern || new Date(now.getTime() + 10000), methode);
             }
 
-            this.schedulerRegistry.addCronJob(schedule.id, job);
+            this.schedulerRegistry.addCronJob(schedule._id, job);
             if (schedule.isPaused) {
                 job.stop();
             } else {
@@ -62,15 +62,29 @@ export class ScheduleService {
 
     }
 
+    public async setPaused(schedule: ScheduleModel, isPaused: boolean): Promise<ScheduleModel> {
+        if (schedule.isPaused === isPaused) { return schedule; }
+        const saved = await this.scheduleRepository.save({ ...schedule, isPaused });
+        const index = this.configurationService.schedules.findIndex(x => x._id === schedule._id);
+        if (index !== -1) { this.configurationService.schedules[index] = saved; }
+        if (this.schedulerRegistry.doesExist('cron', schedule._id)) {
+            const job = this.schedulerRegistry.getCronJob(schedule._id);
+            isPaused ? job.stop() : job.start();
+        } else if (!isPaused) {
+            await this.initSchedule(saved, false, ProcessMode.SCHEDULED, ProcessType.INIT);
+        }
+        return saved;
+    }
+
     public async deleteCronJob(scheduleId: string): Promise<void> {
         const isExists = this.schedulerRegistry.doesExist('cron', scheduleId);
         if (isExists) {
             const job = this.schedulerRegistry.getCronJob(scheduleId);
             job.stop();
             this.schedulerRegistry.deleteCronJob(scheduleId);
-            const schedule = this.configurationService.schedules.find(x => x.id === scheduleId);
+            const schedule = this.configurationService.schedules.find(x => x._id === scheduleId);
             if (schedule) {
-                await this.scheduleRepository.delete(scheduleId, schedule.cycleId);
+                await this.scheduleRepository.delete(scheduleId);
             }
 
         }
@@ -81,9 +95,9 @@ export class ScheduleService {
         mode: ProcessMode = ProcessMode.SCHEDULED, type: ProcessType = ProcessType.INIT, overridedMethode?: () => void): Promise<ScheduleModel> {
 
         if (isDeleted) {
-            const index = this.configurationService.schedules.findIndex(x => x.id === schedule.id);
+            const index = this.configurationService.schedules.findIndex(x => x._id === schedule._id);
             this.configurationService.schedules.splice(index, 1);
-            await this.deleteCronJob(schedule.id);
+            await this.deleteCronJob(schedule._id);
             return schedule; 
         }
 
@@ -94,8 +108,14 @@ export class ScheduleService {
             methode = async (): Promise<void> => {
                 setTimeout(async () => {
                     await this.clearAllSchedules();
-                    if (!process.schedule.isPaused) {
-                        await this.processService.execute({...process});
+                    // relire l'etat courant plutot que "process.schedule" (fige au moment de cet
+                    // enregistrement) : setPaused() ne reconstruit jamais ce callback, il se
+                    // contente de job.start()/job.stop() sur le CronJob deja enregistre - sans
+                    // cette relecture, un depause posterieur (ex: demarrage du Group parent) reste
+                    // invisible ici et le cycle ne demarre jamais malgre isPaused=false en base.
+                    const liveSchedule = this._getLiveSchedule(schedule);
+                    if (!liveSchedule.isPaused) {
+                        await this.processService.execute({ ...process, schedule: liveSchedule });
                     }
                 }, schedule.cron.sunBehavior ? 0 : schedule.cron.after);
             };
@@ -103,35 +123,45 @@ export class ScheduleService {
         return this.createSchedule(schedule, methode);
     }
 
+    // cf. commentaire dans initSchedule/restartAllSchedules : les callbacks de CronJob capturent
+    // une reference figee au moment de l'enregistrement, jamais rafraichie par setPaused().
+    private _getLiveSchedule(schedule: ScheduleModel): ScheduleModel {
+        return this.configurationService.schedules.find(x => x._id === schedule._id) ?? schedule;
+    }
+
     public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULED,
         type: ProcessType = ProcessType.FORCE, action: ExecutableAction = ExecutableAction.ON): ProcessModel {
         const process = new ProcessModel();
-        process.cycle = this.configurationService.structure.cycles.find(x => x.id === schedule.cycleId);
+        process.cycle = this.configurationService.structure.cycles.find(x => x._id === schedule.cycleId);
         process.action = action;
         process.type = ProcessType.INIT;
         process.mode = mode;
         process.schedule = schedule;
+        process.duration = schedule.duration;
         return process;
     }
 
     public async restartAllSchedules(): Promise<void> {
         const schedules = this.configurationService.schedules;
-        const cycles = (await this.cycleRepository.get()) as Array<CycleEntity>;
+        const cycles = (await this.cycleRepository.get()) as CycleModel[];
         for (const key in schedules) {
             if (Object.hasOwnProperty.call(schedules, key)) {
                 const schedule = schedules[key];
-                const cycle = cycles.find(cycle => cycle.id === schedule.cycleId);
-                const cycleModel = CycleEntity.mapToModel(cycle);
+                const cycleModel = cycles.find(cycle => cycle._id === schedule.cycleId);
                 const process = new ProcessModel();
                 process.cycle = cycleModel;
                 process.action = ExecutableAction.ON;
                 process.type = ProcessType.INIT;
                 process.mode = ProcessMode.SCHEDULED;
+                process.duration = schedule.duration;
+                process.schedule = schedule;
                 const methode = async (): Promise<void> => {
                     setTimeout(async () => {
                         await this.clearAllSchedules();
-                        if (!schedule.isPaused) {
-                            await this.processService.execute({...process}); 
+                        // meme relecture a chaud que dans initSchedule (cf. commentaire la-bas).
+                        const liveSchedule = this._getLiveSchedule(schedule);
+                        if (!liveSchedule.isPaused) {
+                            await this.processService.execute({ ...process, schedule: liveSchedule });
                         }
                     }, schedule.cron.after);
 

@@ -1,33 +1,45 @@
-import { Logger } from '@nestjs/common';
 import { ExecutableStatus } from '../interfaces/executable.interface';
-import { ModuleModel } from './module.model';
 import { ConditionModel } from './condition.model';
 
+export interface ModuleTimingConfig {
+    waitBeforeExec: number;
+    waitAfterExec: number;
+    waitBeforeExecOff: number;
+    waitAfterExecOff: number;
+}
+
+export interface SequenceModuleRef {
+    moduleId: string;
+    configTiming: ModuleTimingConfig;
+    customValue?: number;
+}
+
+export interface SecurityConfig {
+    maxDuration: number;
+    conditions?: ConditionModel[];
+    customStack?: { taskId: string; param: string | null }[];
+}
 
 export class SequenceModel {
 
-    public id: string;
+    public _id: string;
+    public cycleId: string;
     public name: string;
     public description: string;
-    public mapSectionId: string;
     public progression: { startedAt: Date; duration: number };
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public maxDuration: number;
-    public vfd: number;
-    public taskId: string;
-    public conditions: ConditionModel[];
-    public modules: ModuleModel[] = [];
 
-    public async reset(): Promise<void> {
-        for (const module of this.modules) {
-            try {
-                await module.execute(0);
-            } catch (error) {
-                Logger.warn(error, 'execution sequence id: ' + this.id);
-            }
-        }
+    // determine l'ordre d'execution des sequences d'un meme cycle (croissant)
+    public order: number;
+    public securityConfig: SecurityConfig = { maxDuration: undefined };
+    // references vers des modules partages entre plusieurs sequences (moduleId + timings propres a cet usage)
+    public moduleConfigs: SequenceModuleRef[] = [];
 
-        this.status = ExecutableStatus.STOPPED;
-        this.progression = null;
+    public createdAt?: Date;
+    public updatedAt?: Date;
+    public deletedAt?: Date | null = null;
+
+    public getActuatorIds(): string[] {
+        return this.moduleConfigs.map((ref) => ref.moduleId);
     }
 }

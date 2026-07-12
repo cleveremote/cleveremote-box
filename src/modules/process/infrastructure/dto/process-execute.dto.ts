@@ -16,7 +16,7 @@ export class ProcessExecuteDTO {
     @IsNotEmpty()
     @IsString()
     @ApiProperty()
-    public id: string;
+    public _id: string;
 
     @IsEnum(ExecutableAction)
     @IsNotEmpty()
@@ -50,7 +50,9 @@ export class ProcessExecuteDTO {
 
     public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();
-        process.cycle = { id: notificationCreateDTO.id, status: ExecutableStatus.STOPPED } as CycleModel ;
+        process.cycle = new CycleModel();
+        process.cycle._id = notificationCreateDTO._id;
+        process.cycle.status = ExecutableStatus.STOPPED;
         process.action = notificationCreateDTO.action;
         process.mode = notificationCreateDTO.mode;
         process.type = notificationCreateDTO.type;

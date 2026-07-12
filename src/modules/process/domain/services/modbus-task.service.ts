@@ -2,14 +2,11 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { ModbusTaskRepository } from '@process/infrastructure/repositories/modbusTask.repository';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import ModbusRTU from "modbus-serial";
-import { ModbusTaskConfigEntity } from '@process/infrastructure/entities/modbusTaskConfig.entity';
-import { ModbusConnectionConfigEntity } from '@process/infrastructure/entities/modbusConnetionConfig.entity';
-import { ModbusConnectionRepository } from '@process/infrastructure/repositories/modbusConnection.repository';
-import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
-import { InverterModel } from '@process/domain/models/inverter.model';
-import { InverterEntity } from '@process/infrastructure/entities/inverter.entity';
+import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
+import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
 
 export interface InverterConfigParam {
     param: string;
@@ -17,12 +14,28 @@ export interface InverterConfigParam {
     persist?: boolean;
 }
 
+export interface DigitalOutputChange {
+    channel: number;
+    previous: boolean;
+    current: boolean;
+}
+
+export interface DigitalInputLongPress {
+    channel: number;
+    heldMs: number;
+}
+
+export interface DigitalMonitorHandle {
+    stop: () => Promise<void>;
+}
+
 interface QueueEntry {
     taskId?: string;
     param?: { value: number };
-    resolve: () => void;
-    reject: (err: Error) => void;
+    resolve?: () => void;
+    reject?: (err: Error) => void;
     inverterConfig?: { inverterId: string; params: InverterConfigParam[] };
+    run?: () => Promise<void>;
 }
 
 @Injectable()
@@ -31,40 +44,90 @@ export class ModbusTaskService {
     private _isProcessing = false;
 
     public constructor(
-        private modbusConnectionRepository: ModbusConnectionRepository,
-        private modbusTaskRepository: ModbusTaskRepository,
-        private inverterRepository: InverterRepository,
+        private deviceRepository: DeviceRepository,
+        private modbusTaskRepository: ComRequestRepository,
         private readonly logger: Logger
     ) { }
+
+    private async _resolveMasterConfig(slaveDeviceId: string): Promise<{ masterConfig: MasterConfigModel; slaveConfig: SlaveConfigModel }> {
+        const slaveDevice = await this.deviceRepository.get(slaveDeviceId) as DeviceModel;
+        if (!slaveDevice) {
+            this.logger.error({ slaveDeviceId }, 'no slave device found');
+            return null;
+        }
+        const slaveConfig = slaveDevice.config as SlaveConfigModel;
+        const masterDevice = await this.deviceRepository.get(slaveConfig.masterDeviceId) as DeviceModel;
+        if (!masterDevice) {
+            this.logger.error({ masterDeviceId: slaveConfig.masterDeviceId }, 'no master device found');
+            return null;
+        }
+        return { masterConfig: masterDevice.config as MasterConfigModel, slaveConfig };
+    }
+
+    private async _connectClient(client: ModbusRTU, masterConfig: MasterConfigModel, slaveConfig: SlaveConfigModel): Promise<void> {
+        if (masterConfig.protocol === MasterProtocol.TCP) {
+            await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+        } else if (masterConfig.protocol === MasterProtocol.RTU) {
+            await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
+        } else {
+            throw new Error(`Protocole inconnu: ${masterConfig.protocol}`);
+        }
+        client.setID(Number(slaveConfig.slaveId));
+        client.setTimeout(masterConfig.timeout || 2000);
+    }
 
     public execute(taskId: string, param?: { value: number }): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this._queue.push({ taskId, param, resolve, reject });
-            if (!this._isProcessing) this._processQueue();
+            if (!this._isProcessing) this._processQueue(); 
         });
     }
 
     public applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
-        return new Promise<void>((resolve, reject) => { 
+        return new Promise<void>((resolve, reject) => {
             this._queue.push({ inverterConfig: { inverterId, params }, resolve, reject });
             if (!this._isProcessing) this._processQueue();
         });
-    } 
+    }
+
+    /**
+     * Met en file `run` derrière toutes les autres opérations Modbus (tâches d'actionneurs,
+     * config onduleur, polling des moniteurs) pour qu'aucune requête ne parte tant qu'une autre
+     * n'a pas reçu sa réponse : le bus RS485 partagé derrière la passerelle est half-duplex, deux
+     * transactions concurrentes (ex: un poll du moniteur pendant l'écriture d'un actionneur)
+     * produisent des trames tronquées/entrelacées ("Data length error") côté modbus-serial.
+     */
+    private _enqueue<T>(run: () => Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            this._queue.push({
+                run: async () => {
+                    try {
+                        resolve(await run());
+                    } catch (err) {
+                        reject(err);
+                    }
+                }
+            });
+            if (!this._isProcessing) this._processQueue();
+        });
+    }
 
     private async _processQueue(): Promise<void> {
         if (this._isProcessing || this._queue.length === 0) return;
-        this._isProcessing = true; 
+        this._isProcessing = true;
         while (this._queue.length > 0) {
             const entry = this._queue.shift();
             try {
-                if (entry.inverterConfig) {
+                if (entry.run) {
+                    await entry.run();
+                } else if (entry.inverterConfig) {
                     await this._applyInverterConfig(entry.inverterConfig.inverterId, entry.inverterConfig.params);
                 } else {
                     await this._executeTask(entry.taskId, entry.param);
                 }
-                entry.resolve();
+                entry.resolve?.();
             } catch (err) {
-                entry.reject(err);
+                entry.reject?.(err);
             }
         }
         this._isProcessing = false;
@@ -117,65 +180,260 @@ export class ModbusTaskService {
 
 
 
+    /**
+     * Exécute directement une tâche Modbus à partir d'un ComRequestModel déjà construit,
+     * sans passer par le repository (utile pour tester manuellement une configuration
+     * avant de la persister).
+     */
+    public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number }): Promise<void> {
+        return this._enqueue(() => this._runComRequest(comRequest, param));
+    }
+
+    /**
+     * Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
+     * `length` premières sorties (Read Coils, adresses 0x0000-0x0007). Ne logue qu'au moment où
+     * un ou plusieurs canaux changent d'état, pas à chaque poll.
+     */
+    public async monitorDigitalOutputs(
+        deviceId: string,
+        intervalMs = 1000,
+        length = 8,
+        onChange?: (changes: DigitalOutputChange[]) => void
+    ): Promise<DigitalMonitorHandle> {
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`monitorDigitalOutputs: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+
+        const client = new ModbusRTU();
+        await this._connectClient(client, masterConfig, slaveConfig);
+
+        let previousStates: boolean[] | null = null;
+        let stopped = false;
+        let timer: NodeJS.Timeout | null = null;
+
+        const poll = async (): Promise<void> => {
+            try {
+                // Mise en file derrière les autres opérations Modbus (cf. _enqueue) : sans ça,
+                // ce poll et l'écriture d'un actionneur (connexion séparée, cf. _runComRequest)
+                // peuvent transiter en même temps sur le bus RS485 partagé et se corrompre
+                // mutuellement ("Data length error").
+                const states = await this._enqueue(async () => {
+                    // La connexion peut avoir été fermée entre deux polls (coupure réseau, reset
+                    // de la passerelle, idle timeout...) : modbus-serial ne se reconnecte jamais
+                    // tout seul et rejette alors toute requête avec "Port Not Open". On la rouvre ici.
+                    if (!client.isOpen) {
+                        await this._connectClient(client, masterConfig, slaveConfig);
+                    }
+                    const result = await client.readCoils(0, length);
+                    return result.data.slice(0, length);
+                });
+
+                if (!previousStates) {
+                    this.logger.log({ deviceId, states }, 'digital output monitor started');
+                } else {
+                    const changes: DigitalOutputChange[] = [];
+                    states.forEach((current, channel) => {
+                        if (current !== previousStates[channel]) {
+                            changes.push({ channel, previous: previousStates[channel], current });
+                        }
+                    });
+                    if (changes.length > 0) {
+                        this.logger.log({ deviceId, changes, states }, 'digital output state changed');
+                        onChange?.(changes);
+                    }
+                }
+                previousStates = states;
+            } catch (err) {
+                this.logger.warn({ deviceId, err: err.message }, 'digital output monitor read failed');
+            }
+        };
+
+        // setTimeout auto-replanifié plutôt que setInterval : le prochain poll ne démarre
+        // qu'une fois le précédent terminé, pour éviter d'empiler des requêtes concurrentes
+        // sur la même connexion Modbus si le device répond lentement (source de timeouts en
+        // cascade).
+        const runPoll = async (): Promise<void> => {
+            await poll();
+            if (!stopped) {
+                timer = setTimeout(runPoll, intervalMs);
+            }
+        };
+
+        await poll();
+        timer = setTimeout(runPoll, intervalMs);
+
+        return {
+            stop: () => new Promise<void>((resolve) => {
+                stopped = true;
+                if (timer) clearTimeout(timer);
+                client.close(() => {
+                    this.logger.log({ deviceId }, 'digital output monitor stopped');
+                    resolve();
+                });
+            })
+        };
+    }
+
+    /**
+     * Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
+     * `length` premières entrées numériques (Read Discrete Inputs, adresses 0x0000-0x0007, cf.
+     * doc Waveshare "Modbus RTU IO 8CH" / RS485 TO POE ETH (B)) pour ne détecter que les appuis
+     * longs : si un canal reste à `true` sans interruption pendant au moins `longPressMs`, un
+     * événement `DigitalInputLongPress` est loggé et transmis à `onLongPress` (une seule fois
+     * par appui, pas à chaque poll une fois le seuil dépassé).
+     */
+    public async monitorDigitalInputs(
+        deviceId: string,
+        intervalMs = 1000,
+        length = 8,
+        longPressMs = 5000,
+        onLongPress?: (event: DigitalInputLongPress) => void
+    ): Promise<DigitalMonitorHandle> {
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`monitorDigitalInputs: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+
+        const client = new ModbusRTU();
+        await this._connectClient(client, masterConfig, slaveConfig);
+
+        // Horodatage du début de l'appui en cours par canal (null = relâché), et flag pour ne
+        // déclencher l'événement long-press qu'une seule fois par appui.
+        const pressStartedAt: (number | null)[] = new Array(length).fill(null);
+        const longPressFired: boolean[] = new Array(length).fill(false);
+        let stopped = false;
+        let timer: NodeJS.Timeout | null = null;
+
+        const poll = async (): Promise<void> => {
+            try {
+                // Cf. monitorDigitalOutputs : mise en file derrière les autres opérations Modbus
+                // pour ne jamais faire transiter deux transactions en même temps sur le bus
+                // RS485 partagé, et reconnexion si la connexion s'est fermée entre deux polls.
+                const states = await this._enqueue(async () => {
+                    if (!client.isOpen) {
+                        await this._connectClient(client, masterConfig, slaveConfig);
+                    }
+                    const result = await client.readDiscreteInputs(0, length);
+                    return result.data.slice(0, length);
+                });
+                const now = Date.now();
+
+                states.forEach((current, channel) => {
+                    if (current) {
+                        if (pressStartedAt[channel] === null) {
+                            pressStartedAt[channel] = now;
+                        } else if (!longPressFired[channel] && now - pressStartedAt[channel] >= longPressMs) {
+                            longPressFired[channel] = true;
+                            const event: DigitalInputLongPress = { channel, heldMs: now - pressStartedAt[channel] };
+                            this.logger.log({ deviceId, ...event }, 'digital input long press detected');
+                            onLongPress?.(event);
+                        }
+                    } else {
+                        pressStartedAt[channel] = null;
+                        longPressFired[channel] = false;
+                    }
+                });
+            } catch (err) {
+                this.logger.warn({ deviceId, err: err.message }, 'digital input monitor read failed');
+            }
+        };
+
+        // setTimeout auto-replanifié plutôt que setInterval : le prochain poll ne démarre
+        // qu'une fois le précédent terminé, pour éviter d'empiler des requêtes concurrentes
+        // sur la même connexion Modbus si le device répond lentement (source de timeouts en
+        // cascade).
+        const runPoll = async (): Promise<void> => {
+            await poll();
+            if (!stopped) {
+                timer = setTimeout(runPoll, intervalMs);
+            }
+        };
+
+        await poll();
+        timer = setTimeout(runPoll, intervalMs);
+
+        return {
+            stop: () => new Promise<void>((resolve) => {
+                stopped = true;
+                if (timer) clearTimeout(timer);
+                client.close(() => {
+                    this.logger.log({ deviceId }, 'digital input monitor stopped');
+                    resolve();
+                });
+            })
+        };
+    }
+
     private async _executeTask(taskId: string, param?: { value: number }): Promise<void> {
         if (!taskId) {
             this.logger.error('modbus execute called without taskId');
         }
-        const task = await this.modbusTaskRepository.get(taskId);
-        const taskModel = ModbusTaskConfigEntity.mapToModel((task as ModbusTaskConfigEntity));
+        const taskModel = await this.modbusTaskRepository.get(taskId) as ComRequestModel;
         if (!taskModel) {
             this.logger.error({ taskId }, 'no modbus task found for taskId');
         }
 
-        const connConfig = await this.modbusConnectionRepository.get(taskModel.connectionId);
-        const connConfigModel = ModbusConnectionConfigEntity.mapToModel((connConfig as ModbusConnectionConfigEntity));
-        if (!connConfigModel) {
-            this.logger.error({ connectionId: taskModel.connectionId }, 'no modbus connection config found');
+        await this._runComRequest(taskModel, param);
+    }
+
+    private async _runComRequest(taskModel: ComRequestModel, param?: { value: number }): Promise<void> {
+        const taskId = taskModel?._id;
+        const resolved = await this._resolveMasterConfig(taskModel.deviceId);
+        if (!resolved) {
+            return;
         }
+        const { masterConfig, slaveConfig } = resolved;
 
         const client = new ModbusRTU();
 
 
         try {
             // --- Connexion ---
-            if (connConfigModel.protocol === "tcp") {
-                await client.connectTCP(connConfigModel.ipAddress, { port: connConfigModel.port });
-            } else if (connConfigModel.protocol === "rtu") {
-                await client.connectRTUBuffered(connConfigModel.path, { baudRate: connConfigModel.baudrate || 9600 });
+            if (masterConfig.protocol === MasterProtocol.TCP) {
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            } else if (masterConfig.protocol === MasterProtocol.RTU) {
+                await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
             } else {
-                throw new Error(`Protocole inconnu: ${connConfigModel.protocol}`);
+                throw new Error(`Protocole inconnu: ${masterConfig.protocol}`);
             }
 
-            client.setID(connConfigModel.slaveId);
-            client.setTimeout(connConfigModel.timeout || 2000);
+            client.setID(Number(slaveConfig.slaveId));
+            client.setTimeout(masterConfig.timeout || 2000);
             client.setTimeout(2000);
 
-            this.logger.log({ connectionId: connConfigModel.id, ip: connConfigModel.ipAddress, port: connConfigModel.port }, 'modbus connected');
-            this.logger.log({ task: taskModel.label }, 'executing modbus task');
+            this.logger.log({ deviceId: taskModel.deviceId, ip: masterConfig.ipAddress, port: masterConfig.port }, 'modbus connected');
+            this.logger.log({ task: taskModel.name }, 'executing modbus task');
 
-            const fn = taskModel.function;
+            const fn = taskModel.config.function as string;
             if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
-            const addr = taskModel.address;
-            const params = taskModel.params || null;
+            const addr = taskModel.config.address;
+            const params = taskModel.config.params || null;
             let result;
 
             // --- Lecture ---
             if (fn.startsWith("read")) {
-                const length = params.length || 1;  
-                result = await client[fn](addr, length); 
+                const length = params.length || 1;
+                result = await client[fn](addr, length);
                 if (!result?.data) throw new Error("Aucune donnée reçue");
 
-                const values = this.decodeFloats(result.data, addr, length, params.scale,true);
-    
-
-                this.logger.log({ label: taskModel.label, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
+                // readCoils/readDiscreteInputs renvoient des booléens (états ON/OFF), pas des
+                // registres 16 bits : le décodage IEEE754 ne s'applique qu'aux registres.
+                if (fn === ModbusFunctionName.READ_COILS || fn === ModbusFunctionName.READ_DISCRETE_INPUTS) {
+                    this.logger.log({ label: taskModel.name, value: result.data }, 'modbus read result');
+                } else {
+                    const values = this.decodeFloats(result.data, addr, length, params.scale,true);
+                    this.logger.log({ label: taskModel.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
+                }
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
                 if (param.value === undefined) throw new Error("Aucune valeur spécifiée pour l'écriture");
                 await client[fn](addr, param.value);
-                this.logger.log({ label: taskModel.label, value: param.value }, 'modbus write done');
+                this.logger.log({ label: taskModel.name, value: param.value }, 'modbus write done');
             }
 
             // --- Fonction non supportée ---
@@ -196,28 +454,26 @@ export class ModbusTaskService {
     }
 
     private async _applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
-        const inverter = await this.inverterRepository.get(inverterId) as InverterEntity;
-        if (!inverter) {
-            this.logger.error({ inverterId }, 'inverter not found');
+        const resolved = await this._resolveMasterConfig(inverterId);
+        if (!resolved) {
             return;
         }
-        const connConfig = await this.modbusConnectionRepository.get(inverter.connectionId);
-        const connConfigModel = ModbusConnectionConfigEntity.mapToModel(connConfig as ModbusConnectionConfigEntity);
+        const { masterConfig, slaveConfig } = resolved;
 
         const client = new ModbusRTU();
         try {
-            if (connConfigModel.protocol === 'tcp') {
-                await client.connectTCP(connConfigModel.ipAddress, { port: connConfigModel.port });
-            } else if (connConfigModel.protocol === 'rtu') {
-                await client.connectRTUBuffered(connConfigModel.path, { baudRate: connConfigModel.baudrate || 9600 });
+            if (masterConfig.protocol === MasterProtocol.TCP) {
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            } else if (masterConfig.protocol === MasterProtocol.RTU) {
+                await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
             } else {
-                throw new Error(`Unknown protocol: ${connConfigModel.protocol}`);
+                throw new Error(`Unknown protocol: ${masterConfig.protocol}`);
             }
-            client.setID(connConfigModel.slaveId);
-            client.setTimeout(connConfigModel.timeout || 2000);
+            client.setID(Number(slaveConfig.slaveId));
+            client.setTimeout(masterConfig.timeout || 2000);
 
             for (const { param, value, persist } of params) {
-                const baseAddress = this._resolveParamAddress(inverter, param);
+                const baseAddress = this._resolveParamAddress(param);
                 if (baseAddress === null) {
                     this.logger.warn({ param }, 'unknown parameter format, skipping');
                     continue;
@@ -237,15 +493,12 @@ export class ModbusTaskService {
         }
     }
 
-    private _resolveParamAddress(inverter: InverterModel, paramName: string): number | null {
+    private _resolveParamAddress(paramName: string): number | null {
         const upper = paramName.toUpperCase();
         const match = upper.match(/^F(\d+)\.(\d+)$/);
         if (!match) return null;
         const group = parseInt(match[1], 10);
         const item = parseInt(match[2], 10);
-        const groupKey = `F${String(group).padStart(2, '0')}`;
-        const entry = inverter.parameters?.[groupKey]?.items?.[upper];
-        if (entry?.address) return parseInt(entry.address, 16);
         return group * 256 + item;
     }
 

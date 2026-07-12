@@ -249,3 +249,8 @@ problem docker alpine upgrade make some copilation package issues
 * cas de changement de sd vers une autre rsb problème de clé ssh
     *  supprimer la ligne correspondante à l’adresse ip
     * refaire la manipulation d’authentification ssh
+
+    docker start cleveremote-mongo && docker ps --filter "name=cleveremote-mongo" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+mongodump --uri='mongodb://admin:Nya0113!@localhost:27017' --out ./backup
+    mongorestore --drop --uri='mongodb://admin:Nya0113!@localhost:27017' ./backup

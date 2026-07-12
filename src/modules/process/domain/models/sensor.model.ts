@@ -1,29 +1,33 @@
 import { SensorType } from '../interfaces/sensor.interface';
+
+export class ComSensorConfigModel {
+    public cronPattern: string;
+    public comRequestId: string;
+}
+
+export enum forcastDataName {
+  TEMPERATURE_2M_MAX = 'temperature_2m_max',
+  TEMPERATURE_2M_MIN = 'temperature_2m_min'
+}
+
+
+export class ForcastSensorConfigModel {
+    public cronPattern: string;
+    public forcastData: forcastDataName;
+}
+
 export class SensorModel {
     public id: string;
     public name: string;
     public description: string;
-    public style: { bgColor: string; fontColor: string; iconColor: { base: string, icon: string } };
+    public style: { bgColor: string; fontColor: string; iconColor: { base: string; icon: string } };
     public type: SensorType;
-    public taskId: string;
-    public cronPattern: string;
-    public unit: string;
-    public getValue(value: any): number {
-        switch (this.type) {
-            case SensorType.LOCAL_TEMPERATURE: 
-                return Number(value.temperature)
-            case SensorType.LOCAL_HUMIDITY:
-                return Number(value.humidity) 
-            case SensorType.FORCAST_TEMPERATURE_MAX:
-            case SensorType.FORCAST_TEMPERATURE_MIN:
-                return Number(value) 
-            case SensorType.SCHEDULED:
-                return Number(value) 
-                case SensorType.TEMPERATURE:
-            case SensorType.MOISTURE: 
-                const arr = value.split('_');
-                    const id = arr[0];
-                return Number(parseFloat(arr[2]))
-        }
-    }
+    public config: ForcastSensorConfigModel | ComSensorConfigModel;
+
+    public value?: number;
+    public date?: Date;
+
+    public createdAt?: Date;
+    public updatedAt?: Date;
+    public deletedAt?: Date | null = null;
 }

@@ -5,9 +5,8 @@ export class ScheduleEntity extends ScheduleModel {
 
     public static mapToModel(scheduleEntity: ScheduleEntity): ScheduleModel {
         const schedule = new ScheduleModel();
-        schedule.id = scheduleEntity.id;
+        schedule._id = scheduleEntity._id;
         schedule.cycleId = scheduleEntity.cycleId;
-        schedule.taskId = scheduleEntity.taskId;
         schedule.name = scheduleEntity.name;
         schedule.description = scheduleEntity.description;
         schedule.cron = scheduleEntity.cron;
@@ -16,14 +15,14 @@ export class ScheduleEntity extends ScheduleModel {
         }
         schedule.isPaused = scheduleEntity.isPaused;
         schedule.shouldConfirmation = scheduleEntity.shouldConfirmation;
+        schedule.duration = scheduleEntity.duration;
         return schedule;
     }
 
     public static mapToEntity(scheduleModel: ScheduleModel): ScheduleEntity {
         const schedule = new ScheduleEntity();
-        schedule.id = scheduleModel.id;
+        schedule._id = scheduleModel._id;
         schedule.cycleId = scheduleModel.cycleId;
-        schedule.taskId = scheduleModel.taskId;
         schedule.name = scheduleModel.name;
         schedule.description = scheduleModel.description;
         schedule.cron = scheduleModel.cron;

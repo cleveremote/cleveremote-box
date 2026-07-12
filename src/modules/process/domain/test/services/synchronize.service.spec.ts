@@ -1,192 +1,494 @@
-import { ConfigModule } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
-import { Test, TestingModule } from '@nestjs/testing';
-import { StructureService } from '@process/domain/services/configuration.service';
-import { ProcessService } from '@process/domain/services/execution.service';
-import { ScheduleService } from '@process/domain/services/schedule.service';
+import { Connection } from 'mongoose';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
-import { StructureSynchronizeDTO } from '@process/infrastructure/dto/configuration-synchronize.dto';
-import { CycleSynchronizeDTO, ScheduleSynchronizeDTO } from '@process/infrastructure/dto/synchronize.dto';
-import { SocketIoClientProxyService } from '../../../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { SocketIoClientProvider } from '../../../../../common/websocket/socket-io-client.provider';
-import { StructureRepositorySpecMock } from './structure.repository.spec-mock';
+import { ScheduleService } from '@process/domain/services/schedule.service';
+import { StructureService } from '@process/domain/services/configuration.service';
+import { TriggerService } from '@process/domain/services/trigger.service';
+import { SensorService } from '@process/domain/services/sensor.service';
+import { ProcessService } from '@process/domain/services/execution.service';
+import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
+import { CycleMongooseRepository } from '@process/infrastructure/repositories/cycle-mongoose.repository';
+import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
+import { SequenceMongooseRepository } from '@process/infrastructure/repositories/sequence-mongoose.repository';
+import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
+import { ScheduleMongooseRepository } from '@process/infrastructure/repositories/schedule-mongoose.repository';
+import { TriggerRepository } from '@process/infrastructure/repositories/trigger.repository';
+import { TriggerMongooseRepository } from '@process/infrastructure/repositories/trigger-mongoose.repository';
+import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
+import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
+import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
+import { Cycle, CycleSchema } from '@process/infrastructure/schemas/cycle.schema';
+import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequence.schema';
+import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedule.schema';
+import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
+import { Device, DeviceSchema } from '@process/infrastructure/schemas/device.schema';
 import {
-    CreateDelSeqAndDelModuleDto,
-    CreateNewScheduleDto,
-    CreateNewScheduleDtowithPattern,
-    CreateScheduleDeleteDto,
-    CreateSynchronizePartialDeleteDto,
-    CreateSynchronizePartialDto,
-    CreateSynchronizePartialUpdateDto
-} from './synchronize.dto.spec-mock';
+    SynchronizeActuatorModel,
+    SynchronizeComRequestModel,
+    SynchronizeCycleModel,
+    SynchronizeDeviceModel,
+    SynchronizeScheduleModel,
+    SynchronizeSensorModel,
+    SynchronizeSequenceModel,
+    SynchronizeTriggerModel
+} from '@process/domain/models/synchronize.model';
+import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol } from '@process/domain/models/device.model';
+import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
+import { SensorModel } from '@process/domain/models/sensor.model';
+import { StructureModel } from '@process/domain/models/structure.model';
+import { SensorType } from '@process/domain/interfaces/sensor.interface';
+import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
+import { CreateCycleModel } from './cycle.spec-mock';
+import { CreateActuatorRpiModel, CreateActuatorComModel, CreateActuatorMongooseModels } from './actuator.spec-mock';
+import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
+import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
+import { CreateScheduleModel } from './schedule.spec-mock';
+import { CreateTriggerModel } from './trigger.spec-mock';
 
+function CreateMasterDeviceModel(overrides: Partial<MasterConfigModel> = {}): DeviceModel {
+    const device = new DeviceModel();
+    device.name = 'master';
+    device.type = DeviceType.MASTER;
+    const config = new MasterConfigModel();
+    config.protocol = MasterProtocol.TCP;
+    config.ipAddress = '192.0.2.1';
+    config.port = 502;
+    config.timeout = 2000;
+    device.config = Object.assign(config, overrides);
+    return device;
+}
 
-describe('Synchronize Service unit testing ', () => {
-    let synchronizeService: SynchronizeService;
-    let configurationService: StructureService;
-    afterEach(() => {
-        jest.resetAllMocks();
+function CreateValveModel(overrides: Partial<ActuatorModel> = {}): ActuatorModel {
+    const valve = new ActuatorModel();
+    valve.name = 'valve';
+    valve.type = ActuatorType.CTRL;
+    valve.status = ModuleStatus.OFF;
+    valve.config = Object.assign(new CtrlActuatorConfigModel(), {
+        deviceId: 'connection-1', channel: 1, flowMeterId: 'flow-1', maxFlowRate: 100,
+        kP: 5, minOpening: 0, maxOpening: 100, openingPercent: 0, tolerance: 1, maxIterations: 20, iterationDelayMs: 500,
+        valveType: 'PROPORTIONAL'
+    });
+    return Object.assign(valve, overrides);
+}
+
+function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
+    return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+}
+
+function CreateReplaceAllRepositoryMock(): { replaceAll: jest.Mock; save: jest.Mock; saveMany: jest.Mock; delete: jest.Mock; get: jest.Mock } {
+    return {
+        replaceAll: jest.fn((models: unknown[]) => Promise.resolve(models)),
+        save: jest.fn((model: unknown) => Promise.resolve(model)),
+        saveMany: jest.fn((models: unknown[]) => Promise.resolve(models)),
+        delete: jest.fn().mockResolvedValue(true),
+        get: jest.fn().mockResolvedValue([])
+    };
+}
+
+describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/actuator/modbus-connection)', () => {
+    let mongod: Awaited<ReturnType<typeof StartMongoMemory>>['mongod'];
+    let connection: Connection;
+    let schedulerRegistry: SchedulerRegistry;
+    let cycleRepository: CycleRepository;
+    let sequenceRepository: SequenceRepository;
+    let scheduleRepository: ScheduleRepository;
+    let triggerRepository: TriggerRepository;
+    let deviceRepository: DeviceRepository;
+    let actuatorRepository: ActuatorRepository;
+    let scheduleService: ScheduleService;
+    let configurationService: { getStructure: jest.Mock; structure: StructureModel; schedules: ScheduleModel[] };
+    let triggerService: { initTrigger: jest.Mock };
+    let sensorService: { initScheduledSensor: jest.Mock };
+    let structureRepository: { save: jest.Mock };
+    let sensorRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
+    let modbusTaskRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
+    let logger: ReturnType<typeof CreateLoggerMock>;
+    let service: SynchronizeService;
+
+    beforeAll(async () => {
+        ({ mongod, connection } = await StartMongoMemory());
+
+        const cycleModel = connection.model(Cycle.name, CycleSchema);
+        const sequenceModel = connection.model(Sequence.name, SequenceSchema);
+        const scheduleModel = connection.model(Schedule.name, ScheduleSchema);
+        const triggerModel = connection.model(Trigger.name, TriggerSchema);
+        const deviceModel = connection.model(Device.name, DeviceSchema);
+        const { actuatorModel, actuatorRpiModel, actuatorComModel, actuatorCtrlModel } = CreateActuatorMongooseModels(connection);
+
+        const sequenceMongooseRepository = new SequenceMongooseRepository(sequenceModel as never);
+        const scheduleMongooseRepository = new ScheduleMongooseRepository(scheduleModel as never);
+        const triggerMongooseRepository = new TriggerMongooseRepository(triggerModel as never);
+        actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
+            actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
+            connection, CreateLoggerMock() as never
+        ));
+        sequenceRepository = new SequenceRepository(sequenceMongooseRepository);
+        scheduleRepository = new ScheduleRepository(scheduleMongooseRepository);
+        triggerRepository = new TriggerRepository(triggerMongooseRepository);
+        cycleRepository = new CycleRepository(
+            new CycleMongooseRepository(cycleModel as never, sequenceMongooseRepository, scheduleMongooseRepository, triggerMongooseRepository),
+            sequenceRepository,
+            scheduleRepository,
+            triggerRepository
+        );
+        deviceRepository = new DeviceRepository(new DeviceMongooseRepository(deviceModel as never));
+
+        const testingModule = await Test.createTestingModule({ imports: [ScheduleModule.forRoot()] }).compile();
+        schedulerRegistry = testingModule.get(SchedulerRegistry);
+    }, 120000);
+
+    afterAll(async () => {
+        for (const name of schedulerRegistry.getCronJobs().keys()) {
+            schedulerRegistry.deleteCronJob(name);
+        }
+        await StopMongoMemory(mongod, connection);
     });
 
     beforeEach(async () => {
+        for (const collectionName of ['cycles', 'sequences', 'schedules', 'triggers', 'devices', 'actuators']) {
+            await connection.collection(collectionName).deleteMany({});
+        }
+        for (const name of schedulerRegistry.getCronJobs().keys()) {
+            schedulerRegistry.deleteCronJob(name);
+        }
 
-        const module: TestingModule = await Test.createTestingModule({
-            imports: [
-                ConfigModule.forRoot(),
-                ScheduleModule.forRoot()],
-            providers: [SocketIoClientProxyService, SocketIoClientProvider]
-        }).compile();
+        configurationService = {
+            getStructure: jest.fn().mockResolvedValue(undefined),
+            structure: new StructureModel(),
+            schedules: []
+        };
+        // TriggerService/SensorService touchent des ressources hors-perimetre de ce test
+        // (serie/BLE/websocket pour SensorService) : on ne verifie ici que la delegation.
+        triggerService = { initTrigger: jest.fn((trigger: unknown) => Promise.resolve(trigger)) };
+        sensorService = { initScheduledSensor: jest.fn((sensor: unknown) => Promise.resolve(sensor)) };
+        structureRepository = { save: jest.fn((structure: unknown) => Promise.resolve(structure)) };
+        sensorRepository = CreateReplaceAllRepositoryMock();
+        modbusTaskRepository = CreateReplaceAllRepositoryMock();
+        logger = CreateLoggerMock();
 
-        const schedulerRegistry: SchedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
-        const service: SocketIoClientProxyService = module.get<SocketIoClientProxyService>(SocketIoClientProxyService);
-        const scheduleService = new ScheduleService(schedulerRegistry);
+        const processService = { execute: jest.fn().mockResolvedValue(undefined) };
+        scheduleService = new ScheduleService(
+            schedulerRegistry,
+            configurationService as unknown as StructureService,
+            processService as unknown as ProcessService,
+            cycleRepository,
+            scheduleRepository,
+            logger as never
+        );
 
-        const structureRepository = new StructureRepositorySpecMock();
-        configurationService = new StructureService(structureRepository);
-        const processService = new ProcessService(configurationService, service, scheduleService);
-        await configurationService.getStructure();
-        synchronizeService = new SynchronizeService(structureRepository, configurationService, processService, scheduleService);
+        service = new SynchronizeService(
+            structureRepository as never,
+            deviceRepository,
+            modbusTaskRepository as never,
+            cycleRepository,
+            sequenceRepository,
+            triggerRepository,
+            scheduleRepository,
+            sensorRepository as never,
+            actuatorRepository,
+            configurationService as unknown as StructureService,
+            scheduleService,
+            triggerService as unknown as TriggerService,
+            sensorService as unknown as SensorService,
+            logger as never
+        );
     });
 
-    it('Should save configuration', async () => {
-        //GIVEN
-        const dto = new StructureSynchronizeDTO();
-        // eslint-disable-next-line max-len
-        dto.configuration = '{"cycles":[{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":26,"direction":"out","edge":"both","instance":{}}],"id":"11","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":19,"direction":"out","edge":"both","instance":{}}],"id":"12","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":21,"direction":"out","edge":"both","instance":{}}],"id":"13","duration":10},{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}}],"id":"14","duration":10}],"id":"1"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":26,"direction":"out","edge":"both","instance":{}}],"id":"21","duration":10}],"id":"2"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":16,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":19,"direction":"out","edge":"both","instance":{}}],"id":"31","duration":10}],"id":"3"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":21,"direction":"out","edge":"both","instance":{}}],"id":"41","duration":10}],"id":"4"},{"status":"STOPPED","sequences":[{"status":"STOPPED","modules":[{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}},{"activeLow":false,"reconfigureDirection":true,"status":"OFF","portNum":20,"direction":"out","edge":"both","instance":{}}],"id":"51","duration":10}],"id":"5"}]}'
-        const configurationModel = StructureSynchronizeDTO.mapToStructureModel(dto);
+    describe('synchronizeCycle', () => {
+        it('should create a cycle with its nested sequence, module, schedule and trigger', async () => {
+            const actuatorRpi = await actuatorRepository.save(CreateActuatorRpiModel());
+            const sequence = new SynchronizeSequenceModel();
+            sequence.name = 'sequence';
+            sequence.securityConfig.maxDuration = 1000;
+            sequence.moduleConfigs = [{
+                moduleId: actuatorRpi._id,
+                configTiming: { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 }
+            }];
 
-        //WHEN
-        const configModel = await synchronizeService.synchronize(configurationModel);
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            cycleModel.sequences = [sequence];
+            cycleModel.schedules = [CreateScheduleModel({ _id: undefined })];
+            cycleModel.triggers = [CreateTriggerModel({ id: undefined })];
 
-        //THEN
-        expect(configModel).toEqual(configurationModel);
+            const result = await service.synchronizeCycle(cycleModel);
+
+            expect(result._id).toBeDefined();
+            expect(result.sequences).toHaveLength(1);
+            expect(result.sequences[0].moduleConfigs).toHaveLength(1);
+            expect(result.schedules).toHaveLength(1);
+            expect(result.triggers).toHaveLength(1);
+            expect(configurationService.getStructure).toHaveBeenCalled();
+            expect(schedulerRegistry.doesExist('cron', result.schedules[0]._id)).toBe(true);
+        });
+
+        it('should update an existing cycle', async () => {
+            const created = await cycleRepository.save(Object.assign(new SynchronizeCycleModel(), CreateCycleModel({ name: 'Zone A' })));
+            const updateModel = new SynchronizeCycleModel();
+            Object.assign(updateModel, CreateCycleModel({ _id: created._id, name: 'Zone A renamed' }));
+
+            const result = await service.synchronizeCycle(updateModel);
+
+            expect(result.name).toEqual('Zone A renamed');
+        });
+
+        it('should soft delete a cycle via synchronizeCycle({ delete: true }), cascading to its sequences', async () => {
+            const sequence = new SynchronizeSequenceModel();
+            sequence.name = 'sequence';
+            sequence.securityConfig.maxDuration = 1000;
+
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            cycleModel.sequences = [sequence];
+            const created = await service.synchronizeCycle(cycleModel);
+
+            const deleteModel = new SynchronizeCycleModel();
+            deleteModel._id = created._id;
+            deleteModel.delete = true;
+            const result = await service.synchronizeCycle(deleteModel);
+
+            expect(result.deletedAt).toBeDefined();
+            expect(await cycleRepository.get(created._id)).toBeNull();
+            expect(await sequenceRepository.findByCycleId(created._id)).toHaveLength(0);
+        });
+
+        it('should soft delete only the sequence flagged delete:true, keeping siblings and leaving absent ones untouched', async () => {
+            const keep = new SynchronizeSequenceModel();
+            keep.name = 'keep';
+            keep.securityConfig.maxDuration = 1000;
+            const toRemove = new SynchronizeSequenceModel();
+            toRemove.name = 'to-remove';
+            toRemove.securityConfig.maxDuration = 1000;
+            const untouched = new SynchronizeSequenceModel();
+            untouched.name = 'untouched';
+            untouched.securityConfig.maxDuration = 1000;
+
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            cycleModel.sequences = [keep, toRemove, untouched];
+            const created = await service.synchronizeCycle(cycleModel);
+            const [keepId, toRemoveId, untouchedId] = created.sequences.map((s) => s._id);
+
+            // deuxieme synchro : `untouched` est absente du payload (ne doit plus etre supprimee
+            // par omission), `toRemove` est explicitement marquee `delete: true`.
+            const keepAgain = new SynchronizeSequenceModel();
+            keepAgain._id = keepId;
+            keepAgain.name = 'keep';
+            keepAgain.securityConfig.maxDuration = 1000;
+            const removeAgain = new SynchronizeSequenceModel();
+            removeAgain._id = toRemoveId;
+            removeAgain.delete = true;
+
+            const resyncModel = new SynchronizeCycleModel();
+            resyncModel._id = created._id;
+            Object.assign(resyncModel, CreateCycleModel({ _id: created._id, name: 'Zone A' }));
+            resyncModel.sequences = [keepAgain, removeAgain];
+            await service.synchronizeCycle(resyncModel);
+
+            expect(await sequenceRepository.get(keepId)).not.toBeNull();
+            expect(await sequenceRepository.get(toRemoveId)).toBeNull();
+            expect(await sequenceRepository.get(untouchedId)).not.toBeNull();
+        });
     });
 
-    it('Should save new cycle as partial configuration', async () => {
+    describe('synchronizeValve', () => {
+        it('should create a valve', async () => {
+            const result = await service.synchronizeValve(CreateValveModel({ name: 'Valve A' }));
 
-        //GIVEN
-        const partialdto: CycleSynchronizeDTO = CreateSynchronizePartialDto();
-        const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
+            expect(result._id).toBeDefined();
+            expect(configurationService.getStructure).toHaveBeenCalled();
+        });
 
-        //WHEN
-        const configModel = await synchronizeService.sychronizePartial(configurationModel);
+        it('should soft delete a valve via synchronizeValve({ delete: true })', async () => {
+            const created = await actuatorRepository.save(CreateValveModel({ name: 'Valve A' }));
 
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === 'partial1'));
+            const deleteModel = new SynchronizeActuatorModel();
+            deleteModel._id = created._id;
+            deleteModel.delete = true;
+            const result = await service.synchronizeValve(deleteModel);
+
+            expect(result.deletedAt).toBeDefined();
+            expect(await actuatorRepository.get(created._id)).toBeNull();
+        });
     });
 
-    it('Should update cycle & sequence child as partial configuration', async () => {
+    describe('synchronizeActuatorList / deleteActuatorList', () => {
+        it('should create a list of actuators (rpi and com)', async () => {
+            const [rpi, com] = await service.synchronizeActuatorList([CreateActuatorRpiModel(), CreateActuatorComModel()]);
 
-        //GIVEN
-        const partialdto: CycleSynchronizeDTO = CreateSynchronizePartialUpdateDto();
-        const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
+            expect(rpi._id).toBeDefined();
+            expect(rpi.type).toEqual(ActuatorType.RPI);
+            expect(com._id).toBeDefined();
+            expect(com.type).toEqual(ActuatorType.COM);
+        });
 
-        //WHEN
-        const configModel = await synchronizeService.sychronizePartial(configurationModel);
+        it('should soft delete only actuators flagged delete:true, leaving absent ones untouched', async () => {
+            const toRemove = await actuatorRepository.save(CreateActuatorRpiModel());
+            const untouched = await actuatorRepository.save(CreateActuatorComModel());
 
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+            const deleteModel = new SynchronizeActuatorModel();
+            deleteModel._id = toRemove._id;
+            deleteModel.delete = true;
+            await service.synchronizeActuatorList([deleteModel]);
+
+            expect(await actuatorRepository.findByIds([toRemove._id])).toHaveLength(0);
+            expect(await actuatorRepository.findByIds([untouched._id])).toHaveLength(1);
+        });
     });
 
-    it('Should delete cycle ', async () => {
+    describe('synchronizeDeviceList / synchronizeModbusTaskList', () => {
+        it('should create a list of devices', async () => {
+            const result = await service.synchronizeDeviceList([CreateMasterDeviceModel()]);
 
-        //GIVEN
-        const partialdto: CycleSynchronizeDTO = CreateSynchronizePartialDeleteDto();
-        const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
+            expect(result[0]._id).toBeDefined();
+            expect(configurationService.getStructure).toHaveBeenCalled();
+        });
 
-        //WHEN
-        await synchronizeService.sychronizePartial(configurationModel);
+        it('should soft delete a device via synchronizeDeviceList({ delete: true })', async () => {
+            const created = await deviceRepository.save(CreateMasterDeviceModel());
 
-        //THEN
-        expect(configurationService.structure.cycles.find(x => x.id === '1')).not.toBeDefined();
+            const deleteModel = new SynchronizeDeviceModel();
+            deleteModel._id = created._id;
+            deleteModel.delete = true;
+            await service.synchronizeDeviceList([deleteModel]);
+
+            expect(await deviceRepository.get(created._id)).toBeNull();
+        });
+
+        it('should delegate modbus task list save to the repository', async () => {
+            const modbusTask = new ComRequestModel();
+            modbusTask.deviceId = 'connection-1';
+            modbusTask.name = 'task';
+            modbusTask.config = { function: ModbusFunctionName.READ_HOLDING_REGISTERS, address: 0, params: {} };
+
+            await service.synchronizeModbusTaskList([modbusTask]);
+
+            expect(modbusTaskRepository.saveMany).toHaveBeenCalledWith([modbusTask]);
+        });
+
+        it('should delegate a delete-flagged modbus task to the repository via synchronizeModbusTaskList', async () => {
+            const modbusTask = new SynchronizeComRequestModel();
+            modbusTask._id = 'task-1';
+            modbusTask.delete = true;
+
+            await service.synchronizeModbusTaskList([modbusTask]);
+
+            expect(modbusTaskRepository.saveMany).toHaveBeenCalledWith([modbusTask]);
+        });
     });
 
+    describe('synchronizeTrigger', () => {
+        it('should create a trigger and delegate initialization to TriggerService', async () => {
+            const trigger = CreateTriggerModel({ id: undefined });
 
-    it('Should delete sequence & module from cycle ', async () => {
+            const result = await service.synchronizeTrigger(trigger);
 
-        //GIVEN
-        const partialdto: CycleSynchronizeDTO = CreateDelSeqAndDelModuleDto();
-        const configurationModel = CycleSynchronizeDTO.mapToCycleModel(partialdto);
+            expect(result.id).toBeDefined();
+            expect(triggerService.initTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: result.id }), false);
+        });
 
-        //WHEN
-        await synchronizeService.sychronizePartial(configurationModel);
+        it('should soft delete a trigger via synchronizeTrigger({ delete: true }) and delegate to TriggerService', async () => {
+            const created = await triggerRepository.save(CreateTriggerModel());
 
-        //THEN
-        expect(configurationService.sequences.find(x => x.id === '12')).not.toBeDefined();
-        const module = configurationService.sequences.find(x => x.id === '11').modules.find(x => x.portNum === 26);
-        expect(module).not.toBeDefined();
+            const deleteModel = new SynchronizeTriggerModel();
+            deleteModel.id = created.id;
+            deleteModel.delete = true;
+            const result = await service.synchronizeTrigger(deleteModel);
+
+            expect(result.deletedAt).toBeDefined();
+            expect(triggerService.initTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: created.id }), true);
+        });
     });
 
-    it('Should save new schedule', async () => {
+    describe('synchronizeSchedule', () => {
+        it('should create a schedule and register its cron job', async () => {
+            const schedule = CreateScheduleModel({ _id: undefined });
 
-        //GIVEN
-        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
-        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+            const result = await service.synchronizeSchedule(schedule);
 
-        //WHEN
-        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+            expect(result._id).toBeDefined();
+            expect(schedulerRegistry.doesExist('cron', result._id)).toBe(true);
+        });
+
+        it('should soft delete a schedule via synchronizeSchedule({ delete: true }) and remove its cron job', async () => {
+            const created = await scheduleRepository.save(CreateScheduleModel());
+            scheduleService.createSchedule(created, jest.fn());
+
+            const deleteModel = new SynchronizeScheduleModel();
+            deleteModel._id = created._id;
+            deleteModel.delete = true;
+            const result = await service.synchronizeSchedule(deleteModel);
+
+            expect(result.deletedAt).toBeDefined();
+            expect(schedulerRegistry.doesExist('cron', created._id)).toBe(false);
+        });
     });
 
+    describe('sychronizeSensor', () => {
+        it('should save the sensor and delegate its cron scheduling to SensorService', async () => {
+            const sensor = { id: 'sensor-1', type: SensorType.FORCAST } as SensorModel;
 
-    it('Should delete schedule ', async () => {
+            await service.sychronizeSensor(sensor);
 
-        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
-        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+            expect(sensorRepository.save).toHaveBeenCalledWith(sensor);
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith(sensor, false);
+        });
 
-        //WHEN
-        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+        it('should soft delete a sensor via sychronizeSensor({ delete: true }) and unregister its cron job', async () => {
+            const deleteModel = { id: 'sensor-1', delete: true } as SynchronizeSensorModel;
 
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+            await service.sychronizeSensor(deleteModel);
 
-        //GIVEN
-        const scheduledtodelete: ScheduleSynchronizeDTO = CreateScheduleDeleteDto();
-        const scheduleSyncModeldelete = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledtodelete);
-
-        //WHEN
-        await synchronizeService.sychronizeSchedule(scheduleSyncModeldelete);
-
-        //THEN
-        expect(configurationService.structure.cycles.find(x => x.id === '1').schedules[0]).not.toBeDefined();
+            expect(sensorRepository.delete).toHaveBeenCalledWith('sensor-1');
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith(expect.objectContaining({ id: 'sensor-1' }), true);
+        });
     });
 
-    it('Should update schedule ', async () => {
+    describe('synchronize (bulk structure sync)', () => {
+        it('should persist every collection and set configurationService.structure', async () => {
+            const structureModel = new StructureModel();
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            structureModel.cycles = [cycleModel];
+            structureModel.sensors = [{ id: 'sensor-1', type: SensorType.FORCAST } as SensorModel];
+            structureModel.modbusTasks = [];
 
-        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDto();
-        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
+            const result = await service.synchronize(structureModel);
 
-        //WHEN
-        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
+            expect(structureRepository.save).toHaveBeenCalled();
+            expect(result.cycles).toHaveLength(1);
+            expect(sensorRepository.replaceAll).toHaveBeenCalledWith(structureModel.sensors);
+            expect(configurationService.structure).toBe(result);
+        });
 
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
+        it('should soft delete only the cycle flagged delete:true, leaving the other one untouched', async () => {
+            const kept = new SynchronizeCycleModel();
+            Object.assign(kept, CreateCycleModel({ name: 'Zone A' }));
+            const createdKept = await cycleRepository.save(kept);
+            const removed = new SynchronizeCycleModel();
+            Object.assign(removed, CreateCycleModel({ name: 'Zone B' }));
+            const createdRemoved = await cycleRepository.save(removed);
 
-        //GIVEN
-        const scheduledtodelete: ScheduleSynchronizeDTO = CreateNewScheduleDto(true);
-        const scheduleSyncModeldelete = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledtodelete);
+            const keptAgain = new SynchronizeCycleModel();
+            keptAgain._id = createdKept._id;
+            Object.assign(keptAgain, CreateCycleModel({ _id: createdKept._id, name: 'Zone A' }));
+            const removeAgain = new SynchronizeCycleModel();
+            removeAgain._id = createdRemoved._id;
+            removeAgain.delete = true;
 
-        //WHEN
-        await synchronizeService.sychronizeSchedule(scheduleSyncModeldelete);
+            const structureModel = new StructureModel();
+            structureModel.cycles = [keptAgain, removeAgain];
+            structureModel.sensors = [];
+            structureModel.modbusTasks = [];
 
-        //THEN
-        expect(configurationService.structure.cycles.find(x => x.id === '1').schedules[0].name).toEqual('name-schedule1122_updated');
+            await service.synchronize(structureModel);
+
+            expect(await cycleRepository.get(createdKept._id)).not.toBeNull();
+            expect(await cycleRepository.get(createdRemoved._id)).toBeNull();
+        });
     });
-
-    it('Should save new schedule', async () => {
-
-        //GIVEN
-        const scheduledto: ScheduleSynchronizeDTO = CreateNewScheduleDtowithPattern();
-        const scheduleSyncModel = ScheduleSynchronizeDTO.mapToScheduleModel(scheduledto);
-
-        //WHEN
-        const configModel = await synchronizeService.sychronizeSchedule(scheduleSyncModel);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        //THEN
-        expect(configModel).toEqual(configurationService.structure.cycles.find(x => x.id === '1'));
-    });
-    
-
 });

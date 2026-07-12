@@ -6,10 +6,7 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DbService {
-    public DB_VALUES: JsonDB;
     public DB_STRUCTURE: JsonDB;
-    public DB_AUTH: JsonDB;
-    public DB_SENSOR_VALUE = {};
 
     constructor(
         private _config: ConfigService,
@@ -19,66 +16,13 @@ export class DbService {
     }
     public async initialize(): Promise<void> {
         this.createFolders();
-        await this._initialiseDbAuth();
-        await this._initialiseDbStructure();
-        await this._initialiseDbValues();
-        await this._initialiseDbSensorData();
-
     }
 
     private createFolders(): void {
         try {
-            fs.mkdir(`${this._config.get('DB_PATH')}/data_in/sensor`, { recursive: true });
             fs.mkdir(`${this._config.get('DB_PATH')}/backup`, { recursive: true });
         } catch (error) {
             this.logger.error({ error }, 'DB folders could not be created');
-        }
-    }
-
-    private async _initialiseDbValues(): Promise<void> {
-        try {
-            this.DB_VALUES = new JsonDB(new Config(`${this._config.get('DB_PATH')}/DB_VALUES`, true, true, '/'));
-
-            if (!await this.DB_VALUES.exists('/sensors')) {
-                await this.DB_VALUES.push('/sensors', []);
-            }
-
-            if (!await this.DB_VALUES.exists('/processes')) {
-                await this.DB_VALUES.push('/processes', []);
-            }
-        } catch (error) {
-            this.logger.error({ error }, 'DB_VALUES could not be loaded, restoring from backup');
-            await this.executeBackUp('DB_VALUES', 'RESTORE');
-            if (!await this.DB_VALUES.exists('/sensors')) {
-                await this.DB_VALUES.push('/sensors', []);
-            }
-
-            if (!await this.DB_VALUES.exists('/processes')) {
-                await this.DB_VALUES.push('/processes', []);
-            }
-        }
-    }
-
-    private async _initialiseDbAuth(): Promise<void> {
-        try {
-            this.DB_AUTH = new JsonDB(new Config(`${this._config.get('DB_PATH')}/DB_AUTH`, true, true, '/'));
-        } catch (error) {
-            this.logger.error({ error }, 'DB_AUTH could not be loaded, restoring from backup');
-            await this.executeBackUp('DB_AUTH', 'RESTORE');
-        }
-    }
-
-    private async _initialiseDbSensorData(): Promise<void> {
-        try {
-            const key = `${(new Date()).getMonth()}-${(new Date()).getFullYear()}`
-            this.DB_SENSOR_VALUE[key] = new JsonDB(new Config(`${this._config.get('DB_PATH')}/data_in/sensor/${key}`, true, false, '/'));
-            if (!await this.DB_SENSOR_VALUE[key].exists('/data')) {
-                await this.DB_SENSOR_VALUE[key].push('/data', []);
-            }
-            let numberOfElements = await this.DB_SENSOR_VALUE[key].count("/data");
-        } catch (error) {
-            this.logger.error({ error }, 'DB_SENSOR_VALUE could not be loaded, restoring from backup');
-            await this.executeBackUp('DB_AUTH', 'RESTORE');
         }
     }
 
@@ -116,6 +60,6 @@ export class DbService {
         } catch (error) {
             this.logger.error({ error, type, action }, `DB ${type} could not be ${action.toLowerCase()}d`);
         }
-    }
+    } 
 
 }

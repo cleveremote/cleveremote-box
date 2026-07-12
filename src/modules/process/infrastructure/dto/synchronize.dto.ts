@@ -1,44 +1,107 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable max-lines */
 import { ApiProperty } from '@nestjs/swagger';
-import { ExecutableAction, ExecutableType, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { ConditionsLogic, CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { ChildCycleRef } from '@process/domain/models/cycle.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
-import { CycleModel } from '@process/domain/models/cycle.model';
-import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
-import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
-import { ScheduleModel } from '@process/domain/models/schedule.model';
-import { SensorModel } from '@process/domain/models/sensor.model';
+import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
-import { TaskModel } from '@process/domain/models/task.model';
-import { ValveConfigModel } from '@process/domain/models/valve.model';
-import { SynchronizeConditionModel, SynchronizeModuleModel, SynchronizeScheduleModel, SynchronizeSequenceModel, SynchronizeTriggerModel } from '@process/domain/models/synchronize.model';
-import { TriggerModel } from '@process/domain/models/trigger.model';
+import { ComActuatorAction, ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel, DigitalPortType } from '@process/domain/models/actuator.model';
+import { DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { ModbusFunctionName } from '@process/domain/models/com-request.model';
+import {
+    SynchronizeConditionModel,
+    SynchronizeCycleModel,
+    SynchronizeDeviceModel,
+    SynchronizeComRequestModel,
+    SynchronizeActuatorModel,
+    SynchronizeScheduleModel,
+    SynchronizeSensorModel,
+    SynchronizeSequenceModel,
+    SynchronizeTriggerModel
+} from '@process/domain/models/synchronize.model';
+import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDate, IsDefined, IsEnum, IsNotEmpty, IsNumber, IsString, Validate, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
-export class SequenceSync {
+import { IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { isValidUuid } from '@process/domain/utils/id.util';
+import { ElementType } from '@process/domain/models/event.model';
+
+export class CustomTaskSync {
     @IsString()
     @IsNotEmpty()
-    public id: string;
+    public taskId: string;
+    @IsOptional()
+    @IsString()
+    public param: string | null = null;
+}
+
+export class SecurityConfigSync {
+    @IsNumber()
+    public maxDuration: number = 60000;
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ConditionSync)
+    public conditions?: ConditionSync[];
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CustomTaskSync)
+    public customStack?: CustomTaskSync[];
+}
+
+export class SequenceSync {
+    @IsOptional()
+    @IsString()
+    public _id: string;
     @IsString()
     public name: string;
     @IsString()
     public description: string;
-    @IsString()
-    public mapSectionId: string;
     @IsNumber()
-    public maxDuration: number;
+    public order: number = 0;
+    @ValidateNested()
+    @Type(() => SecurityConfigSync)
+    public securityConfig: SecurityConfigSync = { maxDuration: 60000 };
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => moduleConfigsSync)
+    public moduleConfigs: moduleConfigsSync[];
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+}
+
+export class ChildCycleConfigSync {
     @IsNumber()
-    public vfd: number;
+    public order: number;
+    @IsBoolean()
+    public waitForCompletion: boolean;
+    @IsNumber()
+    public delayBefore: number;
+    @IsNumber()
+    public delayAfter: number;
+    @IsBoolean()
+    public isSkipped: boolean;
+}
+
+export class ChildCycleSync {
     @IsString()
-    public taskId: string;
-    @IsArray()
-    @Type(() => ModuleSync)
-    public modules: ModuleSync[];
-    @IsArray()
-    @Type(() => ConditionSync)
-    public conditions?: ConditionSync[];
+    @IsNotEmpty()
+    public cycleId: string;
+    @ValidateNested()
+    @Type(() => ChildCycleConfigSync)
+    public config: ChildCycleConfigSync;
+}
+
+export class IconColorSync {
+    @IsString()
+    public icon: string;
+    @IsString()
+    public base: string;
 }
 
 export class Style {
@@ -46,8 +109,9 @@ export class Style {
     public bgColor: string;
     @IsString()
     public fontColor: string;
-    @IsString()
-    public iconColor: any
+    @ValidateNested()
+    @Type(() => IconColorSync)
+    public iconColor: IconColorSync;
 }
 
 export class ModePriority {
@@ -58,42 +122,109 @@ export class ModePriority {
 }
 
 export class CycleSynchronizeDTO {
+    @IsOptional()
     @IsString()
-    public id: string;
+    public _id: string;
+    // gestion des groupes / sous-cycles (GROUP)
+    @IsOptional()
+    @IsEnum(CycleType)
+    public type?: CycleType = CycleType.CYCLE;
     @IsString()
-    public name?: string;
-    @IsString()
-    public taskId?: string;
-    @IsEnum(ExecutableType)
-    public type: ExecutableType;
+    public name: string;
+    @IsOptional()
     @IsString()
     public description: string;
-    @IsString()
-    public mapSectionId: string;
+    @IsOptional()
+    @ValidateNested()
     @Type(() => Style)
-    public style?: Style;
+    public style?: Style = {
+        "bgColor": "#2196F3",
+        "fontColor": "#FFFFFF",
+        "iconColor": {
+            "icon": "water-drop",
+            "base": "#1565C0"
+        }
+    };
+    @IsOptional()
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => ModePriority)
-    public modePriority: ModePriority[];
+    public modePriority?: ModePriority[] = [
+        { mode: ProcessMode.MANUAL, priority: 0 },
+        { mode: ProcessMode.SCHEDULED, priority: 1 },
+        { mode: ProcessMode.TRIGGER, priority: 2 }
+    ];
+    @IsOptional()
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => SequenceSync)
     public sequences?: SequenceSync[];
+    @IsOptional()
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => TriggerSynchronizeDTO)
     public triggers?: TriggerSynchronizeDTO[];
+    @IsOptional()
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => ScheduleSynchronizeDTO)
     public schedules?: ScheduleSynchronizeDTO[];
 
-    public static mapToCycleModel(cycleSynchronizeDTO: CycleSynchronizeDTO): CycleModel {
-        const cycle = new CycleModel();
-        cycle.id = cycleSynchronizeDTO.id;
+    @IsOptional()
+    @IsEnum(ExecutionMode)
+    public executionMode?: ExecutionMode = ExecutionMode.SEQUENTIAL;
+
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ConditionSync)
+    public conditions?: ConditionSync[];
+    @IsOptional()
+    @IsEnum(ConditionsLogic)
+    public conditionsLogic?: ConditionsLogic = ConditionsLogic.AND;
+    @IsOptional()
+    @IsString()
+    public parentCycleId: string = null;
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ChildCycleSync)
+    public childCycles?: ChildCycleSync[];
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToCycleModel(cycleSynchronizeDTO: CycleSynchronizeDTO): SynchronizeCycleModel {
+        const cycle = new SynchronizeCycleModel();
+        cycle._id = cycleSynchronizeDTO._id;
         cycle.name = cycleSynchronizeDTO.name;
-        cycle.taskId = cycleSynchronizeDTO.taskId;
-        cycle.type = cycleSynchronizeDTO.type;
+        cycle.delete = cycleSynchronizeDTO.delete ?? false;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
-        cycle.mapSectionId = cycleSynchronizeDTO.mapSectionId; 
+
+        cycle.type = cycleSynchronizeDTO.type ?? CycleType.CYCLE;
+        cycle.executionMode = cycleSynchronizeDTO.executionMode ?? ExecutionMode.SEQUENTIAL;
+        cycle.conditionsLogic = cycleSynchronizeDTO.conditionsLogic ?? ConditionsLogic.AND;
+        cycle.parentCycleId = cycleSynchronizeDTO.parentCycleId ?? null;
+        cycle.conditions = (cycleSynchronizeDTO.conditions ?? []).map(conditionSync => {
+            const condition = new SynchronizeConditionModel();
+            condition.name = conditionSync.name;
+            condition.elementId = conditionSync.elementId;
+            condition.elementType = conditionSync.elementType;
+            condition.operator = conditionSync.operator;
+            condition.value = conditionSync.value;
+            return condition;
+        });
+        cycle.childCycles = (cycleSynchronizeDTO.childCycles ?? []).map((childCycleSync): ChildCycleRef => ({
+            cycleId: childCycleSync.cycleId,
+            config: {
+                order: childCycleSync.config.order,
+                waitForCompletion: childCycleSync.config.waitForCompletion,
+                delayBefore: childCycleSync.config.delayBefore,
+                delayAfter: childCycleSync.config.delayAfter,
+                isSkipped: childCycleSync.config.isSkipped
+            }
+        }));
 
         cycle.modePriority = [];
         if (cycleSynchronizeDTO.modePriority) {
@@ -107,171 +238,89 @@ export class CycleSynchronizeDTO {
             cycle.modePriority.push({ mode: ProcessMode.TRIGGER, priority: 2 });
         }
 
-        cycle.sequences = [];
-        cycleSynchronizeDTO.sequences.forEach(sequenceSync => {
+        cycle.sequences = (cycleSynchronizeDTO.sequences ?? []).map(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();
-            const splittedSequenceId = sequenceSync.id.split('_');
-            sequence.shouldDelete = splittedSequenceId.length > 1 && splittedSequenceId[0] === 'deleted';
-            sequence.id = splittedSequenceId[1] || splittedSequenceId[0];
-            //no need to save deleted...
-            if (!sequence.shouldDelete) {
-                sequence.name = sequenceSync.name;
-                sequence.description = sequenceSync.description;
-                sequence.mapSectionId = sequenceSync.mapSectionId;
-                sequence.maxDuration = sequenceSync.maxDuration;
-                sequence.vfd = sequenceSync.vfd;
-                sequence.taskId = sequenceSync.taskId;
-                sequence.modules = [];
-                sequenceSync.modules?.forEach((moduleDto) => {
-                    const module = new SynchronizeModuleModel();
-                    const splittedModuleId = moduleDto.id.split('_');
-                    module.shouldDelete = splittedModuleId.length > 1 && splittedModuleId[0] === 'deleted';
-                    //no need to save deleted...
-                    if (!module.shouldDelete) {
-                        module.id = splittedModuleId[1] || splittedModuleId[0];
-                        module.portNum = Number(splittedModuleId[1] || splittedModuleId[0]);
-                        module.status = ModuleStatus.OFF;
-                        module.direction = GPIODirection.OUT;
-                        module.edge = GPIOEdge.BOTH;
-                        delete module.instance;
-                        sequence.modules.push(module);
-                    }
-                });
-                sequence.conditions = [];
-                if (sequenceSync.conditions?.length > 0) {
-                    sequenceSync.conditions.forEach(conditionSync => {
+            sequence._id = sequenceSync._id;
+            sequence.name = sequenceSync.name;
+            sequence.description = sequenceSync.description;
+            sequence.order = sequenceSync.order;
+            sequence.securityConfig = {
+                maxDuration: sequenceSync.securityConfig.maxDuration,
+                ...(sequenceSync.securityConfig.customStack !== undefined && { customStack: sequenceSync.securityConfig.customStack }),
+                ...(sequenceSync.securityConfig.conditions !== undefined && {
+                    conditions: sequenceSync.securityConfig.conditions.map(conditionSync => {
                         const condition = new SynchronizeConditionModel();
-                        const splittedConditionId = conditionSync.id.split('_');
-                        condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
-                        if (!condition.shouldDelete) {
-                            condition.id = splittedConditionId[1] || splittedConditionId[0];
-                            condition.parentId = sequenceSync.id;
-                            condition.name = conditionSync.name;
-                            condition.description = conditionSync.name;
-                            condition.deviceId = conditionSync.deviceId;
-                            condition.operator = conditionSync.operator;
-                            condition.value = conditionSync.value;
-                            sequence.conditions.push(condition);
-                        }
-                    });
-                }
-                cycle.sequences.push(sequence);
-            }
-
+                        condition.name = conditionSync.name;
+                        condition.elementId = conditionSync.elementId;
+                        condition.elementType = conditionSync.elementType;
+                        condition.operator = conditionSync.operator;
+                        condition.value = conditionSync.value;
+                        return condition;
+                    })
+                })
+            };
+            // les modules (actuator-rpi/actuator-com) sont geres via leurs endpoints de sync dedies ;
+            // ici on ne fait que reference leur id, avec un timing par defaut a 0.
+            sequence.moduleConfigs = (sequenceSync.moduleConfigs ?? []).map((moduleDto) => ({
+                moduleId: moduleDto.moduleId,
+                configTiming: moduleDto.configTiming || { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 },
+                ...(moduleDto.customValue !== undefined && { customValue: moduleDto.customValue })
+            }));
+            sequence.delete = sequenceSync.delete ?? false;
+            return sequence;
         });
 
-        cycle.triggers = [];
-        cycleSynchronizeDTO.triggers?.forEach(triggerSync => {
+        cycle.triggers = (cycleSynchronizeDTO.triggers ?? []).map(triggerSync => {
             const trigger = new SynchronizeTriggerModel();
-            const splittedTriggerId = triggerSync.id.split('_');
-            trigger.shouldDelete = splittedTriggerId.length > 1 && splittedTriggerId[0] === 'deleted';
-            trigger.id = splittedTriggerId[1] || splittedTriggerId[0];
-            //no need to save deleted...
-            if (!trigger.shouldDelete) {
-                trigger.name = triggerSync.name;
-                trigger.description = triggerSync.description;
-                trigger.shouldConfirmation = triggerSync.shouldConfirmation;
-                trigger.isPaused = triggerSync.isPaused;
-                trigger.trigger = triggerSync.trigger;
-                trigger.cycleId = triggerSync.cycleId;
-                trigger.delay = triggerSync.delay;
-                trigger.action = triggerSync.action;
-
-                trigger.conditions = [];
-                if (triggerSync.conditions?.length > 0) {
-                    triggerSync.conditions.forEach(conditionSync => {
-                        const condition = new SynchronizeConditionModel();
-                        const splittedConditionId = conditionSync.id.split('_');
-                        condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
-                        if (!condition.shouldDelete) {
-                            condition.id = splittedConditionId[1] || splittedConditionId[0];
-                            condition.parentId = triggerSync.id;
-                            condition.name = conditionSync.name;
-                            condition.description = conditionSync.description;
-                            condition.deviceId = conditionSync.deviceId;
-                            condition.operator = conditionSync.operator;
-                            condition.value = conditionSync.value;
-                            trigger.conditions.push(condition);
-                        }
-                    });
-                }
-                cycle.triggers.push(trigger);
-            }
+            trigger.id = triggerSync._id;
+            trigger.name = triggerSync.name;
+            trigger.description = triggerSync.description;
+            trigger.shouldConfirmation = triggerSync.shouldConfirmation;
+            trigger.isPaused = triggerSync.isPaused;
+            trigger.trigger = triggerSync.trigger;
+            trigger.cycleId = triggerSync.cycleId;
+            trigger.delay = triggerSync.delay;
+            trigger.action = triggerSync.action;
+            trigger.duration = triggerSync.duration;
+            trigger.conditions = (triggerSync.conditions ?? []).map(conditionSync => {
+                const condition = new SynchronizeConditionModel();
+                condition.name = conditionSync.name;
+                condition.elementId = conditionSync.elementId;
+                condition.elementType = conditionSync.elementType;
+                condition.operator = conditionSync.operator;
+                condition.value = conditionSync.value;
+                return condition;
+            });
+            trigger.delete = triggerSync.delete ?? false;
+            return trigger;
         });
 
-        cycle.schedules = [];
-        cycleSynchronizeDTO.schedules?.forEach(scheduleSync => {
+        cycle.schedules = (cycleSynchronizeDTO.schedules ?? []).map(scheduleSync => {
             const scheduleModel = new SynchronizeScheduleModel();
-            const splittedTriggerId = scheduleSync.id.split('_');
-            scheduleModel.shouldDelete = splittedTriggerId.length > 1 && splittedTriggerId[0] === 'deleted';
-            scheduleModel.id = splittedTriggerId[1] || splittedTriggerId[0];
-            if (!scheduleModel.shouldDelete) {
-                scheduleModel.id = scheduleSync.id;
-                scheduleModel.cycleId = scheduleSync.cycleId;
-                scheduleModel.name = scheduleSync.name;
-                scheduleModel.description = scheduleSync.description;
-                scheduleModel.cron = new CronSync();
-                scheduleModel.cron.date = scheduleSync.cron?.date;
-                scheduleModel.cron.pattern = scheduleSync.cron?.pattern;
-                scheduleModel.cron.after = scheduleSync.cron?.after;
-                if (scheduleSync.cron?.sunBehavior) {
-                    scheduleModel.cron.sunBehavior = new SunBehavior();
-                    scheduleModel.cron.sunBehavior.sunState = scheduleSync.cron?.sunBehavior?.sunState;
-                    scheduleModel.cron.sunBehavior.time = scheduleSync.cron?.sunBehavior?.time;
-                }
-                scheduleModel.isPaused = scheduleSync.isPaused;
-                scheduleModel.shouldConfirmation = scheduleSync.shouldConfirmation;
-                cycle.schedules.push(scheduleModel);
+            scheduleModel._id = scheduleSync._id;
+            scheduleModel.cycleId = scheduleSync.cycleId;
+            scheduleModel.name = scheduleSync.name;
+            scheduleModel.description = scheduleSync.description;
+            scheduleModel.cron = new CronSync();
+            scheduleModel.cron.date = scheduleSync.cron?.date;
+            scheduleModel.cron.pattern = scheduleSync.cron?.pattern;
+            scheduleModel.cron.after = scheduleSync.cron?.after;
+            if (scheduleSync.cron?.sunBehavior) {
+                scheduleModel.cron.sunBehavior = new SunBehavior();
+                scheduleModel.cron.sunBehavior.sunState = scheduleSync.cron?.sunBehavior?.sunState;
+                scheduleModel.cron.sunBehavior.time = scheduleSync.cron?.sunBehavior?.time;
             }
-        })
+            scheduleModel.isPaused = scheduleSync.isPaused;
+            scheduleModel.shouldConfirmation = scheduleSync.shouldConfirmation;
+            scheduleModel.duration = scheduleSync.duration;
+            scheduleModel.delete = scheduleSync.delete ?? false;
+            return scheduleModel;
+        });
         return cycle;
     }
 
 }
 
-export class TaskSynchronizeDTO {
-    @IsString()
-    public id: string;
-    @IsString()
-    public name?: string;
-    @IsString()
-    public description: string;
-    @IsString()
-    public mapSectionId?: string;
-    @Type(() => Style)
-    public style?: Style;
-    @IsArray()
-    @Type(() => TriggerSynchronizeDTO)
-    public triggers?: TriggerSynchronizeDTO[];
-    @IsArray()
-    @Type(() => ScheduleSynchronizeDTO)
-    public schedules?: ScheduleSynchronizeDTO[];
-
-    public static mapToTaskModel(taskSynchronizeDTO: TaskSynchronizeDTO): TaskModel {
-        const task = new TaskModel();
-        task.id = taskSynchronizeDTO.id;
-        task.name = taskSynchronizeDTO.name;
-        task.description = taskSynchronizeDTO.description;
-        task.mapSectionId = taskSynchronizeDTO.mapSectionId;
-        task.style = taskSynchronizeDTO.style;
-
-        task.triggers = [];
-        taskSynchronizeDTO.triggers?.forEach(triggerSync => {
-            const trigger = TriggerSynchronizeDTO.mapToTriggerModel(triggerSync);
-            trigger.taskId = taskSynchronizeDTO.id;
-            task.triggers.push(trigger);
-        });
-
-        task.schedules = [];
-        taskSynchronizeDTO.schedules?.forEach(scheduleSync => {
-            const schedule = ScheduleSynchronizeDTO.mapToScheduleModel(scheduleSync);
-            schedule.taskId = taskSynchronizeDTO.id;
-            task.schedules.push(schedule);
-        });
-
-        return task;
-    }
-}
 export class SunBehavior {
     @IsEnum(SunState)
     @IsNotEmpty()
@@ -281,47 +330,61 @@ export class SunBehavior {
     public time: number;
 }
 export class CronSync {
+    @IsOptional()
+    @Type(() => Date)
     @IsDate()
-    public date: Date;
+    public date?: Date;
+    @IsOptional()
     @IsString()
-    public pattern: string;
+    public pattern?: string;
+    @IsOptional()
+    @ValidateNested()
     @Type(() => SunBehavior)
-    public sunBehavior: SunBehavior;
+    public sunBehavior?: SunBehavior;
+    @IsOptional()
     @IsNumber()
-    public after: number;
+    public after?: number;
 }
 
 export class TriggerSync {
     @IsNumber()
     public timeAfter: number; //imemdiat if 0
+    @IsOptional()
+    @ValidateNested()
     @Type(() => SunBehavior)
     public sunBehavior?: SunBehavior;
 }
 
 export class ScheduleSynchronizeDTO {
-    @IsNotEmpty()
-    public id: string;
+    @IsOptional()
+    @IsString()
+    public _id: string;
     @IsString()
     public name?: string;
     @IsString()
     public description: string;
     @IsString()
     public cycleId?: string;
-    @IsString()
-    public taskId?: string;
+    @ValidateNested()
     @Type(() => CronSync)
     public cron: CronSync;
     @IsBoolean()
     public isPaused: boolean
     @IsBoolean()
     public shouldConfirmation: boolean
+    @IsOptional()
+    @IsNumber()
+    public duration?: number;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
 
-    public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): ScheduleModel {
-        const scheduleModel = new ScheduleModel();
-        scheduleModel.id = scheduleSynchronizeDTO.id;
+    public static mapToScheduleModel(scheduleSynchronizeDTO: ScheduleSynchronizeDTO): SynchronizeScheduleModel {
+        const scheduleModel = new SynchronizeScheduleModel();
+        scheduleModel._id = scheduleSynchronizeDTO._id;
+        scheduleModel.delete = scheduleSynchronizeDTO.delete ?? false;
         scheduleModel.cycleId = scheduleSynchronizeDTO.cycleId;
-        scheduleModel.taskId = scheduleSynchronizeDTO.taskId;
         scheduleModel.name = scheduleSynchronizeDTO.name;
         scheduleModel.description = scheduleSynchronizeDTO.description;
         scheduleModel.cron = new CronSync();
@@ -336,6 +399,7 @@ export class ScheduleSynchronizeDTO {
 
         scheduleModel.isPaused = scheduleSynchronizeDTO.isPaused;
         scheduleModel.shouldConfirmation = scheduleSynchronizeDTO.shouldConfirmation;
+        scheduleModel.duration = scheduleSynchronizeDTO.duration;
         return scheduleModel;
     }
 }
@@ -351,44 +415,53 @@ export class IsNumberOrString implements ValidatorConstraintInterface {
 }
 export class ConditionSync {
     @IsString()
-    @IsNotEmpty()
-    public id: string;
-    @IsString()
     public name: string;
-    @IsString()
-    public description: string;
     @IsDefined()
     @Validate(IsNumberOrString)
     public value: number | ExecutableAction;
     @IsString()
     public operator: string;
     @IsString()
-    public deviceId: string;
+    public elementId: string;
+    @IsEnum(ElementType)
+    public elementType: ElementType;
 }
 
-export class ModuleSync {
+export class ModuleTimingConfigSync {
+    waitBeforeExec: number;
+    waitAfterExec: number;
+    waitBeforeExecOff: number;
+    waitAfterExecOff: number;
+}
+
+export class moduleConfigsSync {
     @IsString()
     @IsNotEmpty()
-    public id: string;
-    @IsString()
-    public portNum: string;
+    public moduleId: string;
+
+    @Type(() => ModuleTimingConfigSync)
+    public configTiming: ModuleTimingConfigSync;
+
+    @IsOptional()
+    @IsNumber()
+    public customValue?: number;
 }
 
 export class TriggerSynchronizeDTO {
-    @IsNotEmpty()
-    public id: string;
+    @IsOptional()
+    @IsString()
+    public _id: string;
     @IsString()
     public name?: string;
     @IsString()
     public description: string;
     @IsString()
     public cycleId?: string;
-    @IsString()
-    public taskId?: string;
     @IsEnum(ExecutableAction)
     @IsNotEmpty()
     @ApiProperty()
     public action: ExecutableAction;
+    @ValidateNested()
     @Type(() => TriggerSync)
     public trigger: TriggerSync;
     @IsBoolean()
@@ -397,14 +470,21 @@ export class TriggerSynchronizeDTO {
     public delay: number;
     @IsBoolean()
     public shouldConfirmation: boolean;
+    @IsOptional()
+    @IsNumber()
+    public duration?: number;
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => ConditionSync)
     public conditions?: ConditionSync[];
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
-    public static mapToTriggerModel(triggerSynchronizeDTO: TriggerSynchronizeDTO): TriggerModel {
-        const triggerModel = new TriggerModel();
-
-        triggerModel.id = triggerSynchronizeDTO.id;
+    public static mapToTriggerModel(triggerSynchronizeDTO: TriggerSynchronizeDTO): SynchronizeTriggerModel {
+        const triggerModel = new SynchronizeTriggerModel();
+        triggerModel.id = triggerSynchronizeDTO._id;
+        triggerModel.delete = triggerSynchronizeDTO.delete ?? false;
         triggerModel.name = triggerSynchronizeDTO.name;
         triggerModel.description = triggerSynchronizeDTO.description;
         triggerModel.trigger = new TriggerSync();
@@ -413,83 +493,86 @@ export class TriggerSynchronizeDTO {
         triggerModel.delay = triggerSynchronizeDTO.delay;
         triggerModel.action = triggerSynchronizeDTO.action;
         triggerModel.cycleId = triggerSynchronizeDTO.cycleId;
-        triggerModel.taskId = triggerSynchronizeDTO.taskId;
+        triggerModel.duration = triggerSynchronizeDTO.duration;
 
         if (triggerSynchronizeDTO.trigger?.sunBehavior) {
             triggerModel.trigger.sunBehavior = new SunBehavior();
             triggerModel.trigger.sunBehavior.sunState = triggerSynchronizeDTO.trigger.sunBehavior?.sunState;
             triggerModel.trigger.sunBehavior.time = triggerSynchronizeDTO.trigger?.sunBehavior?.time; //time befor or after sunset sunrise
         }
-        triggerModel.conditions = [];
-        if (triggerSynchronizeDTO.conditions?.length > 0) {
-            triggerSynchronizeDTO.conditions.forEach(conditionSync => {
-                const condition = new SynchronizeConditionModel();
-                const splittedConditionId = conditionSync.id.split('_');
-                condition.shouldDelete = splittedConditionId.length > 1 && splittedConditionId[0] === 'deleted';
-                if (!condition.shouldDelete) {
-                    condition.id = splittedConditionId[1] || splittedConditionId[0];
-                    condition.parentId = triggerModel.id;
-                    condition.name = conditionSync.name;
-                    condition.description = conditionSync.name;
-                    condition.deviceId = conditionSync.deviceId;
-                    condition.operator = conditionSync.operator;
-                    condition.value = conditionSync.value;
-                    triggerModel.conditions.push(condition);
-                }
-
-            });
-        }
+        triggerModel.conditions = (triggerSynchronizeDTO.conditions ?? []).map(conditionSync => {
+            const condition = new SynchronizeConditionModel();
+            condition.name = conditionSync.name;
+            condition.elementId = conditionSync.elementId;
+            condition.elementType = conditionSync.elementType;
+            condition.operator = conditionSync.operator;
+            condition.value = conditionSync.value;
+            return condition;
+        });
         triggerModel.isPaused = triggerSynchronizeDTO.isPaused;
         return triggerModel;
     }
 
 }
 
+export class SensorConfigDTO {
+    @IsString()
+    @IsNotEmpty()
+    public cronPattern: string;
+
+    // FORCAST
+    @ValidateIf(o => o.type === SensorType.FORCAST)
+    @IsEnum(forcastDataName)
+    public forcastData?: forcastDataName;
+
+    // COM
+    @ValidateIf(o => o.type === SensorType.COM)
+    @IsString()
+    @IsNotEmpty()
+    public comRequestId?: string;
+}
+
 export class SensorSynchronizeDTO {
+    @IsOptional()
     @IsNotEmpty()
     public id: string;
     @IsString()
     public name: string;
     @IsString()
-    public unit: string;
-    @IsString()
     public description: string;
+    @ValidateNested()
     @Type(() => Style)
     public style?: Style;
+    @IsEnum(SensorType)
     @IsNotEmpty()
     @ApiProperty()
     public type: SensorType;
-    @IsString()
-    public taskId: string;
-    @IsString()
-    public cronPattern: string;
+    @ValidateNested()
+    @Type(() => SensorConfigDTO)
+    public config: SensorConfigDTO;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
-
-    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
-        const sensorModel = new SensorModel();
+    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SynchronizeSensorModel {
+        const sensorModel = new SynchronizeSensorModel();
         sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.name = sensorSynchronizeDTO.name;
-        sensorModel.taskId = sensorSynchronizeDTO.taskId;
-        sensorModel.cronPattern = sensorSynchronizeDTO.cronPattern;
         sensorModel.description = sensorSynchronizeDTO.description;
         sensorModel.style = sensorSynchronizeDTO.style;
-        sensorModel.id = sensorSynchronizeDTO.id;
         sensorModel.type = sensorSynchronizeDTO.type;
-        sensorModel.unit = sensorSynchronizeDTO.unit;
+        sensorModel.config = sensorSynchronizeDTO.type === SensorType.FORCAST
+            ? Object.assign(new ForcastSensorConfigModel(), sensorSynchronizeDTO.config)
+            : Object.assign(new ComSensorConfigModel(), sensorSynchronizeDTO.config);
+        sensorModel.delete = sensorSynchronizeDTO.delete ?? false;
         return sensorModel;
     }
 }
 
 
-export class ValveSynchronizeDTO {
-    @IsNotEmpty()
-    public id: string;
+export class ValveConfigDTO {
     @IsString()
-    public name: string;
-    @IsString()
-    public description: string;
-    @IsString()
-    public connectionId: string;
+    public deviceId: string;
     @IsNumber()
     public channel: number;
     @IsString()
@@ -508,65 +591,125 @@ export class ValveSynchronizeDTO {
     public maxIterations?: number;
     @IsNumber()
     public iterationDelayMs?: number;
-
-    public static mapToValveModel(valveSynchronizeDTO: ValveSynchronizeDTO): ValveConfigModel {
-        const valveModel = new ValveConfigModel();
-        valveModel.id = valveSynchronizeDTO.id;
-        valveModel.name = valveSynchronizeDTO.name;
-        valveModel.description = valveSynchronizeDTO.description;
-        valveModel.connectionId = valveSynchronizeDTO.connectionId;
-        valveModel.channel = valveSynchronizeDTO.channel;
-        valveModel.flowMeterId = valveSynchronizeDTO.flowMeterId;
-        if (valveSynchronizeDTO.maxFlowRate !== undefined) valveModel.maxFlowRate = valveSynchronizeDTO.maxFlowRate;
-        if (valveSynchronizeDTO.kP !== undefined) valveModel.kP = valveSynchronizeDTO.kP;
-        if (valveSynchronizeDTO.minOpening !== undefined) valveModel.minOpening = valveSynchronizeDTO.minOpening;
-        if (valveSynchronizeDTO.maxOpening !== undefined) valveModel.maxOpening = valveSynchronizeDTO.maxOpening;
-        if (valveSynchronizeDTO.tolerance !== undefined) valveModel.tolerance = valveSynchronizeDTO.tolerance;
-        if (valveSynchronizeDTO.maxIterations !== undefined) valveModel.maxIterations = valveSynchronizeDTO.maxIterations;
-        if (valveSynchronizeDTO.iterationDelayMs !== undefined) valveModel.iterationDelayMs = valveSynchronizeDTO.iterationDelayMs;
-        return valveModel;
-    }
 }
 
-export class SynchronizeDTO {
+export class ValveSynchronizeDTO {
+    @IsOptional()
     @IsNotEmpty()
     public id: string;
     @IsString()
     public name: string;
     @IsString()
-    public unit: string;
-    @IsString()
     public description: string;
-    @Type(() => Style)
-    public style?: Style;
-    @IsNotEmpty()
-    @ApiProperty()
-    public type: SensorType;
+    @IsString()
+    public type?: string;
+    @ValidateNested()
+    @Type(() => ValveConfigDTO)
+    public config: ValveConfigDTO;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
-    public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SensorModel {
-        const sensorModel = new SensorModel();
-        sensorModel.id = sensorSynchronizeDTO.id;
-        sensorModel.name = sensorSynchronizeDTO.name;
-        sensorModel.taskId = sensorSynchronizeDTO.taskId;
-        sensorModel.cronPattern = sensorSynchronizeDTO.cronPattern;
-        sensorModel.description = sensorSynchronizeDTO.description;
-        sensorModel.style = sensorSynchronizeDTO.style;
-        sensorModel.id = sensorSynchronizeDTO.id;
-        sensorModel.type = sensorSynchronizeDTO.type;
-        sensorModel.unit = sensorSynchronizeDTO.unit;
-        return sensorModel;
+    public static mapToValveModel(valveSynchronizeDTO: ValveSynchronizeDTO): SynchronizeActuatorModel {
+        const valveModel = new SynchronizeActuatorModel();
+        valveModel._id = valveSynchronizeDTO.id;
+        valveModel.name = valveSynchronizeDTO.name;
+        valveModel.description = valveSynchronizeDTO.description;
+        valveModel.type = ActuatorType.CTRL;
+        valveModel.status = ModuleStatus.OFF;
+        const config = Object.assign(new CtrlActuatorConfigModel(), valveSynchronizeDTO.config);
+        config.valveType = valveSynchronizeDTO.type ?? 'PROPORTIONAL';
+        valveModel.config = config;
+        valveModel.delete = valveSynchronizeDTO.delete ?? false;
+        return valveModel;
+    }
+}
+
+export class ComActuatorActionConfigDTO {
+    @IsString()
+    @IsNotEmpty()
+    public comRequestId: string;
+
+    @IsEnum(ComActuatorAction)
+    public action: ComActuatorAction;
+
+    @IsNumber()
+    public digitalPort: number;
+
+    @IsEnum(DigitalPortType)
+    public type: DigitalPortType;
+}
+
+export class ActuatorConfigDTO {
+    // RPI
+    @ValidateIf(o => o.type === ActuatorType.RPI)
+    @IsNumber()
+    public rpiPin?: number;
+    @ValidateIf(o => o.type === ActuatorType.RPI)
+    @IsEnum(GPIODirection)
+    public direction?: GPIODirection;
+    @ValidateIf(o => o.type === ActuatorType.RPI)
+    @IsEnum(GPIOEdge)
+    public edge?: GPIOEdge;
+    @IsOptional()
+    @IsBoolean()
+    public activeLow?: boolean;
+    @IsOptional()
+    @IsBoolean()
+    public reconfigureDirection?: boolean;
+    @IsOptional()
+    @IsNumber()
+    public debounceTimeout?: number;
+
+    // COM
+    @ValidateIf(o => o.type === ActuatorType.COM)
+    @IsString()
+    @IsNotEmpty()
+    public deviceId?: string;
+
+    @ValidateIf(o => o.type === ActuatorType.COM)
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ComActuatorActionConfigDTO)
+    public actions?: ComActuatorActionConfigDTO[];
+}
+
+export class ActuatorSynchronizeDTO {
+    public _id: string;
+    @IsEnum(ActuatorType)
+    @IsNotEmpty()
+    public type: ActuatorType;
+    @IsString()
+    public name: string;
+    @ValidateNested()
+    @Type(() => ActuatorConfigDTO)
+    public config: ActuatorConfigDTO;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToActuatorModel(actuatorSynchronizeDTO: ActuatorSynchronizeDTO): SynchronizeActuatorModel {
+        const actuatorModel = new SynchronizeActuatorModel();
+        actuatorModel._id = actuatorSynchronizeDTO._id;
+        actuatorModel.type = actuatorSynchronizeDTO.type;
+        actuatorModel.name = actuatorSynchronizeDTO.name;
+        actuatorModel.status = ModuleStatus.OFF;
+        actuatorModel.config = actuatorSynchronizeDTO.type === ActuatorType.RPI
+            ? Object.assign(new RpiActuatorConfigModel(), actuatorSynchronizeDTO.config)
+            : Object.assign(new ComActuatorConfigModel(), actuatorSynchronizeDTO.config);
+        actuatorModel.delete = actuatorSynchronizeDTO.delete ?? false;
+        return actuatorModel;
     }
 }
 
 export class StructureSynchronizeDTO {
 
     @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => CycleSynchronizeDTO)
     public cycles: CycleSynchronizeDTO[];
     @IsArray()
-    @Type(() => TaskSynchronizeDTO)
-    public tasks?: TaskSynchronizeDTO[];
-    @IsArray()
+    @ValidateNested({ each: true })
     @Type(() => SensorSynchronizeDTO)
     public sensors: SensorSynchronizeDTO[];
 
@@ -574,18 +717,13 @@ export class StructureSynchronizeDTO {
 
         const structureModel = new StructureModel();
         structureModel.cycles = [];
-        structureModel.tasks = [];
         structureModel.sensors = [];
 
-        structureSynchronizeDTO.cycles.forEach(cycle => {
+        (structureSynchronizeDTO.cycles ?? []).forEach(cycle => {
             structureModel.cycles.push(CycleSynchronizeDTO.mapToCycleModel(cycle));
         });
 
-        structureSynchronizeDTO.tasks?.forEach(task => {
-            structureModel.tasks.push(TaskSynchronizeDTO.mapToTaskModel(task));
-        });
-
-        structureSynchronizeDTO.sensors.forEach(cycle => {
+        (structureSynchronizeDTO.sensors ?? []).forEach(cycle => {
             structureModel.sensors.push(SensorSynchronizeDTO.mapToSensorModel(cycle));
         });
 
@@ -595,57 +733,84 @@ export class StructureSynchronizeDTO {
 
 
 
-export class ModbusConnectionConfigDTO {
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Identifiant unique de la connexion" })
-    public id: string;
+export class DeviceConfigDTO {
+    // MASTER
+    @ValidateIf(o => o.type === DeviceType.MASTER)
+    @IsEnum(MasterProtocol)
+    @ApiProperty({ description: "Protocole utilisé (TCP ou RTU)" })
+    public protocol?: MasterProtocol;
 
-    @IsNotEmpty()
+    @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsString()
     @ApiProperty({ description: "Adresse IP de l'équipement" })
-    public ipAddress: string;
+    public ipAddress?: string;
 
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Protocole utilisé (0=RTU, 1=TCP, etc.)" })
-    public protocol: string;
-
-    @IsNotEmpty()
+    @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsNumber()
     @ApiProperty({ description: "Port TCP Modbus (502 par défaut)" })
-    public port: number;
+    public port?: number;
 
-    @IsString()
-    @ApiProperty({ description: "si rtu chemin" })
-    public path: string;
-
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
-    public slaveId: number;
-
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
-    public timeout: number;
-
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @ApiProperty({ description: "baudrate" })
-    public baudrate: number;
+    public baudRate?: number;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: "si rtu chemin" })
+    public path?: string;
+
+    @IsOptional()
+    @IsNumber()
+    @ApiProperty({ description: "timeout de connexion (ms)" })
+    public timeout?: number;
+
+    // SLAVE
+    @ValidateIf(o => o.type === DeviceType.SLAVE)
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+    public slaveId?: string;
+
+    @ValidateIf(o => o.type === DeviceType.SLAVE)
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant du DeviceModel MASTER associé" })
+    public masterDeviceId?: string;
+}
+
+export class DeviceSynchronizeDTO {
+    public _id: string;
+
+    @IsNotEmpty()
+    @IsString()
+    public name: string;
+
+    @IsString()
+    public description: string;
+
+    @IsEnum(DeviceType)
+    @IsNotEmpty()
+    public type: DeviceType;
+
+    @ValidateNested()
+    @Type(() => DeviceConfigDTO)
+    public config: DeviceConfigDTO;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
     // --- Méthode de mapping vers le modèle principal ---
-    public static mapToModbusConnectionConfigModel(dto: ModbusConnectionConfigDTO): ModbusConnectionConfigModel {
-        const model = new ModbusConnectionConfigModel();
-        model.id = dto.id;
-        model.ipAddress = dto.ipAddress;
-        model.protocol = dto.protocol;
-        model.port = dto.port;
-        model.slaveId = dto.slaveId;
-        model.timeout = dto.timeout;
-        model.path = dto.path;
-        model.baudrate = dto.baudrate;
+    public static mapToDeviceModel(dto: DeviceSynchronizeDTO): SynchronizeDeviceModel {
+        const model = new SynchronizeDeviceModel();
+        model._id = dto._id;
+        model.name = dto.name;
+        model.description = dto.description;
+        model.type = dto.type;
+        model.config = dto.type === DeviceType.MASTER
+            ? Object.assign(new MasterConfigModel(), dto.config)
+            : Object.assign(new SlaveConfigModel(), dto.config);
+        model.delete = dto.delete ?? false;
         return model;
     }
 }
@@ -667,52 +832,62 @@ export class ModbusTaskParams {
     public unit: string;
 }
 
-export class ModbusTaskConfigDTO {
+export class ComRequestConfigDTO {
     @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Identifiant unique de la tâche" })
-    public id: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Identifiant de la connexion associée" })
-    public connectionId: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Identifiant de la connexion associée" })
-    public function: string;
-
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Nom lisible ou étiquette de la tâche" })
-    public label: string;
+    @IsEnum(ModbusFunctionName)
+    @ApiProperty({ description: "Fonction Modbus à exécuter" })
+    public function: ModbusFunctionName;
 
     @IsNotEmpty()
     @IsNumber()
     @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
     public address: number;
 
-    @IsNotEmpty()
+
     @ValidateNested()
     @Type(() => ModbusTaskParams)
-    @ApiProperty({ description: "Paramètres de la tâche (longueur, échelle, unité)" })
-    public params: ModbusTaskParams;
+    @ApiProperty({ description: "Paramètres de la requête (longueur, échelle, unité)" })
+    public params?: ModbusTaskParams;
+}
+
+export class ComRequestDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant unique de la requête" })
+    public _id: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Identifiant de la connexion associée" })
+    public deviceId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Nom lisible ou étiquette de la requête" })
+    public name: string;
+
+    @IsNotEmpty()
+    @ValidateNested()
+    @Type(() => ComRequestConfigDTO)
+    @ApiProperty({ description: "Configuration Modbus (fonction, adresse, paramètres)" })
+    public config: ComRequestConfigDTO;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 
     // --- Méthode de mapping vers le modèle principal ---
-    public static mapToModbusTaskConfigModel(dto: ModbusTaskConfigDTO): ModbusTaskConfigModel {
-        const model = new ModbusTaskConfigModel();
-        model.id = dto.id;
-        model.connectionId = dto.connectionId;
-        model.function = dto.function;
-        model.label = dto.label;
-        model.address = dto.address;
-        model.params = {
-            length: dto.params.length,
-            scale: dto.params.scale,
-            unit: dto.params.unit
+    public static mapToComRequestModel(dto: ComRequestDTO): SynchronizeComRequestModel {
+        const model = new SynchronizeComRequestModel();
+        model._id = dto._id;
+        model.deviceId = dto.deviceId;
+        model.name = dto.name;
+        model.config = {
+            function: dto.config.function,
+            address: dto.config.address,
+            params: dto.config.params || undefined
         };
+        model.delete = dto.delete ?? false;
         return model;
     }
 }

@@ -3,7 +3,6 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
-import { TaskService } from './task.service';
 import { StructureService } from './configuration.service';
 import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
@@ -17,15 +16,14 @@ import { SensorModel } from '../models/sensor.model';
 import { TriggerRepository } from '@process/infrastructure/repositories/trigger.repository';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
-import { SensorEntity } from '@process/infrastructure/entities/sensor.entity';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
-import { ProcessValueRepository } from '@process/infrastructure/repositories/process-value.repository';
-import { SensorValueRepository } from '@process/infrastructure/repositories/sensor-value.repository';
 import { ProcessService } from './execution.service';
 import { ConditionModel } from '../models/condition.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
-import { DataRepository } from '@process/infrastructure/repositories/data.repository';
+import { EventRepository } from '@process/infrastructure/repositories/event.repository';
+import { ElementType, ProcessEventData } from '../models/event.model';
+import { ExecutableType } from '../models/value.model';
 @Injectable()
 export class TriggerService {
     public triggers: TriggerModel[] = [];
@@ -39,12 +37,9 @@ export class TriggerService {
         private triggerRepository: TriggerRepository,
         private scheduleRepository: ScheduleRepository,
         private sensorRepository: SensorRepository,
-        private processValueRepository: ProcessValueRepository,
-        private sensorValueRepository: SensorValueRepository,
-        private dataRepository: DataRepository,
+        private eventRepository: EventRepository,
         private valueRepository: ValueRepository,
         @Inject(forwardRef(() => ProcessService)) private processService: ProcessService,
-        @Inject(forwardRef(() => TaskService)) private taskService: TaskService,
         private readonly logger: Logger
     ) {
     }
@@ -58,10 +53,12 @@ export class TriggerService {
     public async initTrigger(trigger: TriggerModel, isDeleted: boolean = false): Promise<TriggerModel> {
         this.logger.log({ triggerId: trigger.id, isDeleted }, 'initTrigger');
         const index = this.triggers.findIndex(x => x.id === trigger.id);
-        if (isDeleted && index !== -1) {
-            this.triggers.splice(index, 1);
+        if (isDeleted) {
+            if (index !== -1) {
+                this.triggers.splice(index, 1);
+            }
         } else if (index !== -1) {
-            this.triggers[0] = trigger;
+            this.triggers[index] = trigger;
         } else {
             this.triggers.push(trigger);
         }
@@ -72,9 +69,28 @@ export class TriggerService {
         this.onElementValueChanged.subscribe(async (element: SensorValueModel | ProcessValueModel) => {
             if (element) {
                 const triggers = this._getTriggerByElementId(element);
-                await this.dataRepository.save({ id: Math.random().toString(), deviceId: element.id, date: new Date(), type: "SENSOR",value:(element as SensorValueModel ).value.toString() }) 
+                // les ProcessValueModel n'ont pas de champ `.value` (seulement `.status`) :
+                // deviner le type via la meme detection que _saveIncommingValue() plutot que de
+                // supposer un SensorValueModel partout, ce qui plantait sur toute valeur process.
+                const isSensor = Object.prototype.hasOwnProperty.call(element, 'value');
+                if (isSensor) {
+                    await this.eventRepository.save({
+                        elementId: element.id,
+                        date: new Date(),
+                        elementType: ElementType.SENSOR,
+                        additionalData: { value: (element as SensorValueModel).value?.toString() }
+                    });
+                } else {
+                    const processElement = element as ProcessValueModel;
+                    await this.eventRepository.save({
+                        elementId: element.id,
+                        date: new Date(),
+                        elementType: processElement.type === ExecutableType.SEQUENCE ? ElementType.SEQUENCE : ElementType.CYCLE,
+                        additionalData: { type: 'sensor', value: processElement.status?.toString() } as ProcessEventData
+                    });
+                }
                 for (const trigger of triggers) {
-                    this._checkTriggerConditions(trigger, element); 
+                    this._checkTriggerConditions(trigger, element);
                 }
             }
         })
@@ -89,20 +105,9 @@ export class TriggerService {
         return !!trigger.isCheckInProgress;
     }
 
-    private async _saveIncommingValue(data: SensorValueModel | ProcessValueModel): Promise<void> {
-        const isSensor = Object.prototype.hasOwnProperty.call(data, 'value');
-        if (isSensor) {
-            await this.sensorValueRepository.save(data as SensorValueModel);
-            return;
-        }
-        await this.processValueRepository.save(data as ProcessValueModel);
-    }
-
     private async _checkTriggerConditions(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): Promise<void> {
         const currentDate = new Date();
         const parser = math.parser();
-
-        await this._saveIncommingValue(data);
 
         const isAllowCheckTrigger = !trigger.lastTriggeredAt || currentDate.getTime() >= (trigger.lastTriggeredAt.getTime() + trigger.delay || 0);
 
@@ -119,9 +124,12 @@ export class TriggerService {
         };
 
         const isVerified = await asyncEvery(trigger.conditions, async (condition) => {
-            const extractedVal = await this.valueRepository.getDeviceValue(condition.deviceId);
-            const value = (extractedVal as SensorValueModel).value || (extractedVal as ProcessValueModel).status;
-            if (!value) { return false; }
+            const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
+            if (!extractedVal) { return false; }
+            const value = condition.elementType === ElementType.SENSOR
+                ? (extractedVal as SensorValueModel).value
+                : (extractedVal as ProcessValueModel).status;
+            if (value === undefined || value === null) { return false; }
             return parser.evaluate(`(${value} ${condition.operator} ${Number(condition.value)})`);
         });
 
@@ -134,21 +142,36 @@ export class TriggerService {
         }
 
         trigger.isCheckInProgress = false;
-        this.checkTriggerQueueProcess.next({ trigger, data });
+        // ne republier que s'il y a effectivement une verification en attente pour ce trigger
+        // (mise en file par _enqueueCheckTrigger pendant qu'un check etait deja en cours) :
+        // republier inconditionnellement ici reprovoquait indefiniment le meme check en boucle
+        // synchrone des que la condition restait non verifiee.
+        if (this.triggerCheckQueue.find(x => x.trigger.id === trigger.id)) {
+            this.checkTriggerQueueProcess.next({ trigger, data });
+        }
+    }
+
+    public async setPaused(trigger: TriggerModel, isPaused: boolean): Promise<TriggerModel> {
+        if (trigger.isPaused === isPaused) { return trigger; }
+        const saved = await this.triggerRepository.save({ ...trigger, isPaused });
+        const index = this.triggers.findIndex(x => x.id === trigger.id);
+        if (index !== -1) { this.triggers[index] = saved; }
+        return saved;
     }
 
     private _getTriggerByElementId(element: SensorValueModel | ProcessValueModel): TriggerModel[] {
          this.structureRepository.get();
-        return this.triggers.filter(x => !!x.conditions.find(y => y.deviceId === element.id));
+        return this.triggers.filter(x => !!x.conditions.find(y => y.elementId === element.id));
     }
 
     private _processQueueCheckInProgress(): void {
         this.checkTriggerQueueProcess.subscribe((value) => {
+            if (!value?.trigger) { return; }
             const index = this.triggerCheckQueue.findIndex(x => x.trigger.id === value.trigger.id);
-            this.triggerCheckQueue.splice(index, 1)
-            if (value?.trigger && value?.data) {
-                this._checkTriggerConditions(value.trigger, value.data); 
-            }
+            if (index === -1) { return; }
+            const queued = this.triggerCheckQueue[index];
+            this.triggerCheckQueue.splice(index, 1);
+            this._checkTriggerConditions(queued.trigger, queued.data);
         })
     }
 
@@ -161,32 +184,21 @@ export class TriggerService {
 
         const scheduleModel = new ScheduleModel();
         scheduleModel.cycleId = trigger.cycleId;
-        scheduleModel.taskId = trigger.taskId;
-        scheduleModel.id = 'trigger_' + math.random();
+        // pas d'id manuel : ScheduleRepository.save() valide le format uuid quand un id est
+        // fourni, laisser le schema Mongoose en generer un (comme pour toute autre creation).
+        scheduleModel.name = `trigger_${trigger.id}`;
         scheduleModel.cron = { date: new Date(executionDate) };
         scheduleModel.shouldConfirmation = trigger.shouldConfirmation;
+        scheduleModel.duration = trigger.duration;
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
 
-        let methode: () => Promise<void>;
-        if (trigger.taskId) {
-            methode = async (): Promise<void> => {
-                await this.scheduleService.clearAllSchedules();
-                const task = this.configurationService.structure.tasks.find(t => t.id === trigger.taskId);
-                if (task) {
-                    await this.taskService.setActive(task, trigger.action);
-                }
-                trigger.isCheckInProgress = false;
-                this.checkTriggerQueueProcess.next({ trigger, data });
-            };
-        } else {
-            const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
-            methode = async (): Promise<void> => {
-                await this.scheduleService.clearAllSchedules();
-                await this.processService.execute({ ...process });
-                trigger.isCheckInProgress = false;
-                this.checkTriggerQueueProcess.next({ trigger, data })
-            };
-        }
+        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
+        const methode = async (): Promise<void> => {
+            await this.scheduleService.clearAllSchedules();
+            await this.processService.execute({ ...process });
+            trigger.isCheckInProgress = false;
+            this.checkTriggerQueueProcess.next({ trigger, data })
+        };
 
         this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, ProcessType.FORCE, methode);
     }

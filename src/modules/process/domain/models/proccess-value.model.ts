@@ -8,5 +8,4 @@ export class ProcessValueModel {
     public startedAt?: Date;
     public duration?: number;
     public causes?: { type: ProcessType; cause: string }[];
-    public mapSectionId: string;
 }

@@ -1,11 +1,10 @@
 import { ExecutableAction } from "../interfaces/executable.interface";
+import { ElementType } from "./event.model";
 
 export class ConditionModel {
-    public id: string;
-    public parentId: string;
     public name: string;
-    public description: string;
-    public deviceId: string;
+    public elementId: string;
+    public elementType: ElementType;
     public operator: string;
     public value: ExecutableAction | number; 
 }

@@ -1,37 +1,52 @@
-import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { Controller, ParseArrayPipe, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
+import { EventFetchUC } from '@process/use-cases/event-fetch.uc';
+import { EventModel } from '@process/domain/models/event.model';
+import { EventQueryDTO } from '../dto/event-query.dto';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { CycleSynchronizeDTO, ModbusConnectionConfigDTO, ModbusTaskConfigDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TaskSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { ComRequestDTO, CycleSynchronizeDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { TaskModel } from '@process/domain/models/task.model';
-import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
-import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
-import { ModbusConnectionSynchronizeUC } from '@process/use-cases/modbusconnection-synchronize.uc';
+import { DeviceModel } from '@process/domain/models/device.model';
+import { ComRequestModel } from '@process/domain/models/com-request.model';
+import { DeviceSynchronizeUC } from '@process/use-cases/device-synchronize.uc';
 import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
-import { TaskSynchronizeUC } from '@process/use-cases/task-synchronize.uc';
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
-import { ValveConfigModel } from '@process/domain/models/valve.model';
+import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.uc';
+import { ActuatorModel } from '@process/domain/models/actuator.model';
+
+function flattenValidationErrors(errors: ValidationError[]): string[] {
+    return errors.flatMap(error => [
+        ...Object.values(error.constraints ?? {}),
+        ...flattenValidationErrors(error.children ?? [])
+    ]);
+}
+
+function validationExceptionFactory(errors: ValidationError[] | string): RpcException {
+    const message = Array.isArray(errors) ? flattenValidationErrors(errors).join(', ') : errors;
+    return new RpcException(message);
+}
 
 @Controller()
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: validationExceptionFactory }))
 export class ConfigurationController {
 
     public constructor(
         private _configurationService: StructureService,
         private _synchronizeService: SynchronizeService) {
     }
-    @UsePipes(ValidationPipe)
     @MessagePattern(['box/synchronize/configuration'])
     public async synchronise(@Payload() configurationSynchronizeDTO: StructureSynchronizeDTO): Promise<StructureModel> {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
@@ -39,17 +54,23 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
-    @MessagePattern(['box/synchronize/modbusconnection'])
-    public async synchroniseModbusConnection(@Payload() modbusConnectionConfigDTO: ModbusConnectionConfigDTO): Promise<ModbusConnectionConfigModel> {
-        const uc = new ModbusConnectionSynchronizeUC(this._synchronizeService);
-        const input = ModbusConnectionConfigDTO.mapToModbusConnectionConfigModel(modbusConnectionConfigDTO);
+    @MessagePattern(['box/synchronize/device'])
+    public async synchroniseDevice(
+        @Payload(new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
+    ): Promise<DeviceModel[]> {
+        const uc = new DeviceSynchronizeUC(this._synchronizeService);
+        const input = deviceSynchronizeDTOs.map(DeviceSynchronizeDTO.mapToDeviceModel);
         return uc.execute(input);
     }
 
-    @MessagePattern(['box/synchronize/modbustask'])
-    public async synchronisePModbusTask(@Payload() modbusTaskConfigDTO: ModbusTaskConfigDTO): Promise<ModbusTaskConfigModel> {
+    @MessagePattern(['box/synchronize/comrequest'])
+    public async synchroniseComRequest(
+        @Payload(new ParseArrayPipe({ items: ComRequestDTO, exceptionFactory: validationExceptionFactory }))
+        comRequestDTOs: ComRequestDTO[]
+    ): Promise<ComRequestModel[]> {
         const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
-        const input = ModbusTaskConfigDTO.mapToModbusTaskConfigModel(modbusTaskConfigDTO);
+        const input = comRequestDTOs.map(ComRequestDTO.mapToComRequestModel);
         return uc.execute(input);
     }
 
@@ -74,13 +95,6 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
-    @MessagePattern(['box/synchronize/task'])
-    public async synchroniseTask(@Payload() taskSynchronizeDTO: TaskSynchronizeDTO): Promise<TaskModel> {
-        const uc = new TaskSynchronizeUC(this._synchronizeService);
-        const input = TaskSynchronizeDTO.mapToTaskModel(taskSynchronizeDTO);
-        return uc.execute(input);
-    }
-
     @MessagePattern(['box/synchronize/sensor'])
     public async synchroniseSensor(@Payload() sensorSynchronizeDTO: SensorSynchronizeDTO): Promise<SensorModel> {
         const uc = new SensorSynchronizeUC(this._synchronizeService);
@@ -88,11 +102,20 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
-    @UsePipes(ValidationPipe)
     @MessagePattern(['box/synchronize/valve'])
-    public async synchroniseValve(@Payload() valveSynchronizeDTO: ValveSynchronizeDTO): Promise<ValveConfigModel> {
+    public async synchroniseValve(@Payload() valveSynchronizeDTO: ValveSynchronizeDTO): Promise<ActuatorModel> {
         const uc = new ValveSynchronizeUC(this._synchronizeService);
         const input = ValveSynchronizeDTO.mapToValveModel(valveSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/actuator'])
+    public async synchroniseActuator(
+        @Payload(new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
+    ): Promise<ActuatorModel[]> {
+        const uc = new ActuatorSynchronizeUC(this._synchronizeService);
+        const input = actuatorSynchronizeDTOs.map(ActuatorSynchronizeDTO.mapToActuatorModel);
         return uc.execute(input);
     }
 
@@ -115,10 +138,16 @@ export class ConfigurationController {
     @MessagePattern(['box/fetch/status'])
     public async getStatus(@Payload() data: any): Promise<string> {
         const uc = new ValuesFetchUC(this._configurationService);
-        const response = await uc.execute(data.type, data.query)
+        const response = await uc.execute(data.type)
         return JSON.stringify(response, (key, value) => {
             if (key === 'instance') return undefined;
             return value;
         });
+    }
+
+    @MessagePattern(['box/fetch/events'])
+    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[]> {
+        const uc = new EventFetchUC(this._configurationService);
+        return uc.execute(eventQueryDTO);
     }
 }
