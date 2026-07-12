@@ -16,11 +16,9 @@ export class ComRequestModel {
     public _id: string;
     public deviceId: string;
     public name: string;
-    public type: ComRequestType;
     public config: {
         address: number;
         function: ModbusFunctionName;
-        lenngth?: number;
         params: {
             length?: number,
             scale?: number,

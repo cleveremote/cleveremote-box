@@ -82,7 +82,7 @@ export class ProcessService {
             this.processList[index]?.instance?.unsubscribe();
             const actuators = await this._resolveActuators();
             const modulesToStop = process.cycle.getModules(actuators)
-                .filter((actuator) => !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
+                .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
             process.cycle.status = ExecutableStatus.STOPPED;
             if (index > -1) {

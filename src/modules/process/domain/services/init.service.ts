@@ -70,7 +70,7 @@ export class InitService {
             .then(() => wrap('ActuatorRepository.migrateLegacyCollections', () => this.actuatorRepository.migrateLegacyCollections()))
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
             //.then(() => wrap('InitService.seedDefaultValves', () => this._seedDefaultValves()))
-            .then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+            //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
