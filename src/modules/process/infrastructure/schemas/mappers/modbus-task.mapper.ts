@@ -8,6 +8,7 @@ export class ModbusTaskMapper {
         model._id = task._id.toString();
         model.deviceId = task.connectionId;
         model.name = task.label;
+        model.type = task.type;
         model.config = {
             function: task.function as ModbusFunctionName,
             address: task.address,
@@ -24,6 +25,7 @@ export class ModbusTaskMapper {
         task.connectionId = model.deviceId;
         task.function = model.config.function;
         task.label = model.name;
+        task.type = model.type;
         task.address = model.config.address;
         task.params = model.config.params;
         return task;

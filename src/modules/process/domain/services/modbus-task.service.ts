@@ -31,7 +31,7 @@ export interface DigitalMonitorHandle {
 
 interface QueueEntry {
     taskId?: string;
-    param?: { value: number };
+    param?: { value: number,adress:number };
     resolve?: () => void;
     reject?: (err: Error) => void;
     inverterConfig?: { inverterId: string; params: InverterConfigParam[] };
@@ -76,10 +76,10 @@ export class ModbusTaskService {
         client.setTimeout(masterConfig.timeout || 2000);
     }
 
-    public execute(taskId: string, param?: { value: number }): Promise<void> {
+    public execute(taskId: string, param?: { value: number, adress: number }): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this._queue.push({ taskId, param, resolve, reject });
-            if (!this._isProcessing) this._processQueue(); 
+            if (!this._isProcessing) this._processQueue();
         });
     }
 
@@ -185,7 +185,7 @@ export class ModbusTaskService {
      * sans passer par le repository (utile pour tester manuellement une configuration
      * avant de la persister).
      */
-    public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number }): Promise<void> {
+    public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number, adress: number }): Promise<void> {
         return this._enqueue(() => this._runComRequest(comRequest, param));
     }
 
@@ -367,7 +367,7 @@ export class ModbusTaskService {
         };
     }
 
-    private async _executeTask(taskId: string, param?: { value: number }): Promise<void> {
+    private async _executeTask(taskId: string, param?: { value: number,adress:number }): Promise<void> {
         if (!taskId) {
             this.logger.error('modbus execute called without taskId');
         }
@@ -379,7 +379,7 @@ export class ModbusTaskService {
         await this._runComRequest(taskModel, param);
     }
 
-    private async _runComRequest(taskModel: ComRequestModel, param?: { value: number }): Promise<void> {
+    private async _runComRequest(taskModel: ComRequestModel, param?: { value: number,adress:number }): Promise<void> {
         const taskId = taskModel?._id;
         const resolved = await this._resolveMasterConfig(taskModel.deviceId);
         if (!resolved) {
@@ -425,14 +425,14 @@ export class ModbusTaskService {
                 if (fn === ModbusFunctionName.READ_COILS || fn === ModbusFunctionName.READ_DISCRETE_INPUTS) {
                     this.logger.log({ label: taskModel.name, value: result.data }, 'modbus read result');
                 } else {
-                    const values = this.decodeFloats(result.data, addr, length, params.scale,true);
+                    const values = this.decodeFloats(result.data, addr, length, params.scale, true);
                     this.logger.log({ label: taskModel.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
                 }
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
                 if (param.value === undefined) throw new Error("Aucune valeur spécifiée pour l'écriture");
-                await client[fn](addr, param.value);
+                await client[fn](param.adress, param.value);
                 this.logger.log({ label: taskModel.name, value: param.value }, 'modbus write done');
             }
 
@@ -448,7 +448,7 @@ export class ModbusTaskService {
             if (!networkCodes.includes(err.code)) {
                 throw err;
             }
-        } finally { 
+        } finally {
             client.close(() => this.logger.log({ taskId }, 'modbus connection closed'));
         }
     }

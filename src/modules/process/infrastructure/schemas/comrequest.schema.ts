@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 
 @Schema()
 export class ComRequestParams {
@@ -33,6 +34,9 @@ export class ComRequest {
 
     @Prop({ required: true })
     public label: string;
+
+    @Prop({ type: String, enum: ComRequestType, required: true })
+    public type: ComRequestType;
 
     @Prop({ required: true })
     public address: number;

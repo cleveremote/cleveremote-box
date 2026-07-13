@@ -1,5 +1,5 @@
 import { Connection } from 'mongoose';
-import { ComActuatorAction, ComActuatorConfigModel, ActuatorModel, DigitalPortType, RpiActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ComActuatorConfigModel, ActuatorModel, RpiActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import {
@@ -41,6 +41,6 @@ export function CreateActuatorComModel(portNum = 30): ActuatorModel {
     actuator.status = ModuleStatus.OFF;
     actuator.config = new ComActuatorConfigModel();
     actuator.config.deviceId = 'com-module-1';
-    actuator.config.actions = [{ comRequestId: 'req-1', action: ComActuatorAction.ON, digitalPort: 1, type: DigitalPortType.OUTPUT }];
+    actuator.config.actions = [{ comRequestId: 'req-1', digitalPort: 1 }];
     return actuator;
 }

@@ -45,7 +45,7 @@ export class ComActuatorStrategy implements ActuatorStrategy {
         //         params: {}
         //     }
         // }, { value: 0 });
-        await this.modBusService.execute(comRequestData._id, { value: action });
+        await this.modBusService.execute(comRequestData._id, { value: action, adress: actions[0].digitalPort});
         //throw new NotImplementedError(`ComActuatorStrategy.execute is not implemented yet (deviceId: ${deviceId})`);
     }
 

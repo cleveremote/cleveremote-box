@@ -16,21 +16,9 @@ export class RpiActuatorConfigModel {
     public reconfigureDirection?: boolean = true;
 }
 
-export enum ComActuatorAction {
-    ON = 'ON',
-    OFF = 'OFF'
-}
-
-export enum DigitalPortType {
-    INPUT = 'INPUT',
-    OUTPUT = 'OUTPUT'
-}
-
 export class ComActuatorActionConfig {
     public comRequestId: string;
     public digitalPort: number;
-    public action: ComActuatorAction;
-    public type: DigitalPortType;
 }
 
 export class ComActuatorConfigModel {

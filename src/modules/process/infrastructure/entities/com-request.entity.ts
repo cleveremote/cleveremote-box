@@ -10,6 +10,7 @@ export class ComRequestEntity extends ComRequestModel {
         modbusTaskConfigModel._id = modbusTaskConfigEntity._id;
         modbusTaskConfigModel.deviceId = modbusTaskConfigEntity.deviceId;
         modbusTaskConfigModel.name = modbusTaskConfigEntity.name;
+        modbusTaskConfigModel.type = modbusTaskConfigEntity.type;
         modbusTaskConfigModel.config = modbusTaskConfigEntity.config;
         return modbusTaskConfigModel;
     }
@@ -19,6 +20,7 @@ export class ComRequestEntity extends ComRequestModel {
         modbusTaskConfigEntity._id = modbusTaskConfigModel._id;
         modbusTaskConfigEntity.deviceId = modbusTaskConfigModel.deviceId;
         modbusTaskConfigEntity.name = modbusTaskConfigModel.name;
+        modbusTaskConfigEntity.type = modbusTaskConfigModel.type;
         modbusTaskConfigEntity.config = modbusTaskConfigModel.config;
         return modbusTaskConfigEntity;
 }

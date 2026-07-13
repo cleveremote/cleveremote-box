@@ -3,21 +3,14 @@ import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
-import { ComActuatorAction, DigitalPortType } from '@process/domain/models/actuator.model';
 
 @Schema({ _id: false })
 export class ComActuatorActionConfig {
     @Prop({ required: true })
     public comRequestId: string;
 
-    @Prop({ required: true, enum: ComActuatorAction })
-    public action: ComActuatorAction;
-
     @Prop({ required: true })
     public digitalPort: number;
-
-    @Prop({ required: true, enum: DigitalPortType })
-    public type: DigitalPortType;
 }
 export const ComActuatorActionConfigSchema = SchemaFactory.createForClass(ComActuatorActionConfig);
 

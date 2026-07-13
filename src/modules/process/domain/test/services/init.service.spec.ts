@@ -128,10 +128,10 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             expect(sensorService.restartAllScheduledSensors).toHaveBeenCalledTimes(1);
         });
 
-        it('should load the configuration before and after seeding default valves', async () => {
+        it('should load the configuration once (default valve seeding is currently disabled)', async () => {
             await service.initialize();
 
-            expect(configurationService.getStructure).toHaveBeenCalledTimes(2);
+            expect(configurationService.getStructure).toHaveBeenCalledTimes(1);
         });
 
         it('should never reject, even when a boot step fails, and should log the wrapped error', async () => {
@@ -159,23 +159,15 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     });
 
     describe('seedDefaultValves (via initialize)', () => {
-        it('should seed both default valves when none exist yet', async () => {
+        // l'etape InitService.seedDefaultValves est actuellement desactivee dans initialize()
+        // (cf. le .then(...) commente) : ce test verrouille ce comportement intentionnel plutot
+        // que de tester une seance de seeding qui ne se declenche plus au demarrage.
+        it('should not seed any default valve via initialize while the seeding step stays disabled', async () => {
             await service.initialize();
 
             const actuators = await actuatorRepository.get() as ActuatorModel[];
             const valves = actuators.filter((a) => a.type === ActuatorType.CTRL);
-            expect(valves.map((v) => v.name).sort()).toEqual(['Injection Venturi Valve 1', 'Injection Venturi Valve 2']);
-            expect(valves.every((v) => !!v._id)).toBe(true);
-        });
-
-        it('should skip seeding a default valve that is already tracked in configurationService.structure.actuators', async () => {
-            configurationService.structure.actuators = [{ type: ActuatorType.CTRL, name: 'Injection Venturi Valve 1' } as ActuatorModel];
-
-            await service.initialize();
-
-            const actuators = await actuatorRepository.get() as ActuatorModel[];
-            const valves = actuators.filter((a) => a.type === ActuatorType.CTRL);
-            expect(valves.map((v) => v.name)).toEqual(['Injection Venturi Valve 2']);
+            expect(valves).toEqual([]);
         });
     });
 

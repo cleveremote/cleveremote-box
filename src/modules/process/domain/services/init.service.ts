@@ -16,6 +16,7 @@ import { ActuatorType } from '../interfaces/actuator-module.interface';
 import { ModuleStatus } from '../interfaces/structure.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ModbusFunctionName } from '../models/com-request.model';
+import { ComRequestType } from '../interfaces/com-request.interface';
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
@@ -70,7 +71,7 @@ export class InitService {
             .then(() => wrap('ActuatorRepository.migrateLegacyCollections', () => this.actuatorRepository.migrateLegacyCollections()))
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
             //.then(() => wrap('InitService.seedDefaultValves', () => this._seedDefaultValves()))
-            //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+            .then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
@@ -200,77 +201,83 @@ export class InitService {
                 //await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID);
 
                 // 1) Configure DO4 en "Toggle mode" (registre de mode = 0x1000 + index canal, valeur 0x0002)
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-do4-set-toggle-mode',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DO4 toggle mode',
-                    config: {
-                        function: ModbusFunctionName.WRITE_SINGLE_REGISTER,
-                        address: 0x1000 + DO4_CHANNEL_INDEX,
-                        params: {}
-                    }
-                }, { value: 0x0002 });
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-do4-set-toggle-mode',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DO4 toggle mode',
+                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     config: {
+                //         function: ModbusFunctionName.WRITE_SINGLE_REGISTER,
+                //         address: 0x1000 + DO4_CHANNEL_INDEX,
+                //         params: {}
+                //     }
+                // }, { value: 0x0002 });
 
                 // 2) Actionne DO4 : ON puis OFF (Write Single Coil, adresse 0x0000-0x0007)
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-do4-on',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DO4 ON',
-                    config: {
-                        function: ModbusFunctionName.WRITE_SINGLE_COIL,
-                        address: DO4_CHANNEL_INDEX,
-                        params: {}
-                    }
-                }, { value: 1 });
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-do4-on',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DO4 ON',
+                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     config: {
+                //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
+                //         address: DO4_CHANNEL_INDEX,
+                //         params: {}
+                //     }
+                // }, { value: 1 });
 
                 // Lit l'état de DO4 après le ON (Read Coils, adresse 0x0000-0x0007)
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-do4-read-after-on',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DO4 read (after ON)',
-                    config: {
-                        function: ModbusFunctionName.READ_COILS,
-                        address: DO4_CHANNEL_INDEX,
-                        params: { length: 1 }
-                    }
-                });
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-do4-read-after-on',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DO4 read (after ON)',
+                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     config: {
+                //         function: ModbusFunctionName.READ_COILS,
+                //         address: DO4_CHANNEL_INDEX,
+                //         params: { length: 1 }
+                //     }
+                // });
 
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // await new Promise(resolve => setTimeout(resolve, 1000));
 
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-do4-off',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DO4 OFF',
-                    config: {
-                        function: ModbusFunctionName.WRITE_SINGLE_COIL,
-                        address: DO4_CHANNEL_INDEX,
-                        params: {}
-                    }
-                }, { value: 0 });
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-do4-off',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DO4 OFF',
+                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     config: {
+                //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
+                //         address: DO4_CHANNEL_INDEX,
+                //         params: {}
+                //     }
+                // }, { value: 0 });
 
-                // Lit l'état de DO4 après le OFF (Read Coils, adresse 0x0000-0x0007)
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-do4-read-after-off',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DO4 read (after OFF)',
-                    config: {
-                        function: ModbusFunctionName.READ_COILS,
-                        address: DO4_CHANNEL_INDEX,
-                        params: { length: 1 }
-                    }
-                });
+                // // Lit l'état de DO4 après le OFF (Read Coils, adresse 0x0000-0x0007)
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-do4-read-after-off',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DO4 read (after OFF)',
+                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     config: {
+                //         function: ModbusFunctionName.READ_COILS,
+                //         address: DO4_CHANNEL_INDEX,
+                //         params: { length: 1 }
+                //     }
+                // });
 
-                // 3) Lit l'état de DI4 (Read Discrete Inputs, adresse 0x0000-0x0007)
-                await this.modBusService.testExecuteTask({
-                    _id: 'io8ch-di4-read',
-                    deviceId: IO_8CH_DEVICE_ID,
-                    name: 'IO 8CH - DI4 read',
-                    config: {
-                        function: ModbusFunctionName.READ_DISCRETE_INPUTS,
-                        address: DI4_CHANNEL_INDEX,
-                        params: { length: 1 }
-                    }
-                });
+                // // 3) Lit l'état de DI4 (Read Discrete Inputs, adresse 0x0000-0x0007)
+                // await this.modBusService.testExecuteTask({
+                //     _id: 'io8ch-di4-read',
+                //     deviceId: IO_8CH_DEVICE_ID,
+                //     name: 'IO 8CH - DI4 read',
+                //     type: ComRequestType.DIGITAL_INPUT,
+                //     config: {
+                //         function: ModbusFunctionName.READ_DISCRETE_INPUTS,
+                //         address: DI4_CHANNEL_INDEX,
+                //         params: { length: 1 }
+                //     }
+                // });
 
                 // Un appui long (5s) n'a pas besoin d'un polling agressif : 500ms suffit très
                 // largement (marge x10 sur le seuil) et réduit la charge sur la passerelle.

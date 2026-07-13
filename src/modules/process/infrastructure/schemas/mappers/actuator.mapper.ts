@@ -34,9 +34,7 @@ export class ActuatorMapper {
             config.deviceId = comConfig.deviceId;
             config.actions = (comConfig.actions ?? []).map((action) => ({
                 comRequestId: action.comRequestId,
-                action: action.action,
-                digitalPort: action.digitalPort,
-                type: action.type
+                digitalPort: action.digitalPort
             }));
             model.config = config;
         } else {

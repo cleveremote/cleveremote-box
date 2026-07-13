@@ -20,7 +20,9 @@ import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { ConditionModel } from '@process/domain/models/condition.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { IActuatorModule, ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
-import { ActuatorModel, ComActuatorAction, ComActuatorConfigModel, DigitalPortType } from '@process/domain/models/actuator.model';
+import { ActuatorModel, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessType } from '@process/domain/interfaces/executable.interface';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
@@ -76,13 +78,33 @@ function Flush(ms = 200): Promise<void> {
 const REAL_SET_TIMEOUT = global.setTimeout;
 const LONG_DELAY_THRESHOLD_MS = 15000;
 
+// Au-dela du grace-period de 20s neutralise ci-dessous, plusieurs tests demarrent un cycle/sequence
+// avec un maxDuration reel (300-5000ms) puis l'arretent explicitement AVANT son expiration naturelle
+// (unsubscribe()). Or le setTimeout(fn, currentSeq.duration) programme par _createExecObs n'est pas
+// relie au cycle de vie de la subscription RxJS : l'arret explicite ne l'annule pas, il continue de
+// tourner en arriere-plan et finit par se declencher plus tard - parfois pendant qu'un AUTRE fichier
+// de test tourne dans le meme worker Jest, avec des mocks/CycleModel perimes (cf. le meme phenomene
+// deja documente pour le timer de 20s). On trace chaque timer reel programme ici pour purger
+// explicitement ceux encore en attente a la fin de CHAQUE test, quelle que soit son origine.
+const pendingRealTimers = new Set<NodeJS.Timeout>();
+
 beforeAll(() => {
     jest.spyOn(global, 'setTimeout').mockImplementation(((fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
         if ((ms ?? 0) >= LONG_DELAY_THRESHOLD_MS) {
             return { unref: () => undefined, ref: () => undefined } as unknown as NodeJS.Timeout;
         }
-        return REAL_SET_TIMEOUT(fn, ms, ...args);
+        const handle = REAL_SET_TIMEOUT(() => {
+            pendingRealTimers.delete(handle);
+            fn(...args);
+        }, ms);
+        pendingRealTimers.add(handle);
+        return handle;
     }) as typeof setTimeout);
+});
+
+afterEach(() => {
+    pendingRealTimers.forEach((handle) => clearTimeout(handle));
+    pendingRealTimers.clear();
 });
 
 afterAll(() => {
@@ -102,6 +124,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let triggerMongooseRepository: TriggerMongooseRepository;
     let structureService: StructureService;
     let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock };
+    let comRequestRepository: { get: jest.Mock };
     let modBusService: { execute: jest.Mock; applyInverterConfig: jest.Mock };
     let wsService: { sendMessage: jest.Mock };
     let valueRepository: { getDeviceValue: jest.Mock };
@@ -176,6 +199,10 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             Promise.resolve(new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i, actuatorTypeOverrides[id])])))
         );
         modBusService = { execute: jest.fn().mockResolvedValue(undefined), applyInverterConfig: jest.fn().mockResolvedValue(undefined) };
+        // par defaut aucun ComRequest connu : les tests de executeModuleCycleForDigitalOutput
+        // surchargent cette resolution pour exposer le ComRequestModel (type DIGITAL_OUTPUT) lie
+        // au comRequestId de l'actionneur COM teste.
+        comRequestRepository = { get: jest.fn().mockResolvedValue([]) };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
         valueRepository = {
             getDeviceValue: jest.fn().mockResolvedValue(0)
@@ -198,6 +225,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             eventRepository as never,
             modBusService as never,
             actuatorService as unknown as ActuatorService,
+            comRequestRepository as never,
             triggerService as never,
             scheduleService as never,
             logger as never
@@ -299,6 +327,44 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
             await Flush();
             expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should turn off every actuator of a priority-conflicted cycle, including one whose owning MODULE cycle was auto-started on an earlier sequence (regression)', async () => {
+            // reproduit le scenario signale : cycle-a a 2 sequences (actuator-1+actuator-4 puis
+            // actuator-3+actuator-5). Sa 1ere sequence demarre auto-demarre (regle 2) les cycles
+            // MODULE de actuator-1 ET actuator-4. Demarrer cycle-b (qui ne partage QUE actuator-1
+            // avec cycle-a) declenche _resetConflictedProcesses -> reset(cycle-a) : sans le fix,
+            // actuator-4 restait bloque ON indefiniment (son MODULE proprietaire jamais informe de
+            // s'arreter), alors que rien ne le reclame independamment.
+            const [cycleA, moduleAct1, moduleAct4, cycleB] = await SeedCycles([
+                {
+                    name: 'cycle-a', sequences: [
+                        { moduleIds: ['actuator-1', 'actuator-4'], maxDuration: 5000 },
+                        { moduleIds: ['actuator-3', 'actuator-5'], maxDuration: 5000 }
+                    ]
+                },
+                { name: 'module-act1', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
+                { name: 'module-act4', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-4'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] }
+            ]);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleAct1.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleAct4.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(moduleAct4.status).toEqual(ExecutableStatus.STOPPED);
+            expect(actuatorService.reset).toHaveBeenCalledWith(
+                expect.arrayContaining([expect.objectContaining({ _id: 'actuator-4' })])
+            );
+
+            // evite de laisser trainer le timer reel de maxDuration (5000ms) de cycle-b.
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
         it('should throw "Method not implemented" for ProcessType.QUEUED', async () => {
@@ -635,10 +701,51 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycleC2.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should not turn off an actuator still used by another active MODULE cycle when its sibling CYCLE is cascade-stopped', async () => {
+        it('should not turn off an actuator whose owning MODULE cycle was independently triggered (not just auto-started by the stopping cycle)', async () => {
             // cycle-a possede actuator-1 ET actuator-2, chacun pilote par son propre MODULE
-            // (module-x / module-y). Arreter module-x doit cascade-stopper cycle-a (regle 1),
-            // mais ne doit JAMAIS couper actuator-2 puisque module-y l'utilise encore activement.
+            // (module-x / module-y). module-y est demarre INDEPENDAMMENT (bouton-poussoir manuel)
+            // AVANT cycle-a : son entree processList porte mode=MANUAL (pas AUTO/sourceCycleId=
+            // cycle-a), le signal qui le distingue d'un simple reflet auto-demarre par cycle-a
+            // (cf. reset() : seul un MODULE encore attribuable EXCLUSIVEMENT au cycle qu'on arrete,
+            // via mode===AUTO && sourceCycleId===ce cycle, est libere avec lui).
+            const [cycleA, moduleX, moduleY] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['actuator-1', 'actuator-2'], maxDuration: 5000 }] },
+                { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
+                { name: 'module-y', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-2'], maxDuration: 5000 }] }
+            ]);
+
+            await service.execute(CreateProcess(moduleY, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
+            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleX.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(moduleX, ProcessMode.MANUAL, ExecutableAction.OFF));
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(moduleX.status).toEqual(ExecutableStatus.STOPPED);
+            // module-y a ete demarre independamment (pas seulement comme reflet de cycle-a) -> reste actif
+            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            // actuator-2 (identifie par son _id d'origine, independant du nom calcule par le mock)
+            // ne doit jamais recevoir de commande OFF tant que module-y tourne encore.
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'actuator-2' }), 0);
+            expect(actuatorService.reset).not.toHaveBeenCalledWith(
+                expect.arrayContaining([expect.objectContaining({ _id: 'actuator-2' })])
+            );
+        });
+
+        it('should turn off an actuator whose owning MODULE cycle was only ever auto-started by the stopping cycle itself (regression: previously stayed ON forever)', async () => {
+            // meme structure que le test precedent, mais module-y n'est JAMAIS demarre
+            // independamment : il n'existe que comme reflet auto-demarre par cycle-a (regle 2,
+            // mode=AUTO, sourceCycleId=cycle-a). Contrairement au cas ci-dessus, il doit etre
+            // libere avec cycle-a, plutot que de rester IN_PROCCESS indefiniment et bloquer a
+            // jamais actuator-2 (cf. _isActuatorStillInUse).
             const [cycleA, moduleX, moduleY] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['actuator-1', 'actuator-2'], maxDuration: 5000 }] },
                 { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
@@ -656,13 +763,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
             expect(moduleX.status).toEqual(ExecutableStatus.STOPPED);
-            // module-y n'a jamais ete touche par la cascade -> reste actif
-            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleY.status).toEqual(ExecutableStatus.STOPPED);
 
-            // actuator-2 (identifie par son _id d'origine, independant du nom calcule par le mock)
-            // ne doit jamais recevoir de commande OFF tant que module-y tourne encore.
-            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'actuator-2' }), 0);
-            expect(actuatorService.reset).not.toHaveBeenCalledWith(
+            expect(actuatorService.reset).toHaveBeenCalledWith(
                 expect.arrayContaining([expect.objectContaining({ _id: 'actuator-2' })])
             );
         });
@@ -1120,10 +1223,18 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             actuator.status = ModuleStatus.OFF;
             const config = new ComActuatorConfigModel();
             config.deviceId = deviceId;
-            config.actions = [{ comRequestId: 'com-req-1', action: ComActuatorAction.ON, digitalPort, type: DigitalPortType.OUTPUT }];
+            config.actions = [{ comRequestId: 'com-req-1', digitalPort }];
             actuator.config = config;
             return actuator;
         }
+
+        // la direction OUTPUT n'est plus portee par l'actionneur (cf. suppression de
+        // ComActuatorActionConfig.type) : elle est deduite du ComRequestModel lie via comRequestId.
+        beforeEach(() => {
+            comRequestRepository.get.mockResolvedValue([
+                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: ComRequestType.DIGITAL_OUTPUT })
+            ]);
+        });
 
         it('should turn ON the MODULE cycle owning the COM actuator mapped to the changed digital output', async () => {
             actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;

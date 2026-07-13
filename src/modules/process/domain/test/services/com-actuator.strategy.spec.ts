@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
-import { ComActuatorAction, ComActuatorConfigModel, ActuatorModel, DigitalPortType } from '@process/domain/models/actuator.model';
+import { ComActuatorConfigModel, ActuatorModel } from '@process/domain/models/actuator.model';
 import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { ComActuatorStrategy } from '@process/domain/services/actuator-strategies/com-actuator.strategy';
 
@@ -9,7 +9,7 @@ function CreateActuatorComModel(): ActuatorModel {
     actuator.type = ActuatorType.COM;
     actuator.config = new ComActuatorConfigModel();
     actuator.config.deviceId = 'com-1';
-    actuator.config.actions = [{ comRequestId: 'req-1', action: ComActuatorAction.ON, digitalPort: 1, type: DigitalPortType.OUTPUT }];
+    actuator.config.actions = [{ comRequestId: 'req-1', digitalPort: 1 }];
     return actuator;
 }
 

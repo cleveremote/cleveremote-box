@@ -8,9 +8,10 @@ import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
-import { ComActuatorAction, ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel, DigitalPortType } from '@process/domain/models/actuator.model';
+import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
@@ -630,14 +631,8 @@ export class ComActuatorActionConfigDTO {
     @IsNotEmpty()
     public comRequestId: string;
 
-    @IsEnum(ComActuatorAction)
-    public action: ComActuatorAction;
-
     @IsNumber()
     public digitalPort: number;
-
-    @IsEnum(DigitalPortType)
-    public type: DigitalPortType;
 }
 
 export class ActuatorConfigDTO {
@@ -868,6 +863,11 @@ export class ComRequestDTO {
     public name: string;
 
     @IsNotEmpty()
+    @IsEnum(ComRequestType)
+    @ApiProperty({ description: "Type de la requête de communication", enum: ComRequestType })
+    public type: ComRequestType;
+
+    @IsNotEmpty()
     @ValidateNested()
     @Type(() => ComRequestConfigDTO)
     @ApiProperty({ description: "Configuration Modbus (fonction, adresse, paramètres)" })
@@ -882,6 +882,7 @@ export class ComRequestDTO {
         model._id = dto._id;
         model.deviceId = dto.deviceId;
         model.name = dto.name;
+        model.type = dto.type;
         model.config = {
             function: dto.config.function,
             address: dto.config.address,

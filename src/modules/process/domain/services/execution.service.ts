@@ -14,7 +14,10 @@ import {
     CycleType
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
-import { ComActuatorConfigModel, DigitalPortType } from '../models/actuator.model';
+import { ComActuatorConfigModel } from '../models/actuator.model';
+import { ComRequestType } from '../interfaces/com-request.interface';
+import { ComRequestModel } from '../models/com-request.model';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ModuleTimingConfig } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
@@ -56,6 +59,7 @@ export class ProcessService {
         private eventRepository: EventRepository,
         private modBusService: ModbusTaskService,
         private actuatorService: ActuatorService,
+        private comRequestRepository: ComRequestRepository,
         @Inject(forwardRef(() => TriggerService)) private triggerService: TriggerService,
         @Inject(forwardRef(() => ScheduleService)) private scheduleService: ScheduleService,
         private readonly logger: Logger
@@ -81,7 +85,27 @@ export class ProcessService {
         if (index > -1 || process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             this.processList[index]?.instance?.unsubscribe();
             const actuators = await this._resolveActuators();
-            const modulesToStop = process.cycle.getModules(actuators)
+            const modules = process.cycle.getModules(actuators);
+
+            // libere d'abord tout cycle MODULE qui n'est IN_PROCCESS que parce que CE cycle l'a
+            // auto-demarre (regle 2, mode AUTO + sourceCycleId le pointant) et qui n'a jamais ete
+            // repris depuis par un declenchement independant (mode different) - sinon il reste
+            // orphelin indefiniment et _isActuatorStillInUse bloque a tort son actuator pour toute
+            // tentative future de l'arreter. Un cycle MODULE repris manuellement/schedule/trigger a
+            // un mode different et reste protege (cf. test "actuator still used by another active
+            // MODULE cycle").
+            // const ownAutoStartedModules = this.processList.filter((proc) =>
+            //     proc.cycle.type === CycleType.MODULE &&
+            //     proc.cycle.status === ExecutableStatus.IN_PROCCESS &&
+            //     proc.mode === ProcessMode.AUTO &&
+            //     proc.sourceCycleId === process.cycle._id &&
+            //     modules.some((actuator) => proc.cycle.exists(actuator, actuators))
+            // );
+            // for (const ownModule of ownAutoStartedModules) {
+            //     await this.reset(ownModule, [{ id: process.id, type: process.type, cause: 'parent cycle stop : ' + process.cycle.name }]);
+            // }
+
+            const modulesToStop = modules
                 .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
             process.cycle.status = ExecutableStatus.STOPPED;
@@ -154,25 +178,31 @@ export class ProcessService {
     // cette methode pour son propre echo. Sans ce garde, ce second appel (sans sourceCycleId)
     // declencherait la regle 1 et arreterait a tort le CYCLE qui vient de demarrer ce MODULE.
     public async executeModuleCycleForDigitalOutput(deviceId: string, channel: number, isOn: boolean): Promise<void> {
-        const actuator = this.configurationService.structure.actuators.find((a) => {
+        const candidates = this.configurationService.structure.actuators.filter((a) => {
             if (a.type !== ActuatorType.COM) return false;
             const config = a.config as ComActuatorConfigModel;
-            const action = config.actions?.[0];
-            return config.deviceId === deviceId
-                && action?.type === DigitalPortType.OUTPUT
-                && action?.digitalPort === channel;
+            return config.deviceId === deviceId && config.actions?.[0]?.digitalPort === channel;
         });
-        if (!actuator) return;
+        if (!candidates.length) return;
 
         const actuators = await this._resolveActuators();
         const moduleCycle = this.configurationService.structure.cycles.find((cycle) =>
-            cycle.type === CycleType.MODULE && cycle.exists(actuator, actuators));
+            cycle.type === CycleType.MODULE && candidates.some((a) => cycle.exists(a, actuators)));
         if (!moduleCycle) return;
 
         const alreadyInRequestedState = isOn
             ? moduleCycle.status === ExecutableStatus.IN_PROCCESS
             : moduleCycle.status === ExecutableStatus.STOPPED;
         if (alreadyInRequestedState) return;
+
+        // la direction OUTPUT n'est plus stockee sur ComActuatorActionConfig : elle est deduite du
+        // ComRequestModel associe (type DIGITAL_OUTPUT), recupere via comRequestId.
+        const comRequests = await this.comRequestRepository.get() as ComRequestModel[];
+        const isDigitalOutput = candidates.some((a) => {
+            const comRequestId = (a.config as ComActuatorConfigModel).actions?.[0]?.comRequestId;
+            return comRequests.find((comRequest) => comRequest._id === comRequestId)?.type === ComRequestType.DIGITAL_OUTPUT;
+        });
+        if (!isDigitalOutput) return;
 
         const moduleProcess = new ProcessModel();
         moduleProcess.cycle = moduleCycle;
@@ -959,7 +989,7 @@ export class ProcessService {
 
         // valeur registre Modbus
         const registerValue = Math.round(frequencyHz * SCALE);
-        this.modBusService.execute(taskId, { value: registerValue });
+        this.modBusService.execute(taskId, { value: registerValue, adress: 0 });
 
     }
 
