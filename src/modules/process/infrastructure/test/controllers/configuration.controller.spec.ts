@@ -83,9 +83,9 @@ describe('ConfigurationController', () => {
     it('should map and delegate a modbus task list synchronization', async () => {
         synchronizeService.synchronizeModbusTaskList.mockResolvedValue(['result']);
         const dto = Object.assign(new ComRequestDTO(), {
-            _id: 'task-1', deviceId: 'conn-1', name: 'task', type: ComRequestType.DIGITAL_OUTPUT,
+            _id: 'task-1', deviceId: 'conn-1', name: 'task', type: [ComRequestType.DIGITAL_OUTPUT],
             config: Object.assign(new ComRequestConfigDTO(), {
-                function: 'readHoldingRegisters', address: 0,
+                function: ['readHoldingRegisters'], address: 0,
                 params: Object.assign(new ModbusTaskParams(), { length: 1, scale: 1, unit: '' })
             })
         });

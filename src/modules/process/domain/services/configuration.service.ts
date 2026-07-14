@@ -38,8 +38,8 @@ export class StructureService {
     public async getStructure(): Promise<StructureModel> {
         const structureModel = new StructureModel();
         // toute la structure (cycles, tasks, sensors, modbus, inverters, valves) est
-        // desormais persistee dans Mongo ; StructureRepository (json-db) ne sert plus
-        // que de squelette legacy, immediatement ecrase ci-dessous
+        // persistee dans Mongo via les repositories dedies ci-dessous (DbService/json-db
+        // et StructureRepository ont ete decommissionnes)
         structureModel.cycles = await this.cycleRepository.get() as CycleModel[];
         structureModel.sensors = await this.sensorRepository.get() as StructureModel['sensors'];
         structureModel.devices = await this.deviceRepository.get() as StructureModel['devices'];
@@ -105,10 +105,6 @@ export class StructureService {
                 return processes.filter((x) => x.type === ExecutableType.SEQUENCE);
             case 'CYCLE':
                 return processes.filter((x) => x.type === ExecutableType.CYCLE);
-            case 'TASK':
-                return processes.filter((x) => x.type === ExecutableType.TASK);
-            case 'PROCESS':
-                return processes;
             default: {
                 const value = new ValueModel();
                 value.processes = processes;
@@ -121,7 +117,7 @@ export class StructureService {
     private _buildProcessValues(): ProcessValueModel[] {
         const cycles = this.structure.cycles.map((cycle) => this._toProcessValue(cycle, ExecutableType.CYCLE));
         const sequences = this.structure.getSequences().map((sequence) => this._toProcessValue(sequence, ExecutableType.SEQUENCE));
-        return [...cycles, ...sequences];
+        return [...cycles, ...sequences]; 
     }
 
     private _toProcessValue(executable: CycleModel | SequenceModel, type: ExecutableType): ProcessValueModel {

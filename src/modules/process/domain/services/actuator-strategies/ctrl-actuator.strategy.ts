@@ -3,9 +3,12 @@ import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorActionConfig, ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { ActuatorStrategy } from './actuator-strategy.interface';
+import { ModbusService } from '../modbus.service';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
+import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -42,6 +45,8 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
     public constructor(
         private deviceRepository: DeviceRepository,
+        private comRequestRepository: ComRequestRepository,
+        private modbusService: ModbusService,
         private readonly logger: Logger
     ) { }
 
@@ -74,9 +79,13 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         let result: ValveAdjustmentResult;
 
         for (let iteration = 1; iteration <= valve.config.maxIterations; iteration++) {
+            const openingBeforeAdjust = valve.config.openingPercent;
             result = await this._adjustOnce(valve, targetFlowRate, iteration);
             if (result.isStabilized) break;
-            await this._delay(valve.config.iterationDelayMs);
+            // en plus du delai de boucle, on attend le temps que met physiquement la vanne a
+            // atteindre sa nouvelle position (cf. _positioningDelayMs) avant de relire le debit.
+            const positioningDelayMs = this._positioningDelayMs(valve, valve.config.openingPercent - openingBeforeAdjust);
+            await this._delay(valve.config.iterationDelayMs + positioningDelayMs);
         }
 
         this.logger.log({ valveId: valve._id, ...result }, 'valve flow rate regulation finished');
@@ -84,16 +93,16 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     }
 
     private async _adjustOnce(valve: ValveActuatorModel, targetFlowRate: number, iteration: number): Promise<ValveAdjustmentResult> {
-        const measuredFlowRate = await this._readFlowMeter(valve);
+        const measuredFlowRate = await this._readFlowMeterTest(valve, iteration);
         const error = targetFlowRate - measuredFlowRate;
         const isStabilized = Math.abs(error) <= valve.config.tolerance;
 
         if (!isStabilized) {
             valve.config.openingPercent = Math.min(
                 valve.config.maxOpening,
-                Math.max(valve.config.minOpening, valve.config.openingPercent + error * valve.config.kP)
+                Math.max(valve.config.minOpening, valve.config.openingPercent + error * (valve.config.kP / 10))
             );
-            await this._writeChannelOutput(valve.config.deviceId, valve.config.channel, this._openingToMilliAmps(valve.config.openingPercent));
+            await this._writeOpeningViaComRequest(valve.config.actions[0], this._openingToMilliAmps(valve.config.openingPercent));
         }
 
         const outputCurrentMa = this._openingToMilliAmps(valve.config.openingPercent);
@@ -109,15 +118,44 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // temps physique estime pour que la vanne rejoigne sa nouvelle position : course complete
+    // (minOpening <-> maxOpening) en config.fullStrokeMs, proportionnellement moins pour un
+    // deplacement partiel.
+    private _positioningDelayMs(valve: ValveActuatorModel, openingDeltaPercent: number): number {
+        const fullRange = valve.config.maxOpening - valve.config.minOpening;
+        if (fullRange <= 0) return 0;
+        return (Math.abs(openingDeltaPercent) / fullRange) * valve.config.fullStrokeMs;
+    }
+
     // 0% -> 4mA, 100% -> 20mA (live zero, jamais en dessous de MIN_OUTPUT_MA)
     private _openingToMilliAmps(openingPercent: number): number {
         return MIN_OUTPUT_MA + (openingPercent / 100) * (MAX_OUTPUT_MA - MIN_OUTPUT_MA);
     }
 
+    private _toClampedMicroAmps(milliAmps: number): number {
+        const clampedMa = Math.min(Math.max(milliAmps, MIN_OUTPUT_MA), MAX_OUTPUT_MA);
+        return Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
+    }
+
+    // route l'ecriture via ModbusTaskService (meme chemin que ComActuatorStrategy.execute) plutot
+    // que via une connexion modbus-serial geree a la main : beneficie de la file d'attente
+    // partagee (_enqueue) qui serialise les acces au bus RS485, et de la gestion
+    // connexion/erreurs deja centralisee dans ModbusTaskService._runComRequest.
+    private async _writeOpeningViaComRequest(action: ActuatorActionConfig, milliAmps: number): Promise<void> {
+        const microAmps = this._toClampedMicroAmps(milliAmps); 
+        const comRequest: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
+
+
+        const comRequestData: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
+        const overrideParams: ComRequestConfigModel = { address: action.portNumber, params: { value: microAmps } }
+        this.modbusService.execute(comRequestData, this.buidOverrideParams(comRequestData.config, overrideParams));
+    } 
+
     /**
      * FAKE - en attendant la documentation officielle du débitmètre RS485.
-     * Simule la lecture Modbus du capteur : le débit suit l'ouverture de la vanne
-     * avec un peu de bruit de mesure, pour permettre de tester la boucle de régulation.
+     * Simule la lecture Modbus du capteur : le débit suit l'ouverture de la vanne avec un peu de
+     * bruit de mesure. Lue seulement après que setFlowRate ait attendu _positioningDelayMs, donc
+     * openingPercent reflete deja la position physique reelle de la vanne a cet instant.
      */
     private async _readFlowMeter(valve: ValveActuatorModel): Promise<number> {
         const theoreticalFlowRate = (valve.config.openingPercent / 100) * valve.config.maxFlowRate;
@@ -128,10 +166,17 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         return measuredFlowRate;
     }
 
+    private async _readFlowMeterTest(valve: ValveActuatorModel, iteration: number): Promise<number> {
+
+        return iteration * 10;
+
+
+    }
+
     private async _connectClient(deviceId: string, unitIdOverride?: number): Promise<ModbusRTU> {
         const slaveDevice = await this.deviceRepository.get(deviceId) as DeviceModel;
         if (!slaveDevice) {
-            throw new Error(`No slave device found for deviceId: ${deviceId}`);
+            throw new Error(`no slave device found for deviceId: ${deviceId}`);
         }
         const slaveConfig = slaveDevice.config as SlaveConfigModel;
         const masterDevice = await this.deviceRepository.get(slaveConfig.masterDeviceId) as DeviceModel;
@@ -177,19 +222,18 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     public async testStepOutput(deviceId: string, channel: number, stepMa = 0.1, stepDelayMs = 100): Promise<void> {
         await this._writeChannelOutput(deviceId, channel, 4);
         await this._delay(10000);
-        for (let ma = MIN_OUTPUT_MA; ma <= MAX_OUTPUT_MA; ma += stepMa) {
-            await this._writeChannelOutput(deviceId, channel, ma);
-            await this._delay(stepDelayMs);
-        }
-        await this._writeChannelOutput(deviceId, channel, 4);
-        await this._delay(10000);
+        // for (let ma = MIN_OUTPUT_MA; ma <= MAX_OUTPUT_MA; ma += stepMa) {
+        //     await this._writeChannelOutput(deviceId, channel, ma);
+        //     await this._delay(stepDelayMs);
+        // }
+        // await this._writeChannelOutput(deviceId, channel, 4);
+        // await this._delay(10000);
     }
 
     private async _writeChannelOutput(deviceId: string, channel: number, milliAmps: number): Promise<void> {
         const client = await this._connectClient(deviceId);
         try {
-            const clampedMa = Math.min(Math.max(milliAmps, MIN_OUTPUT_MA), MAX_OUTPUT_MA);
-            const microAmps = Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
+            const microAmps = this._toClampedMicroAmps(milliAmps);
             const address = AO8CH_CHANNEL_BASE_ADDRESS + (channel - 1);
             await client.writeRegister(address, microAmps);
 
@@ -203,5 +247,22 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
             client.close(() => this.logger.log({ deviceId, channel }, 'valve modbus connection closed'));
         }
     }
-
+    private buidOverrideParams(params: ComRequestConfigModel, overrideParams: ComRequestConfigModel): ComRequestConfigModel {
+        const overridedParams: ComRequestConfigModel = {
+            address: overrideParams.address || params.address,
+            function: overrideParams.function || params.function,
+            disabled: overrideParams.disabled || params.disabled,
+            params: {
+                length: overrideParams.params?.length || params.params?.length,
+                scale: overrideParams.params?.scale || params.params?.scale,
+                unit: overrideParams.params?.unit || params.params?.unit,
+                value: overrideParams.params?.value || params.params?.value,
+                persistence: {
+                    persist: overrideParams.params?.persistence?.persist ?? params.params?.persistence?.persist ?? false,
+                    address: overrideParams.params?.persistence?.address ?? params.params?.persistence?.address ?? 0
+                }
+            }
+        }; 
+        return overridedParams;
+    }
 }

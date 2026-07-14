@@ -128,6 +128,19 @@ describe('SensorService', () => {
             expect(structSensor.value).toEqual(27);
             expect(otherInstance.value).toBeUndefined();
         });
+
+        it('should log warnings when sending the sync message fails locally and remotely', async () => {
+            const sensor = CreateSensorModel();
+            wsService.sendMessage
+                .mockRejectedValueOnce(new Error('local down'))
+                .mockRejectedValueOnce(new Error('remote down'));
+
+            service.emitReceivedData(sensor, 23.5);
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send sensor value (local)');
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send sensor value (remote)');
+        });
     });
 
     describe('initScheduledSensor', () => {
@@ -212,6 +225,25 @@ describe('SensorService', () => {
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ sensorId: 'cron-sensor-5' }), 'sensor read failed');
             expect(triggerService.onElementValueChanged.next).not.toHaveBeenCalled();
             schedulerRegistry.getCronJob('cron-sensor-5').stop();
+        });
+
+        it('should log and swallow a NotImplementedError when the sensor type has no registered strategy', async () => {
+            const serviceWithoutComStrategy = new SensorService(
+                schedulerRegistry,
+                configurationService as unknown as StructureService,
+                triggerService as never,
+                wsService as never,
+                sensorRepository as never,
+                [forcastStrategy],
+                logger as never
+            );
+            const sensor = CreateComSensorModel({ id: 'unsupported-type-sensor' });
+            await serviceWithoutComStrategy.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('unsupported-type-sensor').fireOnTick();
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ sensorId: 'unsupported-type-sensor' }), 'sensor read failed');
+            schedulerRegistry.getCronJob('unsupported-type-sensor').stop();
         });
     });
 

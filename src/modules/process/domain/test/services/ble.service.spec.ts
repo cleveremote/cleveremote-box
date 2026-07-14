@@ -196,6 +196,30 @@ describe('BleService (hci-socket/ble-host/node-network-manager mocked)', () => {
             expect(callback).toHaveBeenCalledWith(2, JSON.stringify([]));
         });
 
+        it('should fall back to String(err) when fetching wifi networks rejects with a non-Error value', async () => {
+            mockNetwork.getConnectionProfilesList.mockRejectedValue('plain string reason');
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666668');
+            const callback = jest.fn();
+
+            await characteristic.onRead(null, callback);
+
+            expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: 'plain string reason' }), 'BleService: getWifiNetworks failed');
+            expect(callback).toHaveBeenCalledWith(2, JSON.stringify([]));
+        });
+
+        it('should fall back to String(err) when fetching wifi networks rejects with undefined', async () => {
+            mockNetwork.getConnectionProfilesList.mockRejectedValue(undefined);
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666668');
+            const callback = jest.fn();
+
+            await characteristic.onRead(null, callback);
+
+            expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: 'undefined' }), 'BleService: getWifiNetworks failed');
+            expect(callback).toHaveBeenCalledWith(2, JSON.stringify([]));
+        });
+
         it('should connect to wifi and reply success when the write payload has a valid password', async () => {
             authenticationService.checkPassword.mockResolvedValue(true);
             await service.initialize();
@@ -231,6 +255,38 @@ describe('BleService (hci-socket/ble-host/node-network-manager mocked)', () => {
 
             expect(logger.error).toHaveBeenCalledWith(
                 expect.objectContaining({ err: expect.any(String) }),
+                'BleService: buildContenteConfigFile failed'
+            );
+            expect(callback).toHaveBeenCalledWith(2);
+        });
+
+        it('should fall back to String(err) when the write payload handling rejects with a non-Error value', async () => {
+            authenticationService.checkPassword.mockRejectedValue('plain string reason');
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666669');
+            const callback = jest.fn();
+            const payload = Buffer.from(JSON.stringify({ ssid: 'home-wifi', psk: 'wifi-pass', password: 'device-password' }));
+
+            await characteristic.onWrite(null, true, payload, callback);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({ err: 'plain string reason' }),
+                'BleService: buildContenteConfigFile failed'
+            );
+            expect(callback).toHaveBeenCalledWith(2);
+        });
+
+        it('should fall back to String(err) when the write payload handling rejects with undefined', async () => {
+            authenticationService.checkPassword.mockRejectedValue(undefined);
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666669');
+            const callback = jest.fn();
+            const payload = Buffer.from(JSON.stringify({ ssid: 'home-wifi', psk: 'wifi-pass', password: 'device-password' }));
+
+            await characteristic.onWrite(null, true, payload, callback);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({ err: 'undefined' }),
                 'BleService: buildContenteConfigFile failed'
             );
             expect(callback).toHaveBeenCalledWith(2);

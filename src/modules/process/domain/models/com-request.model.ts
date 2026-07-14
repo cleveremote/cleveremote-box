@@ -12,21 +12,29 @@ export enum ModbusFunctionName {
   WRITE_MULTIPLE_REGISTERS = 'writeRegisters',
 }
 
+export class ComRequestConfigModel {
+    public address: number;
+    public function?: ModbusFunctionName[];
+    public disabled?: boolean;
+    public params: {
+        length?: number,
+        scale?: number,
+        unit?: string,
+        value?: number,
+        persistence?: {
+            persist: boolean,
+            address: number
+        }
+    };
+}
+
 export class ComRequestModel {
     public _id: string;
     public deviceId: string;
     public name: string;
-    public type: ComRequestType;
-    public config: {
-        address: number;
-        function: ModbusFunctionName;
-        params: {
-            length?: number,
-            scale?: number,
-            unit?: string,
-            value?: number
-        }
-    };
+    public description?: string;
+    public type: ComRequestType[];
+    public config: ComRequestConfigModel;
     public createdAt?: Date;
     public updatedAt?: Date;
     public deletedAt?: Date | null = null;

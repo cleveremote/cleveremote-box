@@ -3,6 +3,7 @@ import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { SynchronizeComRequestModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
+import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import { ComRequestkMongooseRepository } from './com-request-mongoose.repository';
 
 @Injectable()
@@ -41,6 +42,10 @@ export class ComRequestRepository {
             return this.comRequestMongooseRepository.findAll();
         }
         return this.comRequestMongooseRepository.findById(id);
+    }
+
+    public async getComRequestsByDeviceIdAndTypes(deviceId: string, types: ComRequestType[]): Promise<ComRequestModel[]> {
+        return this.comRequestMongooseRepository.findByDeviceIdAndTypes(deviceId, types);
     }
 
     public async replaceAll(models: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {

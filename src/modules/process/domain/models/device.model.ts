@@ -10,6 +10,11 @@ export enum DeviceType {
     SLAVE = 'SLAVE',
 }
 
+export enum DeviceKind {
+    MODBUS_SLAVE = 'MODBUS_SLAVE',
+    INVERTER = 'INVERTER',
+}
+
 export class MasterConfigModel {
     public protocol: MasterProtocol;
     ipAddress?: string;
@@ -28,6 +33,7 @@ export class DeviceModel {
     public _id: string;
     public name: string;
     public type: DeviceType;
+    public kind?: DeviceKind;
     public description: string;
     public config: MasterConfigModel | SlaveConfigModel;
     

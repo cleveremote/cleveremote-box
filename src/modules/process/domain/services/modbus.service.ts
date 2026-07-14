@@ -6,7 +6,7 @@ import { ComRequestRepository } from '@process/infrastructure/repositories/com-r
 import ModbusRTU from "modbus-serial";
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestConfigModel, ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
 
 export interface InverterConfigParam {
     param: string;
@@ -30,8 +30,8 @@ export interface DigitalMonitorHandle {
 }
 
 interface QueueEntry {
-    taskId?: string;
-    param?: { value: number,adress:number };
+    comRequest?: ComRequestModel;
+    param?: ComRequestConfigModel;
     resolve?: () => void;
     reject?: (err: Error) => void;
     inverterConfig?: { inverterId: string; params: InverterConfigParam[] };
@@ -39,7 +39,7 @@ interface QueueEntry {
 }
 
 @Injectable()
-export class ModbusTaskService {
+export class ModbusService {
     private _queue: QueueEntry[] = [];
     private _isProcessing = false;
 
@@ -76,9 +76,9 @@ export class ModbusTaskService {
         client.setTimeout(masterConfig.timeout || 2000);
     }
 
-    public execute(taskId: string, param?: { value: number, adress: number }): Promise<void> {
+    public execute(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this._queue.push({ taskId, param, resolve, reject });
+            this._queue.push({ comRequest, param, resolve, reject });
             if (!this._isProcessing) this._processQueue();
         });
     }
@@ -123,7 +123,7 @@ export class ModbusTaskService {
                 } else if (entry.inverterConfig) {
                     await this._applyInverterConfig(entry.inverterConfig.inverterId, entry.inverterConfig.params);
                 } else {
-                    await this._executeTask(entry.taskId, entry.param);
+                    await this._executeComRequest(entry.comRequest, entry.param);
                 }
                 entry.resolve?.();
             } catch (err) {
@@ -180,14 +180,14 @@ export class ModbusTaskService {
 
 
 
-    /**
-     * Exécute directement une tâche Modbus à partir d'un ComRequestModel déjà construit,
-     * sans passer par le repository (utile pour tester manuellement une configuration
-     * avant de la persister).
-     */
-    public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number, adress: number }): Promise<void> {
-        return this._enqueue(() => this._runComRequest(comRequest, param));
-    }
+    // /**
+    //  * Exécute directement une tâche Modbus à partir d'un ComRequestModel déjà construit,
+    //  * sans passer par le repository (utile pour tester manuellement une configuration
+    //  * avant de la persister).
+    //  */
+    // public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number, adress: number }): Promise<void> {
+    //     return this._enqueue(() => this._runComRequest(comRequest, param));
+    // }
 
     /**
      * Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
@@ -367,21 +367,16 @@ export class ModbusTaskService {
         };
     }
 
-    private async _executeTask(taskId: string, param?: { value: number,adress:number }): Promise<void> {
-        if (!taskId) {
-            this.logger.error('modbus execute called without taskId');
+    private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
+        if (!comRequest) { 
+            this.logger.error('modbus execute called without comRequest');
         }
-        const taskModel = await this.modbusTaskRepository.get(taskId) as ComRequestModel;
-        if (!taskModel) {
-            this.logger.error({ taskId }, 'no modbus task found for taskId');
-        }
-
-        await this._runComRequest(taskModel, param);
+        await this._runComRequest(comRequest, param);
     }
 
-    private async _runComRequest(taskModel: ComRequestModel, param?: { value: number,adress:number }): Promise<void> {
-        const taskId = taskModel?._id;
-        const resolved = await this._resolveMasterConfig(taskModel.deviceId);
+    private async _runComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
+        const taskId = comRequest?._id;
+        const resolved = await this._resolveMasterConfig(comRequest.deviceId);
         if (!resolved) {
             return;
         }
@@ -404,14 +399,16 @@ export class ModbusTaskService {
             client.setTimeout(masterConfig.timeout || 2000);
             client.setTimeout(2000);
 
-            this.logger.log({ deviceId: taskModel.deviceId, ip: masterConfig.ipAddress, port: masterConfig.port }, 'modbus connected');
-            this.logger.log({ task: taskModel.name }, 'executing modbus task');
+            this.logger.log({ deviceId: comRequest.deviceId, ip: masterConfig.ipAddress, port: masterConfig.port }, 'modbus connected');
+            this.logger.log({ task: comRequest.name }, 'executing modbus task');
 
-            const fn = taskModel.config.function as string;
+            const isWrite = param !== undefined;
+            const fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
+            if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? "d'écriture" : "de lecture"} configurée pour cette tâche`);
             if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
-            const addr = taskModel.config.address;
-            const params = taskModel.config.params || null;
+            const addr = comRequest.config.address;
+            const params = comRequest.config.params || null;
             let result;
 
             // --- Lecture ---
@@ -423,17 +420,17 @@ export class ModbusTaskService {
                 // readCoils/readDiscreteInputs renvoient des booléens (états ON/OFF), pas des
                 // registres 16 bits : le décodage IEEE754 ne s'applique qu'aux registres.
                 if (fn === ModbusFunctionName.READ_COILS || fn === ModbusFunctionName.READ_DISCRETE_INPUTS) {
-                    this.logger.log({ label: taskModel.name, value: result.data }, 'modbus read result');
+                    this.logger.log({ label: comRequest.name, value: result.data }, 'modbus read result');
                 } else {
                     const values = this.decodeFloats(result.data, addr, length, params.scale, true);
-                    this.logger.log({ label: taskModel.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
+                    this.logger.log({ label: comRequest.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
                 }
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
-                if (param.value === undefined) throw new Error("Aucune valeur spécifiée pour l'écriture");
-                await client[fn](param.adress, param.value);
-                this.logger.log({ label: taskModel.name, value: param.value }, 'modbus write done');
+                const address = param.params?.persistence?.persist ? param.address+param.params?.persistence?.address: param.address;
+                await client[fn](address, param.params.value);
+                this.logger.log({ label: comRequest.name, value: param.params.value }, 'modbus write done');
             }
 
             // --- Fonction non supportée ---

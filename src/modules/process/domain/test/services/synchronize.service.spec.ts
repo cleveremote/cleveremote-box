@@ -103,7 +103,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
     let configurationService: { getStructure: jest.Mock; structure: StructureModel; schedules: ScheduleModel[] };
     let triggerService: { initTrigger: jest.Mock };
     let sensorService: { initScheduledSensor: jest.Mock };
-    let structureRepository: { save: jest.Mock };
     let sensorRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
     let modbusTaskRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -165,7 +164,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         // (serie/BLE/websocket pour SensorService) : on ne verifie ici que la delegation.
         triggerService = { initTrigger: jest.fn((trigger: unknown) => Promise.resolve(trigger)) };
         sensorService = { initScheduledSensor: jest.fn((sensor: unknown) => Promise.resolve(sensor)) };
-        structureRepository = { save: jest.fn((structure: unknown) => Promise.resolve(structure)) };
         sensorRepository = CreateReplaceAllRepositoryMock();
         modbusTaskRepository = CreateReplaceAllRepositoryMock();
         logger = CreateLoggerMock();
@@ -181,7 +179,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         );
 
         service = new SynchronizeService(
-            structureRepository as never,
             deviceRepository,
             modbusTaskRepository as never,
             cycleRepository,
@@ -293,6 +290,20 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(await sequenceRepository.get(toRemoveId)).toBeNull();
             expect(await sequenceRepository.get(untouchedId)).not.toBeNull();
         });
+
+        it('should fall back to an empty array when sequences/schedules/triggers are explicitly undefined', async () => {
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            cycleModel.sequences = undefined;
+            cycleModel.schedules = undefined;
+            cycleModel.triggers = undefined;
+
+            const result = await service.synchronizeCycle(cycleModel);
+
+            expect(result.sequences).toEqual([]);
+            expect(result.schedules).toEqual([]);
+            expect(result.triggers).toEqual([]);
+        });
     });
 
     describe('synchronizeValve', () => {
@@ -363,7 +374,7 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             const modbusTask = new ComRequestModel();
             modbusTask.deviceId = 'connection-1';
             modbusTask.name = 'task';
-            modbusTask.config = { function: ModbusFunctionName.READ_HOLDING_REGISTERS, address: 0, params: {} };
+            modbusTask.config = { function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 0, params: {} };
 
             await service.synchronizeModbusTaskList([modbusTask]);
 
@@ -402,6 +413,16 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(result.deletedAt).toBeDefined();
             expect(triggerService.initTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: created.id }), true);
         });
+
+        it('should fall back to the original trigger payload when repository.save resolves falsy', async () => {
+            const trigger = CreateTriggerModel({ id: undefined });
+            const saveSpy = jest.spyOn(triggerRepository, 'save').mockResolvedValueOnce(null);
+
+            await service.synchronizeTrigger(trigger);
+
+            expect(triggerService.initTrigger).toHaveBeenCalledWith(trigger, false);
+            saveSpy.mockRestore();
+        });
     });
 
     describe('synchronizeSchedule', () => {
@@ -426,6 +447,16 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(result.deletedAt).toBeDefined();
             expect(schedulerRegistry.doesExist('cron', created._id)).toBe(false);
         });
+
+        it('should fall back to the original schedule payload when repository.save resolves falsy', async () => {
+            const scheduleModel = CreateScheduleModel({ _id: undefined });
+            const saveSpy = jest.spyOn(scheduleRepository, 'save').mockResolvedValueOnce(null);
+
+            await service.synchronizeSchedule(scheduleModel);
+
+            expect(configurationService.schedules).toContainEqual(scheduleModel);
+            saveSpy.mockRestore();
+        });
     });
 
     describe('sychronizeSensor', () => {
@@ -446,6 +477,15 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(sensorRepository.delete).toHaveBeenCalledWith('sensor-1');
             expect(sensorService.initScheduledSensor).toHaveBeenCalledWith(expect.objectContaining({ id: 'sensor-1' }), true);
         });
+
+        it('should fall back to the original sensor payload when repository.save resolves falsy', async () => {
+            const sensor = { id: 'sensor-1', type: SensorType.FORCAST } as SensorModel;
+            sensorRepository.save.mockResolvedValueOnce(null);
+
+            await service.sychronizeSensor(sensor);
+
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith(sensor, false);
+        });
     });
 
     describe('synchronize (bulk structure sync)', () => {
@@ -456,13 +496,27 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             structureModel.cycles = [cycleModel];
             structureModel.sensors = [{ id: 'sensor-1', type: SensorType.FORCAST } as SensorModel];
             structureModel.modbusTasks = [];
+            const expectedSensors = structureModel.sensors;
 
             const result = await service.synchronize(structureModel);
 
-            expect(structureRepository.save).toHaveBeenCalled();
             expect(result.cycles).toHaveLength(1);
-            expect(sensorRepository.replaceAll).toHaveBeenCalledWith(structureModel.sensors);
+            expect(sensorRepository.replaceAll).toHaveBeenCalledWith(expectedSensors);
             expect(configurationService.structure).toBe(result);
+        });
+
+        it('should fall back to an empty array when sensors/modbusTasks are left undefined on the incoming structure', async () => {
+            const structureModel = new StructureModel();
+            const cycleModel = new SynchronizeCycleModel();
+            Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
+            structureModel.cycles = [cycleModel];
+            structureModel.sensors = undefined;
+            structureModel.modbusTasks = undefined;
+
+            await service.synchronize(structureModel);
+
+            expect(sensorRepository.replaceAll).toHaveBeenCalledWith([]);
+            expect(modbusTaskRepository.replaceAll).toHaveBeenCalledWith([]);
         });
 
         it('should soft delete only the cycle flagged delete:true, leaving the other one untouched', async () => {

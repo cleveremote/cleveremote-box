@@ -16,19 +16,21 @@ export class RpiActuatorConfigModel {
     public reconfigureDirection?: boolean = true;
 }
 
-export class ComActuatorActionConfig {
+export class ActuatorActionConfig {
     public comRequestId: string;
-    public digitalPort: number;
+    public portNumber: number;
 }
 
-export class ComActuatorConfigModel {
+export class ActuatorConfigModel {
     public deviceId: string;
-    public actions: ComActuatorActionConfig[];
+    public actions: ActuatorActionConfig[];
 }
 
-export class CtrlActuatorConfigModel {
+export class ComActuatorConfigModel extends ActuatorConfigModel {
+}
 
-    public deviceId: string;
+export class CtrlActuatorConfigModel extends ComActuatorConfigModel {
+
     public channel: number;
     public flowMeterId: string;
     public maxFlowRate: number = 100;
@@ -39,6 +41,8 @@ export class CtrlActuatorConfigModel {
     public tolerance: number = 1;
     public maxIterations: number = 20;
     public iterationDelayMs: number = 500;
+    // temps que met la vanne pour parcourir toute sa course (minOpening <-> maxOpening), en ms.
+    public fullStrokeMs: number = 7000;
     public valveType: string = 'PROPORTIONAL';
 
 }

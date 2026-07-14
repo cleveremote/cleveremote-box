@@ -41,6 +41,6 @@ export function CreateActuatorComModel(portNum = 30): ActuatorModel {
     actuator.status = ModuleStatus.OFF;
     actuator.config = new ComActuatorConfigModel();
     actuator.config.deviceId = 'com-module-1';
-    actuator.config.actions = [{ comRequestId: 'req-1', digitalPort: 1 }];
+    actuator.config.actions = [{ comRequestId: 'req-1', portNumber: 1 }];
     return actuator;
 }

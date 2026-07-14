@@ -7,11 +7,12 @@ import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
 import { BleService } from '@process/domain/services/ble.service';
-import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
+import { ModbusService } from '@process/domain/services/modbus.service';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
-import { DbService } from '@process/infrastructure/db/db.service';
+import { ActuatorService } from '@process/domain/services/actuator.service';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
@@ -45,14 +46,15 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let actuatorRepository: ActuatorRepository;
     let configurationService: { getStructure: jest.Mock; structure: { actuators: ActuatorModel[] } };
     let authenticationService: { initAuthentication: jest.Mock };
-    let dbService: { initialize: jest.Mock };
-    let processService: { resetAllModules: jest.Mock; applyInverterConfig: jest.Mock };
+    let processService: { resetAllModules: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
     let scheduleService: { restartAllSchedules: jest.Mock };
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
     let bleService: { initialize: jest.Mock };
     let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock };
+    let comRequestRepository: { migrateMissingType: jest.Mock };
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
+    let actuatorService: { execute: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: InitService;
 
@@ -72,12 +74,14 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     beforeEach(async () => {
         await connection.collection('actuators').deleteMany({});
         Gpio.accessible = false;
-        jest.spyOn(actuatorRepository, 'migrateLegacyCollections');
 
         configurationService = { getStructure: jest.fn().mockResolvedValue(undefined), structure: { actuators: [] } };
         authenticationService = { initAuthentication: jest.fn().mockResolvedValue(true) };
-        dbService = { initialize: jest.fn().mockResolvedValue(undefined) };
-        processService = { resetAllModules: jest.fn().mockResolvedValue(undefined), applyInverterConfig: jest.fn().mockResolvedValue(undefined) };
+        processService = {
+            resetAllModules: jest.fn().mockResolvedValue(undefined),
+            applyInverterConfig: jest.fn().mockResolvedValue(undefined),
+            executeModuleCycleForDigitalOutput: jest.fn().mockResolvedValue(undefined)
+        };
         scheduleService = { restartAllSchedules: jest.fn().mockResolvedValue(undefined) };
         triggerService = { initilize: jest.fn() };
         sensorService = {
@@ -90,24 +94,27 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             testExecuteTask: jest.fn().mockResolvedValue(undefined),
             monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined)
         };
+        comRequestRepository = { migrateMissingType: jest.fn().mockResolvedValue(undefined) };
         ctrlActuatorStrategy = {
             testSetDeviceAddress: jest.fn().mockResolvedValue(undefined),
             testStepOutput: jest.fn().mockResolvedValue(undefined)
         };
+        actuatorService = { execute: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
 
         service = new InitService(
             configurationService as unknown as StructureService,
             authenticationService as unknown as AuthenticationService,
-            dbService as unknown as DbService,
             processService as unknown as ProcessService,
             scheduleService as unknown as ScheduleService,
             triggerService as unknown as TriggerService,
             sensorService as unknown as SensorService,
             bleService as unknown as BleService,
-            modBusService as unknown as ModbusTaskService,
+            modBusService as unknown as ModbusService,
             actuatorRepository,
+            comRequestRepository as unknown as ComRequestRepository,
             ctrlActuatorStrategy as unknown as CtrlActuatorStrategy,
+            actuatorService as unknown as ActuatorService,
             logger as never,
             processService as unknown as ProcessService
         );
@@ -117,8 +124,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         it('should run every boot step exactly once, in order, without throwing', async () => {
             await expect(service.initialize()).resolves.toBeUndefined();
 
-            expect(dbService.initialize).toHaveBeenCalledTimes(1);
-            expect(actuatorRepository.migrateLegacyCollections).toHaveBeenCalledTimes(1);
             expect(authenticationService.initAuthentication).toHaveBeenCalledTimes(1);
             expect(bleService.initialize).toHaveBeenCalledTimes(1);
             expect(triggerService.initilize).toHaveBeenCalledTimes(1);
@@ -135,12 +140,12 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         });
 
         it('should never reject, even when a boot step fails, and should log the wrapped error', async () => {
-            dbService.initialize.mockRejectedValue(new Error('boom'));
+            configurationService.getStructure.mockRejectedValue(new Error('boom'));
 
             await expect(service.initialize()).resolves.toBeUndefined();
 
             expect(logger.error).toHaveBeenCalledWith(
-                expect.objectContaining({ message: expect.stringContaining('[DbService.initialize] Error: boom') }),
+                expect.objectContaining({ message: expect.stringContaining('[StructureService.getStructure] Error: boom') }),
                 'initialization failed'
             );
         });
@@ -168,6 +173,40 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             const actuators = await actuatorRepository.get() as ActuatorModel[];
             const valves = actuators.filter((a) => a.type === ActuatorType.CTRL);
             expect(valves).toEqual([]);
+        });
+    });
+
+    describe('digital-output -> module cycle mapping (via initialize)', () => {
+        it('should map a monitored digital output change to executeModuleCycleForDigitalOutput', async () => {
+            const change = { channel: 3, previous: false, current: true };
+            modBusService.monitorDigitalOutputs.mockImplementation((_deviceId, _interval, _length, onChange) => {
+                onChange([change]);
+                return Promise.resolve(undefined);
+            });
+
+            await service.initialize();
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(processService.executeModuleCycleForDigitalOutput).toHaveBeenCalledWith(
+                expect.any(String), change.channel, change.current
+            );
+        });
+
+        it('should log a warning when mapping a digital output change to a module cycle fails', async () => {
+            const change = { channel: 3, previous: false, current: true };
+            modBusService.monitorDigitalOutputs.mockImplementation((_deviceId, _interval, _length, onChange) => {
+                onChange([change]);
+                return Promise.resolve(undefined);
+            });
+            processService.executeModuleCycleForDigitalOutput.mockRejectedValue(new Error('boom'));
+
+            await service.initialize();
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ error: expect.any(Error), change }),
+                'digital output -> module cycle mapping failed'
+            );
         });
     });
 

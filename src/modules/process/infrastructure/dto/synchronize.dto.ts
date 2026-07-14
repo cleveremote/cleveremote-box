@@ -9,7 +9,7 @@ import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interface
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
-import { DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { ModbusFunctionName } from '@process/domain/models/com-request.model';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import {
@@ -25,7 +25,7 @@ import {
 } from '@process/domain/models/synchronize.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
 
@@ -592,6 +592,14 @@ export class ValveConfigDTO {
     public maxIterations?: number;
     @IsNumber()
     public iterationDelayMs?: number;
+    @IsOptional()
+    @IsNumber()
+    public fullStrokeMs?: number;
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ComActuatorActionConfigDTO)
+    public actions?: ComActuatorActionConfigDTO[];
 }
 
 export class ValveSynchronizeDTO {
@@ -788,6 +796,11 @@ export class DeviceSynchronizeDTO {
     @IsNotEmpty()
     public type: DeviceType;
 
+    @IsOptional()
+    @IsEnum(DeviceKind)
+    @ApiProperty({ description: "Nature de l'équipement (esclave Modbus générique, onduleur, ...)" })
+    public kind?: DeviceKind;
+
     @ValidateNested()
     @Type(() => DeviceConfigDTO)
     public config: DeviceConfigDTO;
@@ -802,12 +815,23 @@ export class DeviceSynchronizeDTO {
         model.name = dto.name;
         model.description = dto.description;
         model.type = dto.type;
+        model.kind = dto.kind;
         model.config = dto.type === DeviceType.MASTER
             ? Object.assign(new MasterConfigModel(), dto.config)
             : Object.assign(new SlaveConfigModel(), dto.config);
         model.delete = dto.delete ?? false;
         return model;
     }
+}
+
+export class PersistenceDTO {
+    @IsBoolean()
+    @ApiProperty({ description: "Si vrai, écriture persistante (EEPROM) plutôt que volatile" })
+    public persist: boolean;
+
+    @IsNumber()
+    @ApiProperty({ description: "Adresse cible pour l'écriture persistante" })
+    public address: number;
 }
 
 export class ModbusTaskParams {
@@ -825,19 +849,30 @@ export class ModbusTaskParams {
     @IsString()
     @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
     public unit: string;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => PersistenceDTO)
+    @ApiProperty({ description: "Configuration de persistance (EEPROM) du paramètre, si applicable" })
+    public persistence?: PersistenceDTO;
 }
 
 export class ComRequestConfigDTO {
-    @IsNotEmpty()
-    @IsEnum(ModbusFunctionName)
-    @ApiProperty({ description: "Fonction Modbus à exécuter" })
-    public function: ModbusFunctionName;
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsEnum(ModbusFunctionName, { each: true })
+    @ApiProperty({ description: "Fonction(s) Modbus à exécuter", enum: ModbusFunctionName, isArray: true })
+    public function: ModbusFunctionName[];
 
     @IsNotEmpty()
     @IsNumber()
     @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
     public address: number;
 
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: "Désactive la requête sans la supprimer", required: false })
+    public disabled?: boolean;
 
     @ValidateNested()
     @Type(() => ModbusTaskParams)
@@ -862,10 +897,16 @@ export class ComRequestDTO {
     @ApiProperty({ description: "Nom lisible ou étiquette de la requête" })
     public name: string;
 
-    @IsNotEmpty()
-    @IsEnum(ComRequestType)
-    @ApiProperty({ description: "Type de la requête de communication", enum: ComRequestType })
-    public type: ComRequestType;
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: "Description de la requête" })
+    public description?: string;
+
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsEnum(ComRequestType, { each: true })
+    @ApiProperty({ description: "Type(s) de la requête de communication", enum: ComRequestType, isArray: true })
+    public type: ComRequestType[];
 
     @IsNotEmpty()
     @ValidateNested()
@@ -882,10 +923,12 @@ export class ComRequestDTO {
         model._id = dto._id;
         model.deviceId = dto.deviceId;
         model.name = dto.name;
+        model.description = dto.description;
         model.type = dto.type;
         model.config = {
             function: dto.config.function,
             address: dto.config.address,
+            disabled: dto.config.disabled,
             params: dto.config.params || undefined
         };
         model.delete = dto.delete ?? false;

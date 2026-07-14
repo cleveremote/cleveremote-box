@@ -7,7 +7,6 @@ import { StructureService } from './configuration.service';
 import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import * as math from 'mathjs';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { ScheduleModel } from '../models/schedule.model';
 import { getSunrise, getSunset } from 'sunrise-sunset-js';
 import { SunState } from '../interfaces/schedule.interface';
@@ -33,7 +32,6 @@ export class TriggerService {
     public constructor(
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
-        private structureRepository: StructureRepository,
         private triggerRepository: TriggerRepository,
         private scheduleRepository: ScheduleRepository,
         private sensorRepository: SensorRepository,
@@ -160,7 +158,6 @@ export class TriggerService {
     }
 
     private _getTriggerByElementId(element: SensorValueModel | ProcessValueModel): TriggerModel[] {
-         this.structureRepository.get();
         return this.triggers.filter(x => !!x.conditions.find(y => y.elementId === element.id));
     }
 

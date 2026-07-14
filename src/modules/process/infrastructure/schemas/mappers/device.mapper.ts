@@ -25,6 +25,7 @@ export class DeviceMapper {
         model._id = device._id;
         model.name = device.name;
         model.type = device.type;
+        model.kind = device.kind;
         model.description = device.description;
         model.config = DeviceMapper._mapConfig(device);
         model.createdAt = (device as unknown as { createdAt?: Date }).createdAt;
@@ -37,6 +38,7 @@ export class DeviceMapper {
         const device = new Device();
         device.name = model.name;
         device.type = model.type;
+        device.kind = model.kind;
         device.description = model.description;
         if (model.type === DeviceType.MASTER) {
             const config = model.config as MasterConfigModel;

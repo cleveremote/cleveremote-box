@@ -212,5 +212,17 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             expect(result.processes).toHaveLength(2);
             expect(result.sensors).toHaveLength(1);
         });
+
+        it('should include startedAt/duration from an executable\'s progression when present', async () => {
+            const startedAt = new Date('2024-06-01T10:00:00Z');
+            service.structure.cycles[0].progression = { startedAt, duration: 1500 };
+            service.structure.cycles[0].sequences[0].progression = { startedAt, duration: 30 };
+
+            const result = await service.getStatus('CYCLE') as ProcessValueModel[];
+            const sequenceResult = await service.getStatus('SEQUENCE') as ProcessValueModel[];
+
+            expect(result[0]).toMatchObject({ startedAt, duration: 1500 });
+            expect(sequenceResult[0]).toMatchObject({ startedAt, duration: 30 });
+        });
     });
 });

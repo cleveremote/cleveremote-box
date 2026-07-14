@@ -180,6 +180,20 @@ describe('CycleGroupService CRUD (integration mongodb-memory-server)', () => {
             expect((await service.get(child1._id)).parentCycleId).toEqual(parent._id);
         });
 
+        it('should default the order to the current children count when the childRef has no config at all', async () => {
+            const parent = await service.create(CreateCycleModel({ name: 'Group', type: CycleType.GROUP }));
+            const child1 = await service.create(CreateCycleModel({ name: 'Child 1' }));
+            const child2 = await service.create(CreateCycleModel({ name: 'Child 2' }));
+            await service.addChild(parent._id, { cycleId: child1._id } as ChildCycleRef);
+
+            const updatedParent = await service.addChild(parent._id, { cycleId: child2._id } as ChildCycleRef);
+
+            expect(updatedParent.childCycles.map((c) => ({ cycleId: c.cycleId, order: c.config.order }))).toEqual([
+                { cycleId: child1._id, order: 0 },
+                { cycleId: child2._id, order: 1 }
+            ]);
+        });
+
         it('should refuse to attach a child cycle that already belongs to another parent', async () => {
             const parent1 = await service.create(CreateCycleModel({ name: 'Group 1', type: CycleType.GROUP }));
             const parent2 = await service.create(CreateCycleModel({ name: 'Group 2', type: CycleType.GROUP }));

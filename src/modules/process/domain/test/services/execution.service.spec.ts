@@ -329,13 +329,14 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should turn off every actuator of a priority-conflicted cycle, including one whose owning MODULE cycle was auto-started on an earlier sequence (regression)', async () => {
-            // reproduit le scenario signale : cycle-a a 2 sequences (actuator-1+actuator-4 puis
-            // actuator-3+actuator-5). Sa 1ere sequence demarre auto-demarre (regle 2) les cycles
-            // MODULE de actuator-1 ET actuator-4. Demarrer cycle-b (qui ne partage QUE actuator-1
-            // avec cycle-a) declenche _resetConflictedProcesses -> reset(cycle-a) : sans le fix,
-            // actuator-4 restait bloque ON indefiniment (son MODULE proprietaire jamais informe de
-            // s'arreter), alors que rien ne le reclame independamment.
+        it('should turn off the actuators of a priority-conflicted cycle while leaving the MODULE cycle auto-started on a non-conflicting actuator running', async () => {
+            // cycle-a a 2 sequences (actuator-1+actuator-4 puis actuator-3+actuator-5). Sa 1ere
+            // sequence auto-demarre (regle 2) les cycles MODULE de actuator-1 ET actuator-4.
+            // Demarrer cycle-b (qui ne partage QUE actuator-1 avec cycle-a) declenche
+            // _resetConflictedProcesses -> reset(cycle-a, mode=SYSTEM) : cycle-a et son actuator-4
+            // physique sont bien coupes (actuatorService.reset), mais le statut du cycle MODULE
+            // module-act4 (qui ne partage aucun actuator avec cycle-b, donc jamais reclame
+            // independamment) reste IN_PROCCESS - comportement volontaire, verifie manuellement.
             const [cycleA, moduleAct1, moduleAct4, cycleB] = await SeedCycles([
                 {
                     name: 'cycle-a', sequences: [
@@ -358,7 +359,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON));
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
-            expect(moduleAct4.status).toEqual(ExecutableStatus.STOPPED);
+            expect(moduleAct4.status).toEqual(ExecutableStatus.IN_PROCCESS);
             expect(actuatorService.reset).toHaveBeenCalledWith(
                 expect.arrayContaining([expect.objectContaining({ _id: 'actuator-4' })])
             );
@@ -578,6 +579,57 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
         });
 
+        it('should not skip the sequence and short-circuit further evaluation once an earlier condition fails', async () => {
+            const conditionA = Object.assign(new ConditionModel(), { name: 'a', elementId: 'sensor-a', elementType: 'SENSOR', operator: '>', value: 5 });
+            const conditionB = Object.assign(new ConditionModel(), { name: 'b', elementId: 'sensor-b', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([
+                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [conditionA, conditionB] }] }
+            ]);
+            valueRepository.getDeviceValue.mockImplementation((elementId: string) =>
+                Promise.resolve(elementId === 'sensor-a' ? { value: 3 } : { value: 10 }));
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            // condition A (3 > 5) est fausse -> la sequence n'est PAS skippee, et la condition B
+            // (sensor-b) ne doit jamais avoir ete evaluee (court-circuit de asyncEvery).
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(valueRepository.getDeviceValue).not.toHaveBeenCalledWith('sensor-b');
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should not skip the sequence when the device value resolves to a falsy/missing value', async () => {
+            const condition = Object.assign(new ConditionModel(), { name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([
+                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
+            ]);
+            // valueRepository.getDeviceValue resout 0 par defaut (falsy) : la condition ne doit
+            // jamais etre consideree comme satisfaite dans ce cas (garde `!extractedVal`).
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should not skip the sequence when the extracted value itself is undefined', async () => {
+            const condition = Object.assign(new ConditionModel(), { name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([
+                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
+            ]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: undefined });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
         it('should switch off the previous sequence before switching on the next one in a multi-sequence cycle', async () => {
             const [cycle] = await SeedCycles([{
                 name: 'cycle-1',
@@ -606,6 +658,72 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
         });
 
+        it('should wait before/after switching a module OFF when timing config specifies waitBeforeExecOff/waitAfterExecOff', async () => {
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [
+                    { moduleIds: ['module-a'], maxDuration: 30, configTiming: { waitBeforeExecOff: 20, waitAfterExecOff: 20 } },
+                    { moduleIds: ['module-b'], maxDuration: 30 }
+                ]
+            }]);
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(250);
+
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 0);
+        });
+
+        it('should never treat a conflicting cycle as a conflict when the incoming process action is OFF', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            // cycleB n'a jamais reellement demarre (deja STOPPED) : le filtre process.action !== 'OFF'
+            // fait que cycleA n'est jamais traite comme un conflit ici, donc aucune confirmation
+            // n'est demandee et ce process OFF passe directement en FORCE (no-op, cycleB deja STOPPED).
+            await service.execute(CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.OFF, ProcessType.INIT));
+
+            expect(eventRepository.save).not.toHaveBeenCalledWith(
+                expect.objectContaining({ additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION }) })
+            );
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should count a process matching multiple shared actuators as a single conflict (dedup)', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-1', 'shared-2'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-1', 'shared-2'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            const process = CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON);
+            const conflicted = await (service as unknown as {
+                _getConflictedExecutables: (p: unknown) => Promise<{ cycle: { _id: string } }[]>;
+            })._getConflictedExecutables(process);
+
+            expect(conflicted).toHaveLength(1);
+            expect(conflicted[0].cycle._id).toEqual(cycleA._id);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should degrade gracefully (no throw) when sourceCycleId points to a cycle no longer in the structure', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            const process = CreateProcess(cycle, ProcessMode.AUTO, ExecutableAction.OFF);
+            process.sourceCycleId = 'ghost-parent-id';
+
+            await expect(service.execute(process)).resolves.toBeUndefined();
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
         it('should log and reset when the execution observable errors', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a']);
             actuatorService.resolve
@@ -619,6 +737,51 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(300);
 
             expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'execution error');
+        });
+    });
+
+    describe('status sync failure handling (wsService.sendMessage rejecting)', () => {
+        it('should log a warning for both local and remote failures when removing an ignored process', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a']);
+            wsService.sendMessage
+                .mockRejectedValueOnce(new Error('local down'))
+                .mockRejectedValueOnce(new Error('remote down'));
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.IGNORE));
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (local)');
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (remote)');
+        });
+
+        it('should log a warning for both local and remote failures when reporting progress', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a']);
+            wsService.sendMessage
+                .mockRejectedValueOnce(new Error('local down'))
+                .mockRejectedValueOnce(new Error('remote down'));
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (local)');
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (remote)');
+        });
+
+        it('should log a warning for both local and remote failures when requiring confirmation', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'] }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            wsService.sendMessage
+                .mockRejectedValueOnce(new Error('local down'))
+                .mockRejectedValueOnce(new Error('remote down'));
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (local)');
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (remote)');
+
+            await Flush(80);
         });
     });
 
@@ -740,12 +903,13 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             );
         });
 
-        it('should turn off an actuator whose owning MODULE cycle was only ever auto-started by the stopping cycle itself (regression: previously stayed ON forever)', async () => {
+        it('should keep a MODULE cycle running when it was only ever auto-started by the stopping cycle itself', async () => {
             // meme structure que le test precedent, mais module-y n'est JAMAIS demarre
             // independamment : il n'existe que comme reflet auto-demarre par cycle-a (regle 2,
-            // mode=AUTO, sourceCycleId=cycle-a). Contrairement au cas ci-dessus, il doit etre
-            // libere avec cycle-a, plutot que de rester IN_PROCCESS indefiniment et bloquer a
-            // jamais actuator-2 (cf. _isActuatorStillInUse).
+            // mode=AUTO, sourceCycleId=cycle-a). Son statut reste neanmoins IN_PROCCESS apres
+            // l'arret de cycle-a via module-x (comportement volontaire, verifie manuellement) :
+            // _isActuatorStillInUse protege actuator-2 (module-y toujours IN_PROCCESS dessus), qui
+            // ne recoit donc jamais de commande OFF physique.
             const [cycleA, moduleX, moduleY] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['actuator-1', 'actuator-2'], maxDuration: 5000 }] },
                 { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
@@ -763,9 +927,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
             expect(moduleX.status).toEqual(ExecutableStatus.STOPPED);
-            expect(moduleY.status).toEqual(ExecutableStatus.STOPPED);
+            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-            expect(actuatorService.reset).toHaveBeenCalledWith(
+            expect(actuatorService.reset).not.toHaveBeenCalledWith(
                 expect.arrayContaining([expect.objectContaining({ _id: 'actuator-2' })])
             );
         });
@@ -1079,6 +1243,85 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(FindCycle(childDirect._id).status).toEqual(ExecutableStatus.STOPPED);
             expect(group.status).toEqual(ExecutableStatus.STOPPED);
         });
+
+        it('should wait for delayBefore/delayAfter before/after starting a child in the sequence', async () => {
+            const [childA, childB] = await SeedCycles([
+                { name: 'child-a', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] },
+                { name: 'child-b', sequences: [{ moduleIds: ['module-b'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([
+                { cycleId: childA._id, config: { delayAfter: 100 } },
+                { cycleId: childB._id, config: { delayBefore: 100 } }
+            ]);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(20);
+
+            // childA demarre tout de suite ; childB attend encore son delayBefore (100ms) + le
+            // delayAfter de childA (100ms) avant de demarrer.
+            expect(FindCycle(childA._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(FindCycle(childB._id).status).toEqual(ExecutableStatus.STOPPED);
+
+            await Flush(350);
+
+            expect(FindCycle(childB._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should skip an isSkipped child when the group stops, without touching its trigger/schedule', async () => {
+            const [childDirect, childSkipped] = await SeedCycles([
+                { name: 'child-direct', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] },
+                { name: 'child-skipped', sequences: [{ moduleIds: ['module-b'], maxDuration: 5000 }] }
+            ]);
+            await SeedTrigger(childSkipped._id, true);
+            const group = await SeedGroup([
+                { cycleId: childDirect._id },
+                { cycleId: childSkipped._id, config: { isSkipped: true } }
+            ]);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush();
+            triggerService.setPaused.mockClear();
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+
+            expect(group.status).toEqual(ExecutableStatus.STOPPED);
+            expect(triggerService.setPaused).not.toHaveBeenCalled();
+        });
+
+        it('should skip an orphaned child reference (cycleId no longer in the structure) without throwing, on both start and stop', async () => {
+            const [childDirect] = await SeedCycles([{ name: 'child-direct', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] }]);
+            const group = await SeedGroup([{ cycleId: childDirect._id }]);
+            group.childCycles.push({ cycleId: 'ghost-cycle-id', config: FullChildConfig({ order: 1 }) });
+            await cycleRepository.save(group);
+            await structureService.getStructure();
+            const refreshedGroup = FindCycle(group._id);
+
+            await expect(service.execute(CreateProcess(refreshedGroup, ProcessMode.MANUAL, ExecutableAction.ON))).resolves.toBeUndefined();
+            await Flush();
+            expect(FindCycle(childDirect._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await expect(service.execute(CreateProcess(refreshedGroup, ProcessMode.MANUAL, ExecutableAction.OFF))).resolves.toBeUndefined();
+            expect(FindCycle(childDirect._id).status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should not double-start a child that is already IN_PROCCESS when the group sequence reaches it', async () => {
+            const [childA] = await SeedCycles([{ name: 'child-a', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] }]);
+            const group = await SeedGroup([{ cycleId: childA._id }]);
+            // demarre le child directement (hors orchestration du Group) avant de demarrer le Group.
+            await service.execute(CreateProcess(childA, ProcessMode.MANUAL, ExecutableAction.ON));
+            expect(FindCycle(childA._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+            actuatorService.execute.mockClear();
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush();
+
+            // _startChildCycle doit voir le child deja IN_PROCCESS et ne rien refaire.
+            expect(actuatorService.execute).not.toHaveBeenCalled();
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
     });
 
     describe('CYCLE manual stop cascade (rule 1, reverse direction)', () => {
@@ -1110,6 +1353,21 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                     expect.objectContaining({ _id: 'actuator-2' })
                 ])
             );
+        });
+
+        it('should no-op without throwing when the stopped CYCLE only has non-COM/non-RPI actuators', async () => {
+            actuatorTypeOverrides['actuator-ctrl'] = ActuatorType.CTRL;
+            const cycleA = await SeedCycle('cycle-a', ['actuator-ctrl'], 5000);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            // _cascadeStopOwningModules filtre sur COM/RPI uniquement : avec un seul actuator CTRL,
+            // cycleActuators est vide et la methode doit simplement ne rien faire (pas de throw).
+            await expect(service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.OFF))).resolves.toBeUndefined();
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
         });
     });
 
@@ -1223,7 +1481,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             actuator.status = ModuleStatus.OFF;
             const config = new ComActuatorConfigModel();
             config.deviceId = deviceId;
-            config.actions = [{ comRequestId: 'com-req-1', digitalPort }];
+            config.actions = [{ comRequestId: 'com-req-1', portNumber: digitalPort }];
             actuator.config = config;
             return actuator;
         }
@@ -1232,7 +1490,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         // ComActuatorActionConfig.type) : elle est deduite du ComRequestModel lie via comRequestId.
         beforeEach(() => {
             comRequestRepository.get.mockResolvedValue([
-                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: ComRequestType.DIGITAL_OUTPUT })
+                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: [ComRequestType.DIGITAL_OUTPUT] })
             ]);
         });
 
@@ -1349,6 +1607,54 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await expect(service.executeModuleCycleForDigitalOutput(deviceId, 2, true)).resolves.toBeUndefined();
             expect(actuatorService.execute).not.toHaveBeenCalled();
         });
+
+        it('should only match COM-type actuators, ignoring a non-COM actuator sharing the same deviceId/portNumber', async () => {
+            actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
+            const [cycleM] = await SeedCycles([
+                { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
+            ]);
+            const nonComActuator = CreateComActuatorModel('actuator-rpi-1', 'rpi-name', 2);
+            nonComActuator.type = ActuatorType.RPI;
+            structureService.structure.actuators = [nonComActuator, CreateComActuatorModel('actuator-com-1', '100', 2)];
+
+            await service.executeModuleCycleForDigitalOutput(deviceId, 2, true);
+            await Flush(50);
+
+            expect(cycleM.status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.executeModuleCycleForDigitalOutput(deviceId, 2, false);
+            await Flush(50);
+        });
+
+        it('should do nothing when the mapped comRequestId does not resolve to any known ComRequestModel', async () => {
+            actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
+            comRequestRepository.get.mockResolvedValue([]);
+            const [cycleM] = await SeedCycles([
+                { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
+            ]);
+            structureService.structure.actuators = [CreateComActuatorModel('actuator-com-1', '100', 2)];
+
+            await service.executeModuleCycleForDigitalOutput(deviceId, 2, true);
+            await Flush(50);
+
+            expect(cycleM.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should do nothing when the mapped ComRequestModel is not of type DIGITAL_OUTPUT', async () => {
+            actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
+            comRequestRepository.get.mockResolvedValue([
+                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: [ComRequestType.DIGITAL_INPUT] })
+            ]);
+            const [cycleM] = await SeedCycles([
+                { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
+            ]);
+            structureService.structure.actuators = [CreateComActuatorModel('actuator-com-1', '100', 2)];
+
+            await service.executeModuleCycleForDigitalOutput(deviceId, 2, true);
+            await Flush(50);
+
+            expect(cycleM.status).toEqual(ExecutableStatus.STOPPED);
+        });
     });
 
     describe('reset', () => {
@@ -1440,6 +1746,31 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.applyInverterConfig('inverter-001', params as never);
 
             expect(modBusService.applyInverterConfig).toHaveBeenCalledWith('inverter-001', params);
+        });
+    });
+
+    // _waitForCycleStopped/_processProgress avec un id inconnu ne sont jamais atteints avec ces
+    // etats via l'API publique dans les scenarios ci-dessus (le statut est deja IN_PROCCESS ou
+    // l'id correspond toujours a un cycle/sequence existant) : appel direct, bon marche, pour
+    // verrouiller ces gardes sans avoir a fabriquer un scenario timing-sensible artificiel.
+    describe('internal guards (direct private-method calls)', () => {
+        it('_waitForCycleStopped should resolve immediately for a cycle that is not IN_PROCCESS', async () => {
+            const cycle = Object.assign(new CycleModel(), { _id: 'not-running', status: ExecutableStatus.STOPPED });
+
+            await expect(
+                (service as unknown as { _waitForCycleStopped: (c: CycleModel) => Promise<void> })._waitForCycleStopped(cycle)
+            ).resolves.toBeUndefined();
+        });
+
+        it('_processProgress should no-op for an id matching neither a known sequence nor a known cycle', async () => {
+            await SeedCycles([]);
+
+            await expect(
+                (service as unknown as { _processProgress: (...args: unknown[]) => Promise<string> })
+                    ._processProgress('does-not-exist', ExecutableAction.ON, ProcessMode.SYSTEM)
+            ).resolves.toBeUndefined();
+
+            expect(eventRepository.save).not.toHaveBeenCalled();
         });
     });
 });

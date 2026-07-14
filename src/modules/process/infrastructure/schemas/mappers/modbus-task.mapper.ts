@@ -6,12 +6,14 @@ export class ModbusTaskMapper {
     public static mapToModel(task: ComRequestDocument): ComRequestModel {
         const model = new ComRequestModel();
         model._id = task._id.toString();
-        model.deviceId = task.connectionId;
-        model.name = task.label;
+        model.deviceId = task.deviceId;
+        model.name = task.name;
+        model.description = task.description;
         model.type = task.type;
         model.config = {
-            function: task.function as ModbusFunctionName,
+            function: task.function as ModbusFunctionName[],
             address: task.address,
+            disabled: task.disabled,
             params: task.params
         };
         model.createdAt = (task as unknown as { createdAt?: Date }).createdAt;
@@ -22,11 +24,13 @@ export class ModbusTaskMapper {
 
     public static mapToSchema(model: ComRequestModel): ComRequest {
         const task = new ComRequest();
-        task.connectionId = model.deviceId;
+        task.deviceId = model.deviceId;
         task.function = model.config.function;
-        task.label = model.name;
+        task.name = model.name;
+        task.description = model.description;
         task.type = model.type;
         task.address = model.config.address;
+        task.disabled = model.config.disabled;
         task.params = model.config.params;
         return task;
     }

@@ -1,6 +1,6 @@
 import ModbusRTU from 'modbus-serial';
-import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
+import { ModbusService } from '@process/domain/services/modbus.service';
+import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 
 interface MockModbusClient {
@@ -16,7 +16,7 @@ interface MockModbusClient {
     close: jest.Mock;
 }
 
-// ModbusTaskService pilote un vrai equipement Modbus (taches de lecture/ecriture + configuration
+// ModbusService pilote un vrai equipement Modbus (taches de lecture/ecriture + configuration
 // d'onduleur/VFD) : meme precaution que ctrl-actuator.strategy.spec.ts, 'modbus-serial' est
 // entierement mocke, aucun test n'ouvre jamais un vrai port serie/TCP.
 const mockModbusClients: MockModbusClient[] = [];
@@ -48,7 +48,7 @@ function CreateModbusTaskModel(configOverrides: Record<string, unknown> = {}): C
     task.deviceId = 'slave-1';
     task.name = 'task';
     task.config = {
-        function: 'readHoldingRegisters',
+        function: ['readHoldingRegisters'],
         address: 100,
         params: { length: 2, scale: 1 },
         ...configOverrides
@@ -90,19 +90,19 @@ function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
 }
 
-describe('ModbusTaskService (modbus-serial mocked)', () => {
+describe('ModbusService (modbus-serial mocked)', () => {
     let modbusTaskRepository: { get: jest.Mock };
     let deviceRepository: { get: jest.Mock };
     let masterDevice: DeviceModel;
     let slaveDevice: DeviceModel;
     let logger: ReturnType<typeof CreateLoggerMock>;
-    let service: ModbusTaskService;
+    let service: ModbusService;
 
     beforeEach(() => {
         mockModbusClients.length = 0;
         masterDevice = CreateMasterDeviceModel();
         slaveDevice = CreateSlaveDeviceModel();
-        modbusTaskRepository = { get: jest.fn().mockResolvedValue(CreateModbusTaskModel()) };
+        modbusTaskRepository = { get: jest.fn() };
         deviceRepository = {
             get: jest.fn((id: string) => Promise.resolve(
                 id === masterDevice._id ? masterDevice : id === slaveDevice._id ? slaveDevice : null
@@ -110,23 +110,22 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
         };
         logger = CreateLoggerMock();
 
-        service = new ModbusTaskService(
+        service = new ModbusService(
             deviceRepository as never,
             modbusTaskRepository as never,
             logger as never
         );
     });
 
-    describe('execute (read/write tasks)', () => {
+    describe('execute (read/write com requests)', () => {
         it('should read holding registers and decode/log the resulting value', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'readHoldingRegisters', address: 100 }));
             mockModbusClients.length = 0;
             // 1.0f en IEEE754 = 0x3F800000 ; avec wordSwap=true (fixe dans le service), registers = [16256, 0]
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
                 readHoldingRegisters: jest.fn().mockResolvedValue({ data: [16256, 0] })
             }));
 
-            await service.execute('task-1');
+            await service.execute(CreateModbusTaskModel({ function: ['readHoldingRegisters'], address: 100 }));
 
             expect(logger.log).toHaveBeenCalledWith(
                 expect.objectContaining({ label: 'task', value: 1 }),
@@ -136,69 +135,89 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
         });
 
         it('should throw when a read task returns no data', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'readHoldingRegisters' }));
             mockModbusClients.length = 0;
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
                 readHoldingRegisters: jest.fn().mockResolvedValue({ data: undefined })
             }));
 
-            await expect(service.execute('task-1')).rejects.toThrow('Aucune donnée reçue');
+            await expect(service.execute(CreateModbusTaskModel({ function: ['readHoldingRegisters'] }))).rejects.toThrow('Aucune donnée reçue');
         });
 
-        it('should write the given value to a write task', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'writeRegister', address: 50 }));
+        it('should write the given value to a write com request', async () => {
             mockModbusClients.length = 0;
             const writeRegister = jest.fn().mockResolvedValue({ address: 50, value: 42 });
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeRegister }));
+            const param: ComRequestConfigModel = { address: 50, function: [], params: { value: 42 } };
 
-            await service.execute('task-1', { value: 42 });
+            await service.execute(CreateModbusTaskModel({ function: ['writeRegister'], address: 50 }), param);
 
             expect(writeRegister).toHaveBeenCalledWith(50, 42);
             expect(logger.log).toHaveBeenCalledWith(expect.objectContaining({ value: 42 }), 'modbus write done');
         });
 
-        it('should throw when a write task is called without a value', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'writeRegister' }));
-
-            await expect(service.execute('task-1', {} as { value: number })).rejects.toThrow('Aucune valeur spécifiée pour l\'écriture');
+        it('should throw when no configured function is known to the client', async () => {
+            await expect(service.execute(CreateModbusTaskModel({ function: ['readSomethingElse'] }))).rejects.toThrow('Fonction Modbus inconnue: readSomethingElse');
         });
 
-        it('should throw when the client has no matching function at all', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'doSomethingElse' }));
-
-            await expect(service.execute('task-1')).rejects.toThrow('Fonction Modbus inconnue: doSomethingElse');
+        it('should throw when no configured function matches the requested read/write direction', async () => {
+            await expect(service.execute(CreateModbusTaskModel({ function: ['pingModule'] }))).rejects.toThrow('Aucune fonction Modbus de lecture configurée pour cette tâche');
         });
 
-        it('should throw for a client function that is neither a read nor a write', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'pingModule' }));
+        it('should pick the write function from a com request configured with both a read and a write function', async () => {
             mockModbusClients.length = 0;
-            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
-                pingModule: jest.fn().mockResolvedValue(undefined)
-            } as never));
+            const writeRegister = jest.fn().mockResolvedValue({ address: 50, value: 42 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeRegister }));
+            const param: ComRequestConfigModel = { address: 50, function: [], params: { value: 42 } };
 
-            await expect(service.execute('task-1')).rejects.toThrow('Type de fonction non supporté: pingModule');
+            await service.execute(CreateModbusTaskModel({ function: ['readCoils', 'writeRegister'], address: 50 }), param);
+
+            expect(writeRegister).toHaveBeenCalledWith(50, 42);
         });
 
         it('should throw when the number of decoded registers does not match the requested length', async () => {
-            modbusTaskRepository.get.mockResolvedValue(CreateModbusTaskModel({ function: 'readHoldingRegisters', params: { length: 2 } }));
             mockModbusClients.length = 0;
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
                 readHoldingRegisters: jest.fn().mockResolvedValue({ data: [0] })
             }));
 
-            await expect(service.execute('task-1')).rejects.toThrow('ne correspond pas au length');
+            await expect(service.execute(CreateModbusTaskModel({ function: ['readHoldingRegisters'], params: { length: 2 } }))).rejects.toThrow('ne correspond pas au length');
         });
 
-        it('should log an error but continue when execute is called without a taskId', async () => {
-            await expect(service.execute('')).resolves.toBeUndefined();
+        it('should log the raw boolean array for a readCoils com request instead of decoding it as floats', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readCoils: jest.fn().mockResolvedValue({ data: [true, false] })
+            }));
 
-            expect(logger.error).toHaveBeenCalledWith('modbus execute called without taskId');
+            await service.execute(CreateModbusTaskModel({ function: ['readCoils'], address: 0, params: { length: 2 } }));
+
+            expect(logger.log).toHaveBeenCalledWith(
+                expect.objectContaining({ label: 'task', value: [true, false] }),
+                'modbus read result'
+            );
         });
 
-        it('should log an error and stop when no slave device is found for the task', async () => {
+        it('should write to the persistence-offset address when param.params.persistence.persist is true', async () => {
+            mockModbusClients.length = 0;
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeRegister }));
+            const param: ComRequestConfigModel = { address: 50, function: [], params: { value: 42, persistence: { persist: true, address: 10 } } };
+
+            await service.execute(CreateModbusTaskModel({ function: ['writeRegister'], address: 50 }), param);
+
+            expect(writeRegister).toHaveBeenCalledWith(60, 42);
+        });
+
+        it('should log an error and reject when execute is called without a comRequest', async () => {
+            await expect(service.execute(undefined as unknown as ComRequestModel)).rejects.toThrow();
+
+            expect(logger.error).toHaveBeenCalledWith('modbus execute called without comRequest');
+        });
+
+        it('should log an error and stop when no slave device is found for the com request', async () => {
             deviceRepository.get.mockResolvedValue(null);
 
-            await expect(service.execute('task-1')).resolves.toBeUndefined();
+            await expect(service.execute(CreateModbusTaskModel())).resolves.toBeUndefined();
 
             expect(logger.error).toHaveBeenCalledWith({ slaveDeviceId: 'slave-1' }, 'no slave device found');
         });
@@ -206,7 +225,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
         it('should log an error and stop when no master device is found for the slave', async () => {
             deviceRepository.get.mockImplementation((id: string) => Promise.resolve(id === slaveDevice._id ? slaveDevice : null));
 
-            await expect(service.execute('task-1')).resolves.toBeUndefined();
+            await expect(service.execute(CreateModbusTaskModel())).resolves.toBeUndefined();
 
             expect(logger.error).toHaveBeenCalledWith({ masterDeviceId: 'master-1' }, 'no master device found');
         });
@@ -217,7 +236,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
             const connectRTUBuffered = jest.fn().mockResolvedValue(undefined);
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ connectRTUBuffered }));
 
-            await service.execute('task-1');
+            await service.execute(CreateModbusTaskModel());
 
             expect(connectRTUBuffered).toHaveBeenCalledWith('/dev/ttyUSB3', expect.objectContaining({ baudRate: 19200 }));
         });
@@ -225,14 +244,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
         it('should reject for an unknown connection protocol', async () => {
             masterDevice.config = Object.assign(new MasterConfigModel(), { protocol: 'foo' });
 
-            await expect(service.execute('task-1')).rejects.toThrow('Protocole inconnu: foo');
-        });
-
-        it('should reject when the task or connection lookup fails (invalid taskId)', async () => {
-            modbusTaskRepository.get.mockResolvedValue(null);
-
-            await expect(service.execute('missing-task')).rejects.toThrow();
-            expect(logger.error).toHaveBeenCalledWith({ taskId: 'missing-task' }, 'no modbus task found for taskId');
+            await expect(service.execute(CreateModbusTaskModel())).rejects.toThrow('Protocole inconnu: foo');
         });
 
         it('should swallow a network-related error instead of rejecting', async () => {
@@ -242,7 +254,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
                 readHoldingRegisters: jest.fn().mockRejectedValue(networkError)
             }));
 
-            await expect(service.execute('task-1')).resolves.toBeUndefined();
+            await expect(service.execute(CreateModbusTaskModel())).resolves.toBeUndefined();
         });
 
         it('should swallow a modbus-protocol-coded error instead of rejecting', async () => {
@@ -252,7 +264,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
                 readHoldingRegisters: jest.fn().mockRejectedValue(modbusError)
             }));
 
-            await expect(service.execute('task-1')).resolves.toBeUndefined();
+            await expect(service.execute(CreateModbusTaskModel())).resolves.toBeUndefined();
         });
 
         it('should reject an unexpected error that is neither network nor modbus-coded', async () => {
@@ -261,11 +273,15 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
                 readHoldingRegisters: jest.fn().mockRejectedValue(new Error('boom'))
             }));
 
-            await expect(service.execute('task-1')).rejects.toThrow('boom');
+            await expect(service.execute(CreateModbusTaskModel())).rejects.toThrow('boom');
         });
 
         it('should process queued calls sequentially and resolve all of them', async () => {
-            const results = await Promise.all([service.execute('task-1'), service.execute('task-1'), service.execute('task-1')]);
+            const results = await Promise.all([
+                service.execute(CreateModbusTaskModel()),
+                service.execute(CreateModbusTaskModel()),
+                service.execute(CreateModbusTaskModel())
+            ]);
 
             expect(results).toEqual([undefined, undefined, undefined]);
             expect(mockModbusClients).toHaveLength(3);
@@ -365,14 +381,14 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
 
     // Regression tests for the "Data length error, expected X got Y" / timeouts seen when
     // monitorDigitalOutputs polls the same physical bus as an actuator command: every Modbus
-    // operation (queued task, testExecuteTask, monitor poll) must now go through the same
-    // internal queue so no two transactions are ever in flight on the wire at once.
-    describe('operation ordering (monitor polls, testExecuteTask and execute never overlap)', () => {
+    // operation (queued execute() call, monitor poll) must now go through the same internal
+    // queue so no two transactions are ever in flight on the wire at once.
+    describe('operation ordering (monitor polls and execute never overlap)', () => {
         function FlushMicrotasks(): Promise<void> {
             return new Promise((resolve) => setImmediate(resolve));
         }
 
-        it('should run testExecuteTask only after a previously queued execute() call has completed', async () => {
+        it('should run a second execute() call only after a previously queued one has completed', async () => {
             mockModbusClients.length = 0;
             const order: string[] = [];
             let resolveFirstRead!: (value: { data: number[] }) => void;
@@ -387,24 +403,24 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
                 }))
                 .mockImplementationOnce(() => CreateMockClient({
                     readHoldingRegisters: jest.fn(() => {
-                        order.push('test-start');
+                        order.push('second-start');
                         return Promise.resolve({ data: [0, 0] });
                     })
                 }));
 
-            const executeCall = service.execute('task-1');
+            const firstCall = service.execute(CreateModbusTaskModel());
             await FlushMicrotasks();
             expect(order).toEqual(['execute-start']);
 
-            const testExecuteCall = service.testExecuteTask(CreateModbusTaskModel());
+            const secondCall = service.execute(CreateModbusTaskModel());
             await FlushMicrotasks();
-            // testExecuteTask must still be waiting behind the in-flight execute() call.
+            // The second execute() must still be waiting behind the in-flight first one.
             expect(order).toEqual(['execute-start']);
 
             resolveFirstRead({ data: [0, 0] });
-            await Promise.all([executeCall, testExecuteCall]);
+            await Promise.all([firstCall, secondCall]);
 
-            expect(order).toEqual(['execute-start', 'execute-end', 'test-start']);
+            expect(order).toEqual(['execute-start', 'execute-end', 'second-start']);
         });
 
         it('should serialize monitorDigitalOutputs polls behind actuator execute() calls on the same bus', async () => {
@@ -431,7 +447,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
             await FlushMicrotasks();
             expect(order).toEqual(['poll-start']);
 
-            const executeCall = service.execute('task-1');
+            const executeCall = service.execute(CreateModbusTaskModel());
             await FlushMicrotasks();
             // execute() must wait for the monitor's in-flight readCoils, not race it.
             expect(order).toEqual(['poll-start']);
@@ -468,7 +484,7 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
             await FlushMicrotasks();
             expect(order).toEqual(['poll-start']);
 
-            const executeCall = service.execute('task-1');
+            const executeCall = service.execute(CreateModbusTaskModel());
             await FlushMicrotasks();
             expect(order).toEqual(['poll-start']);
 
@@ -512,6 +528,163 @@ describe('ModbusTaskService (modbus-serial mocked)', () => {
             await handle.stop();
 
             expect(onChange).not.toHaveBeenCalled();
+        });
+
+        it('should not throw when onChange is omitted and a channel changes state', async () => {
+            mockModbusClients.length = 0;
+            const pollResults = [new Array(8).fill(false), new Array(8).fill(false).map((_, i) => i === 1)];
+            let callIndex = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readCoils: jest.fn(() => Promise.resolve({ data: pollResults[Math.min(callIndex++, pollResults.length - 1)] }))
+            }));
+
+            const handle = await service.monitorDigitalOutputs('slave-1', 10, 8);
+
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            await expect(handle.stop()).resolves.toBeUndefined();
+        });
+
+        it('should reject when no device is found for the deviceId', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+
+            await expect(service.monitorDigitalOutputs('missing-device', 10, 8))
+                .rejects.toThrow('monitorDigitalOutputs: no device found for deviceId "missing-device"');
+        });
+
+        it('should connect over RTU when the connection protocol is rtu', async () => {
+            masterDevice.config = Object.assign(new MasterConfigModel(), { protocol: MasterProtocol.RTU, path: '/dev/ttyUSB5', baudRate: 19200 });
+            mockModbusClients.length = 0;
+            const connectRTUBuffered = jest.fn().mockResolvedValue(undefined);
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ connectRTUBuffered }));
+
+            const handle = await service.monitorDigitalOutputs('slave-1', 100000, 8);
+            await handle.stop();
+
+            expect(connectRTUBuffered).toHaveBeenCalledWith('/dev/ttyUSB5', expect.objectContaining({ baudRate: 19200 }));
+        });
+
+        it('should reject for an unknown connection protocol', async () => {
+            masterDevice.config = Object.assign(new MasterConfigModel(), { protocol: 'foo' });
+
+            await expect(service.monitorDigitalOutputs('slave-1', 100000, 8)).rejects.toThrow('Protocole inconnu: foo');
+        });
+
+        it('should reconnect before the next poll if the connection has closed in between', async () => {
+            mockModbusClients.length = 0;
+            const connectTCP = jest.fn().mockResolvedValue(undefined);
+            const client = CreateMockClient({ connectTCP, readCoils: jest.fn().mockResolvedValue({ data: new Array(8).fill(false) }) });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => client);
+
+            const handle = await service.monitorDigitalOutputs('slave-1', 10, 8);
+            expect(connectTCP).toHaveBeenCalledTimes(1);
+            client.isOpen = false;
+
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            await handle.stop();
+
+            expect(connectTCP.mock.calls.length).toBeGreaterThanOrEqual(2);
+        });
+
+        it('should log a warning and keep polling when a read fails', async () => {
+            mockModbusClients.length = 0;
+            const readCoils = jest.fn()
+                .mockRejectedValueOnce(new Error('bus error'))
+                .mockResolvedValue({ data: new Array(8).fill(false) });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ readCoils }));
+
+            const handle = await service.monitorDigitalOutputs('slave-1', 10, 8);
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            await handle.stop();
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ deviceId: 'slave-1' }), 'digital output monitor read failed');
+        });
+    });
+
+    describe('monitorDigitalInputs (long-press detection)', () => {
+        it('should invoke onLongPress once a channel has been held past longPressMs', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readDiscreteInputs: jest.fn().mockResolvedValue({ data: [true, false] })
+            }));
+
+            const onLongPress = jest.fn();
+            const handle = await service.monitorDigitalInputs('slave-1', 10, 2, 30, onLongPress);
+
+            await new Promise((resolve) => setTimeout(resolve, 80));
+            await handle.stop();
+
+            expect(onLongPress).toHaveBeenCalledTimes(1);
+            expect(onLongPress).toHaveBeenCalledWith(expect.objectContaining({ channel: 0, heldMs: expect.any(Number) }));
+            expect(onLongPress.mock.calls[0][0].heldMs).toBeGreaterThanOrEqual(30);
+            expect(logger.log).toHaveBeenCalledWith(expect.objectContaining({ deviceId: 'slave-1', channel: 0 }), 'digital input long press detected');
+        });
+
+        it('should not invoke onLongPress and should reset state when the channel is released before longPressMs', async () => {
+            mockModbusClients.length = 0;
+            const pollResults = [[true, false], [true, false], [false, false]];
+            let callIndex = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readDiscreteInputs: jest.fn(() => Promise.resolve({ data: pollResults[Math.min(callIndex++, pollResults.length - 1)] }))
+            }));
+
+            const onLongPress = jest.fn();
+            const handle = await service.monitorDigitalInputs('slave-1', 10, 2, 25, onLongPress);
+
+            await new Promise((resolve) => setTimeout(resolve, 80));
+            await handle.stop();
+
+            expect(onLongPress).not.toHaveBeenCalled();
+        });
+
+        it('should only fire onLongPress once even when held across several polls past the threshold', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readDiscreteInputs: jest.fn().mockResolvedValue({ data: [true] })
+            }));
+
+            const onLongPress = jest.fn();
+            const handle = await service.monitorDigitalInputs('slave-1', 10, 1, 20, onLongPress);
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await handle.stop();
+
+            expect(onLongPress).toHaveBeenCalledTimes(1);
+        });
+
+        it('should reject when no device is found for the deviceId', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+
+            await expect(service.monitorDigitalInputs('missing-device', 10, 8, 5000))
+                .rejects.toThrow('monitorDigitalInputs: no device found for deviceId "missing-device"');
+        });
+
+        it('should reconnect before the next poll if the connection has closed in between', async () => {
+            mockModbusClients.length = 0;
+            const connectTCP = jest.fn().mockResolvedValue(undefined);
+            const client = CreateMockClient({ connectTCP, readDiscreteInputs: jest.fn().mockResolvedValue({ data: new Array(8).fill(false) }) });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => client);
+
+            const handle = await service.monitorDigitalInputs('slave-1', 10, 8, 5000);
+            expect(connectTCP).toHaveBeenCalledTimes(1);
+            client.isOpen = false;
+
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            await handle.stop();
+
+            expect(connectTCP.mock.calls.length).toBeGreaterThanOrEqual(2);
+        });
+
+        it('should log a warning and keep polling when a read fails', async () => {
+            mockModbusClients.length = 0;
+            const readDiscreteInputs = jest.fn()
+                .mockRejectedValueOnce(new Error('bus error'))
+                .mockResolvedValue({ data: new Array(8).fill(false) });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ readDiscreteInputs }));
+
+            const handle = await service.monitorDigitalInputs('slave-1', 10, 8, 5000);
+            await handle.stop();
+
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ deviceId: 'slave-1' }), 'digital input monitor read failed');
         });
     });
 });

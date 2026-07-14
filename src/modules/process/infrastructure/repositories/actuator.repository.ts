@@ -49,8 +49,4 @@ export class ActuatorRepository {
         return this.actuatorMongooseRepository.findAll();
     }
 
-    public async migrateLegacyCollections(): Promise<void> {
-        return this.actuatorMongooseRepository.migrateLegacyCollections();
-    }
-
 }

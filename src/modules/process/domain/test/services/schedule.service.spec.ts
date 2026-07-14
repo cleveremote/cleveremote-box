@@ -147,6 +147,47 @@ describe('ScheduleService', () => {
 
             expect(schedulerRegistry.doesExist('cron', schedule._id)).toBe(true);
         });
+
+        it('should register a sun-based schedule (non-SUNRISE) without throwing', () => {
+            const schedule = CreateScheduleModel({ cron: { sunBehavior: { sunState: SunState.SUNSET, time: 0 } } });
+
+            expect(() => service.createSchedule(schedule, jest.fn())).not.toThrow();
+
+            expect(schedulerRegistry.doesExist('cron', schedule._id)).toBe(true);
+        });
+    });
+
+    describe('setPaused', () => {
+        it('should return the same schedule without saving when isPaused already matches', async () => {
+            const schedule = CreateScheduleModel({ isPaused: false });
+            const saveSpy = jest.spyOn(scheduleRepository, 'save');
+
+            const result = await service.setPaused(schedule, false);
+
+            expect(result).toBe(schedule);
+            expect(saveSpy).not.toHaveBeenCalled();
+            saveSpy.mockRestore();
+        });
+
+        it('should stop the cron job when pausing an already-registered schedule', async () => {
+            const schedule = CreateScheduleModel({ isPaused: false, cron: { pattern: '0 0 1 1 *' } });
+            await service.initSchedule(schedule);
+            const job = schedulerRegistry.getCronJob(schedule._id);
+            const stopSpy = jest.spyOn(job, 'stop');
+
+            await service.setPaused(schedule, true);
+
+            expect(stopSpy).toHaveBeenCalled();
+        });
+
+        it('should create the cron job from scratch when resuming a schedule that was never registered', async () => {
+            const schedule = CreateScheduleModel({ isPaused: true });
+
+            await service.setPaused(schedule, false);
+
+            expect(schedulerRegistry.doesExist('cron', schedule._id)).toBe(true);
+            expect(schedulerRegistry.getCronJob(schedule._id).isActive).toBe(true);
+        });
     });
 
     describe('deleteCronJob', () => {
@@ -259,6 +300,40 @@ describe('ScheduleService', () => {
             let pendingCallback: Promise<void>;
             const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
                 .mockImplementation(((fn: () => Promise<void>) => { pendingCallback = fn(); return 0; }) as never);
+            await schedulerRegistry.getCronJob(schedule._id).fireOnTick();
+            await pendingCallback;
+
+            expect(processService.execute).toHaveBeenCalledWith(expect.objectContaining({ cycle, action: ExecutableAction.ON }));
+            setTimeoutSpy.mockRestore();
+        });
+
+        it('should schedule the internal delay at 0ms when the schedule uses sunBehavior', async () => {
+            let capturedDelay: number;
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+                .mockImplementation(((fn: () => Promise<void>, delay?: number) => { capturedDelay = delay; return 0; }) as never);
+            const cycle = CreateCycleModel({ _id: 'cycle-1' });
+            configurationService.structure.cycles = [cycle];
+            const schedule = CreateScheduleModel({
+                cycleId: 'cycle-1', isPaused: false, cron: { sunBehavior: { sunState: SunState.SUNRISE, time: 0 } }
+            });
+
+            await service.initSchedule(schedule);
+            await schedulerRegistry.getCronJob(schedule._id).fireOnTick();
+
+            expect(capturedDelay).toEqual(0);
+            setTimeoutSpy.mockRestore();
+        });
+
+        it('should fall back to the originally-captured schedule when it is no longer tracked in configurationService.schedules by tick time', async () => {
+            let pendingCallback: Promise<void>;
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+                .mockImplementation(((fn: () => Promise<void>) => { pendingCallback = fn(); return 0; }) as never);
+            const cycle = CreateCycleModel({ _id: 'cycle-1' });
+            configurationService.structure.cycles = [cycle];
+            const schedule = CreateScheduleModel({ cycleId: 'cycle-1', isPaused: false, cron: { pattern: '0 0 1 1 *', after: 10 } });
+
+            await service.initSchedule(schedule);
+            configurationService.schedules.splice(0, configurationService.schedules.length);
             await schedulerRegistry.getCronJob(schedule._id).fireOnTick();
             await pendingCallback;
 

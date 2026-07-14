@@ -2,7 +2,6 @@
 /* eslint-disable no-empty */
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
 import { CycleModel } from '../models/cycle.model';
 import {
     SynchronizeActuatorModel,
@@ -36,7 +35,6 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 @Injectable()
 export class SynchronizeService {
     public constructor(
-        private structureRepository: StructureRepository,
         private deviceRepository: DeviceRepository,
         private modbusTaskRepository: ComRequestRepository,
         private cycleRepository: CycleRepository,
@@ -55,7 +53,7 @@ export class SynchronizeService {
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
         this.logger.log('synchronizing structure');
         // toute la structure est persistee dans Mongo (remplacement complet par collection) ;
-        // structureRepository (json-db) ne garde plus qu'un squelette vide, immediatement ecrase
+        // data part d'un StructureModel vide, immediatement ecrase champ par champ ci-dessous
         const incoming = {
             // structureModel.cycles proviennent de StructureSynchronizeDTO.mapToStructureModel(), donc
             // reellement des SynchronizeCycleModel (avec sequences: SynchronizeSequenceModel[])
@@ -66,7 +64,7 @@ export class SynchronizeService {
         structureModel.cycles = [];
         structureModel.sensors = [];
         structureModel.modbusTasks = [];
-        const data = await this.structureRepository.save(structureModel);
+        const data = new StructureModel();
         data.cycles = await this.cycleRepository.replaceAll(incoming.cycles);
         data.sensors = await this.sensorRepository.replaceAll(incoming.sensors ?? []);
         data.modbusTasks = await this.modbusTaskRepository.replaceAll(incoming.modbusTasks ?? []);

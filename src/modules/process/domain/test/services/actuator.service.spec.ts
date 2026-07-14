@@ -51,7 +51,12 @@ describe('ActuatorService', () => {
             Gpio.accessible = false;
             logger = CreateLoggerMock();
             modBusService = { execute: jest.fn() };
-            comRequestRepository = { get: jest.fn().mockResolvedValue(Object.assign(new ComRequestModel(), { _id: 'com-request-1' })) };
+            comRequestRepository = {
+                get: jest.fn().mockResolvedValue(Object.assign(new ComRequestModel(), {
+                    _id: 'com-request-1',
+                    config: { address: 5, function: [], params: { value: 0 } }
+                }))
+            };
             const strategies = [new RpiActuatorStrategy(logger as never), new ComActuatorStrategy(modBusService as never, comRequestRepository as never)];
             service = new ActuatorService(logger as never, {} as never, strategies);
         });
@@ -77,7 +82,10 @@ describe('ActuatorService', () => {
 
             await service.execute(actuator, 1);
 
-            expect(modBusService.execute).toHaveBeenCalledWith('com-request-1', { value: 1 });
+            expect(modBusService.execute).toHaveBeenCalledWith(
+                expect.objectContaining({ _id: 'com-request-1' }),
+                expect.objectContaining({ address: 1, params: expect.objectContaining({ value: 1 }) })
+            );
         });
 
         it('should throw NotImplementedError for an unsupported actuator type', async () => {

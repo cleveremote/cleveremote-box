@@ -33,8 +33,7 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType } from '../models/event.model';
-import { type InverterConfigParam, ModbusTaskService } from './modbus-task.service';
-import { report } from 'process';
+import { type InverterConfigParam, ModbusService } from './modbus.service';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
@@ -57,7 +56,7 @@ export class ProcessService {
         private cycleRepository: CycleRepository,
         private valueRepository: ValueRepository,
         private eventRepository: EventRepository,
-        private modBusService: ModbusTaskService,
+        private modBusService: ModbusService,
         private actuatorService: ActuatorService,
         private comRequestRepository: ComRequestRepository,
         @Inject(forwardRef(() => TriggerService)) private triggerService: TriggerService,
@@ -181,7 +180,7 @@ export class ProcessService {
         const candidates = this.configurationService.structure.actuators.filter((a) => {
             if (a.type !== ActuatorType.COM) return false;
             const config = a.config as ComActuatorConfigModel;
-            return config.deviceId === deviceId && config.actions?.[0]?.digitalPort === channel;
+            return config.deviceId === deviceId && config.actions?.[0]?.portNumber === channel;
         });
         if (!candidates.length) return;
 
@@ -200,7 +199,7 @@ export class ProcessService {
         const comRequests = await this.comRequestRepository.get() as ComRequestModel[];
         const isDigitalOutput = candidates.some((a) => {
             const comRequestId = (a.config as ComActuatorConfigModel).actions?.[0]?.comRequestId;
-            return comRequests.find((comRequest) => comRequest._id === comRequestId)?.type === ComRequestType.DIGITAL_OUTPUT;
+            return comRequests.find((comRequest) => comRequest._id === comRequestId)?.type?.includes(ComRequestType.DIGITAL_OUTPUT);
         });
         if (!isDigitalOutput) return;
 
@@ -976,22 +975,22 @@ export class ProcessService {
         return this.modBusService.applyInverterConfig(inverterId, params);
     }
 
-    private percentToFrequencyRegister(taskId, percent) {
-        const MAX_HZ = 50;
-        const SCALE = 100; // 0.01 Hz
+    // private percentToFrequencyRegister(taskId, percent) {
+    //     const MAX_HZ = 50;
+    //     const SCALE = 100; // 0.01 Hz
 
-        // sécurité
-        if (percent < 0) percent = 0;
-        if (percent > 100) percent = 100;
+    //     // sécurité
+    //     if (percent < 0) percent = 0;
+    //     if (percent > 100) percent = 100;
 
-        // calcul fréquence
-        const frequencyHz = (percent / 100) * MAX_HZ;
+    //     // calcul fréquence
+    //     const frequencyHz = (percent / 100) * MAX_HZ;
 
-        // valeur registre Modbus
-        const registerValue = Math.round(frequencyHz * SCALE);
-        this.modBusService.execute(taskId, { value: registerValue, adress: 0 });
+    //     // valeur registre Modbus
+    //     const registerValue = Math.round(frequencyHz * SCALE);
+    //     this.modBusService.execute(taskId, { value: registerValue, adress: 0 });
 
-    }
+    // }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
         const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };

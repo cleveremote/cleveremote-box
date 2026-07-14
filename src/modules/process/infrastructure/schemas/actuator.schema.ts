@@ -10,7 +10,7 @@ export class ComActuatorActionConfig {
     public comRequestId: string;
 
     @Prop({ required: true })
-    public digitalPort: number;
+    public portNumber: number;
 }
 export const ComActuatorActionConfigSchema = SchemaFactory.createForClass(ComActuatorActionConfig);
 
@@ -54,6 +54,9 @@ export class CtrlActuatorConfig {
     @Prop()
     public channel?: number;
 
+    @Prop({ type: [ComActuatorActionConfigSchema], default: [] })
+    public actions?: ComActuatorActionConfig[];
+
     @Prop()
     public flowMeterId?: string;
 
@@ -80,6 +83,9 @@ export class CtrlActuatorConfig {
 
     @Prop({ default: 500 })
     public iterationDelayMs?: number;
+
+    @Prop({ default: 7000 })
+    public fullStrokeMs?: number;
 
     @Prop({ default: 'PROPORTIONAL' })
     public valveType?: string;

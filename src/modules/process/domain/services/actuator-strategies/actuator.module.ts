@@ -15,7 +15,7 @@ import { DeviceRepository } from '@process/infrastructure/repositories/device.re
 import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestkMongooseRepository } from '@process/infrastructure/repositories/com-request-mongoose.repository';
-import { ModbusTaskService } from '@process/domain/services/modbus-task.service';
+import { ModbusService } from '@process/domain/services/modbus.service';
 import { ActuatorService } from '../actuator.service';
 import { RpiActuatorStrategy } from './rpi-actuator.strategy';
 import { ComActuatorStrategy } from './com-actuator.strategy';
@@ -46,7 +46,7 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         DeviceMongooseRepository,
         ComRequestRepository,
         ComRequestkMongooseRepository,
-        ModbusTaskService,
+        ModbusService,
         RpiActuatorStrategy,
         ComActuatorStrategy,
         CtrlActuatorStrategy,
@@ -56,6 +56,6 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             inject: [RpiActuatorStrategy, ComActuatorStrategy, CtrlActuatorStrategy]
         }
     ],
-    exports: [ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, ModbusTaskService, CtrlActuatorStrategy]
+    exports: [ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, ModbusService, CtrlActuatorStrategy]
 })
 export class ActuatorModule { }

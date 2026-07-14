@@ -13,7 +13,6 @@ import { SocketIoClientProvider } from '../../../common/websocket/socket-io-clie
 import { ProcessService } from '@process/domain/services/execution.service';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { ConfigurationController } from './controllers/configuration.controller';
-import { StructureRepository } from './repositories/structure.repository';
 import { ExecutionController } from './controllers/execution.controller';
 import { InitService } from '@process/domain/services/init.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
@@ -21,7 +20,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { DbService } from './db/db.service';
 import { CycleRepository } from './repositories/cycle.repository';
 import { SequenceRepository } from './repositories/sequence.repository';
 import { TriggerRepository } from './repositories/trigger.repository';
@@ -43,6 +41,7 @@ import { TriggerMongooseRepository } from './repositories/trigger-mongoose.repos
 import { SensorMongooseRepository } from './repositories/sensor-mongoose.repository';
 import { CycleGroupService } from '@process/domain/services/cycle-group.service';
 import { ActuatorModule } from '@process/domain/services/actuator-strategies/actuator.module';
+import { DeviceModule } from '@process/domain/services/device-strategies/device.module';
 import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategies/forcast-sensor.strategy';
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
@@ -67,7 +66,8 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema }
         ]),
-        ActuatorModule
+        ActuatorModule,
+        DeviceModule
     ],
     controllers: [
         ConfigurationController,
@@ -76,14 +76,12 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         PingController
     ],
     providers: [
-        DbService,
         //----Repositories------//
         AuthenticationRepository,
         CycleRepository,
         SequenceRepository,
         TriggerRepository,
         ScheduleRepository,
-        StructureRepository,
         SensorRepository,
         ValueRepository,
         EventRepository,

@@ -34,7 +34,7 @@ export class ActuatorMapper {
             config.deviceId = comConfig.deviceId;
             config.actions = (comConfig.actions ?? []).map((action) => ({
                 comRequestId: action.comRequestId,
-                digitalPort: action.digitalPort
+                portNumber: action.portNumber
             }));
             model.config = config;
         } else {
@@ -42,6 +42,10 @@ export class ActuatorMapper {
             const config = new CtrlActuatorConfigModel();
             config.deviceId = ctrlConfig.deviceId;
             config.channel = ctrlConfig.channel;
+            config.actions = (ctrlConfig.actions ?? []).map((action) => ({
+                comRequestId: action.comRequestId,
+                portNumber: action.portNumber
+            }));
             config.flowMeterId = ctrlConfig.flowMeterId;
             config.maxFlowRate = ctrlConfig.maxFlowRate;
             config.kP = ctrlConfig.kP;
@@ -51,6 +55,7 @@ export class ActuatorMapper {
             config.tolerance = ctrlConfig.tolerance;
             config.maxIterations = ctrlConfig.maxIterations;
             config.iterationDelayMs = ctrlConfig.iterationDelayMs;
+            config.fullStrokeMs = ctrlConfig.fullStrokeMs;
             config.valveType = ctrlConfig.valveType;
             model.config = config;
         }
@@ -88,6 +93,7 @@ export class ActuatorMapper {
             config: {
                 deviceId: config.deviceId,
                 channel: config.channel,
+                actions: config.actions,
                 flowMeterId: config.flowMeterId,
                 maxFlowRate: config.maxFlowRate,
                 kP: config.kP,
@@ -97,6 +103,7 @@ export class ActuatorMapper {
                 tolerance: config.tolerance,
                 maxIterations: config.maxIterations,
                 iterationDelayMs: config.iterationDelayMs,
+                fullStrokeMs: config.fullStrokeMs,
                 valveType: config.valveType
             }
         };

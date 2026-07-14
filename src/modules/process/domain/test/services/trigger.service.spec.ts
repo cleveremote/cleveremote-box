@@ -20,6 +20,7 @@ import { TriggerModel } from '@process/domain/models/trigger.model';
 import { ConditionModel } from '@process/domain/models/condition.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ElementType } from '@process/domain/models/event.model';
+import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateTriggerModel } from './trigger.spec-mock';
 
@@ -63,7 +64,6 @@ describe('TriggerService', () => {
     let configurationService: { triggers: TriggerModel[]; schedules: unknown[]; structure: { cycles: unknown[] } };
     let valueRepository: { getDeviceValue: jest.Mock };
     let eventRepository: { save: jest.Mock };
-    let structureRepository: { get: jest.Mock };
     let sensorRepository: Record<string, never>;
     let processService: { execute: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -110,7 +110,6 @@ describe('TriggerService', () => {
         configurationService = { triggers: [], schedules: [], structure: { cycles: [] } };
         valueRepository = { getDeviceValue: jest.fn() };
         eventRepository = { save: jest.fn().mockResolvedValue(undefined) };
-        structureRepository = { get: jest.fn().mockResolvedValue(undefined) };
         sensorRepository = {};
         logger = CreateLoggerMock();
 
@@ -127,7 +126,6 @@ describe('TriggerService', () => {
         service = new TriggerService(
             configurationService as unknown as StructureService,
             scheduleService,
-            structureRepository as never,
             triggerRepository,
             scheduleRepository,
             sensorRepository as never,
@@ -172,6 +170,51 @@ describe('TriggerService', () => {
         it('should not track anything when deleting a trigger id that is not tracked', async () => {
             await service.initTrigger(CreateTriggerModel({ id: 'ghost' }), true);
 
+            expect(service.triggers).toHaveLength(0);
+        });
+
+        it('should default isDeleted to false when omitted', async () => {
+            const trigger = CreateTriggerModel();
+
+            await service.initTrigger(trigger);
+
+            expect(service.triggers).toContainEqual(trigger);
+        });
+    });
+
+    describe('setPaused', () => {
+        it('should return the same trigger without saving when isPaused already matches', async () => {
+            const trigger = CreateTriggerModel({ isPaused: false });
+            const saveSpy = jest.spyOn(triggerRepository, 'save');
+
+            const result = await service.setPaused(trigger, false);
+
+            expect(result).toBe(trigger);
+            expect(saveSpy).not.toHaveBeenCalled();
+            saveSpy.mockRestore();
+        });
+
+        it('should save and return the updated trigger when isPaused differs', async () => {
+            const trigger = CreateTriggerModel({ isPaused: false });
+
+            const result = await service.setPaused(trigger, true);
+
+            expect(result.isPaused).toBe(true);
+        });
+
+        it('should replace the tracked entry in service.triggers when the trigger is tracked', async () => {
+            const trigger = CreateTriggerModel({ isPaused: false });
+            await service.initTrigger(trigger, false);
+
+            const result = await service.setPaused(trigger, true);
+
+            expect(service.triggers.find((t) => t.id === trigger.id)).toEqual(result);
+        });
+
+        it('should not throw when the trigger is not tracked in service.triggers', async () => {
+            const trigger = CreateTriggerModel({ isPaused: false });
+
+            await expect(service.setPaused(trigger, true)).resolves.toEqual(expect.objectContaining({ isPaused: true }));
             expect(service.triggers).toHaveLength(0);
         });
     });
@@ -318,6 +361,145 @@ describe('TriggerService', () => {
                     additionalData: expect.objectContaining({ type: 'sensor', value: 'IN_PROCCESS' })
                 })
             );
+        });
+
+        it('should tag a persisted event as a SEQUENCE element when the process value type is SEQUENCE', async () => {
+            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'seq-1' })] });
+            configurationService.triggers = [trigger];
+            service.initilize();
+
+            service.onElementValueChanged.next({ id: 'seq-1', type: 'SEQUENCE', status: 'IN_PROCCESS' } as never);
+            await Flush();
+
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({ elementId: 'seq-1', elementType: 'SEQUENCE' })
+            );
+        });
+
+        it('should tolerate an undefined sensor value when saving the sensor event', async () => {
+            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'sensor-1' })] });
+            configurationService.triggers = [trigger];
+            service.initilize();
+
+            service.onElementValueChanged.next({ id: 'sensor-1', value: undefined } as never);
+            await Flush();
+
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({ elementType: 'SENSOR', additionalData: { value: undefined } })
+            );
+        });
+
+        it('should tolerate an undefined status when saving a CYCLE/SEQUENCE event', async () => {
+            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'process-1' })] });
+            configurationService.triggers = [trigger];
+            service.initilize();
+
+            service.onElementValueChanged.next({ id: 'process-1', type: 'CYCLE', status: undefined } as never);
+            await Flush();
+
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({ elementType: 'CYCLE', additionalData: { type: 'sensor', value: undefined } })
+            );
+        });
+
+        it('should allow re-checking once the configured delay has elapsed since lastTriggeredAt', async () => {
+            const trigger = CreateTriggerModel({
+                lastTriggeredAt: new Date(Date.now() - 2000),
+                delay: 1000,
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(valueRepository.getDeviceValue).toHaveBeenCalled();
+        });
+
+        it('should still allow checking when trigger.delay is falsy (0)', async () => {
+            const trigger = CreateTriggerModel({
+                lastTriggeredAt: new Date(Date.now() - 100000),
+                delay: 0,
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(valueRepository.getDeviceValue).toHaveBeenCalled();
+        });
+
+        it('should not verify the condition when the device value resolves to undefined', async () => {
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(undefined);
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(0);
+        });
+
+        it('should read `.status` instead of `.value` for a non-SENSOR condition element type', async () => {
+            const trigger = CreateTriggerModel({
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 1 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue({ status: 1 } as never);
+
+            service.onElementValueChanged.next({ id: 'cycle-x', value: 10 } as never);
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(1);
+        });
+
+        it('should not verify the condition when the extracted value itself is undefined', async () => {
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue({ value: undefined } as never);
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(0);
+        });
+
+        it('should compute the execution time from sunset when sunBehavior.sunState is SUNRISE', async () => {
+            const trigger = CreateTriggerModel({
+                trigger: { sunBehavior: { sunState: SunState.SUNRISE, time: 0 } },
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(1);
+        });
+
+        it('should compute the execution time from sunrise when sunBehavior.sunState is not SUNRISE', async () => {
+            const trigger = CreateTriggerModel({
+                trigger: { sunBehavior: { sunState: SunState.SUNSET, time: 0 } },
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(1);
         });
     });
 });

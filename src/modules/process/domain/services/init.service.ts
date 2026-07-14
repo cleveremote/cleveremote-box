@@ -5,19 +5,20 @@ import { ProcessService } from './execution.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
-import { DbService } from '@process/infrastructure/db/db.service';
 import { AuthenticationService } from './authentication.service';
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
-import { ModbusTaskService } from './modbus-task.service';
+import { ModbusService } from './modbus.service';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ActuatorType } from '../interfaces/actuator-module.interface';
 import { ModuleStatus } from '../interfaces/structure.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ModbusFunctionName } from '../models/com-request.model';
 import { ComRequestType } from '../interfaces/com-request.interface';
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
+import { ActuatorService } from './actuator.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -28,15 +29,16 @@ export class InitService {
     public constructor(
         private configurationService: StructureService,
         private authenticationService: AuthenticationService,
-        private dbService: DbService,
         private processService: ProcessService,
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
         private bleService: BleService,
-        private modBusService: ModbusTaskService,
+        private modBusService: ModbusService,
         private actuatorRepository: ActuatorRepository,
+        private comRequestRepository: ComRequestRepository,
         private ctrlActuatorStrategy: CtrlActuatorStrategy,
+        private actuatorService: ActuatorService,
         private readonly logger: Logger,
         private readonly _processService: ProcessService
     ) { }
@@ -67,10 +69,7 @@ export class InitService {
         const wrap = (name: string, fn: () => Promise<any> | void) =>
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
-        return wrap('DbService.initialize', () => this.dbService.initialize())
-            .then(() => wrap('ActuatorRepository.migrateLegacyCollections', () => this.actuatorRepository.migrateLegacyCollections()))
-            .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
-            //.then(() => wrap('InitService.seedDefaultValves', () => this._seedDefaultValves()))
+        return wrap('StructureService.getStructure', () => this._loadConfiguration())
             .then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
@@ -80,96 +79,66 @@ export class InitService {
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
-            /* .then(() => {
+           /*  .then(() => {
                  return this._processService.applyInverterConfig("inverter-001", [ 
                 
-                     /*
+                     
                      // { "param": "F05.02", "value": 30 }                
-                     // { "param": "F05.03", "value": 50 },
+                     // { "param": "F05.03", "value": 5000 },
                      // { "param": "F05.04", "value": 2900 },
                      // { "param": "F05.05", "value": 380 },
-                     // { "param": "F05.06", "value": 10 },
+                     // { "param": "F05.06", "value": 100 },
                      
-                     
-                     
-                     
-                     //  { "param": "F00.02", "value": 1,persist:true },
-                     //  { "param": "F00.03", "value": 8,persist:true },
-                     //  { "param": "F00.11", "value": 4500,persist:true },
-                     //  { "param": "F00.12", "value": 3300,persist:true },
-                     //  { "param": "F00.14", "value": 4250,persist:true },
-                     //  { "param": "F00.15", "value": 1500,persist:true },
-                     //
                      // { "param": "F01.10", "value": 0 },
                      // { "param": "F01.35", "value": 1 }, 
-                     //
+                     
                      // { "param": "F02.00", "value": 1 }, 
                      // { "param": "F02.24", "value": 0 }, lié au F01.35 pour cas ou coupure reprise en prenant compte de l'etat actuelle
                      // { "param": "F02.44", "value": 1 },
                      // { "param": "F02.43", "value": 0 },
-                     // 
+                      
                      //  { "param": "F03.00", "value": 50 },
                      //  { "param": "F03.01", "value": 0 },
                      //  { "param": "F03.02", "value": 450 },
-                     //  { "param": "F03.03", "value": 100 },
+                     //  { "param": "F03.03", "value": 10000 },
                      //  { "param": "F03.04", "value": 1000 },
                      //  { "param": "F03.19", "value": 0x0000 } 
-                     //  
-                     //   { "param": "F11.00", "value": 6,persist:true},
-                     //   { "param": "F11.01", "value": 0,persist:true },
-                     //   { "param": "F11.03", "value": 2,persist:true },
-                     //   { "param": "F11.04", "value": 100,persist:true }, //lissage de la valeur plus c'est grand environment bruité on laisse par defaut
-                     //   { "param": "F11.05", "value": 100,persist:true }, 
+                       
+                        
                      
-                     
-                 
-                         { "param": "F11.08", "value": 720,persist:true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-                         { "param": "F11.09", "value": 450,persist:true }, //avant que le pid ne prenne la main
-                     
-                         { "param": "F11.18", "value": 100,persist:true }, // seuil bas valeur par defaut
-                     //    { "param": "F11.19", "value": 420,persist:true } // seuil haut valeur par defaut
-                 
-                     //  { "param": "F11.25", "value": 20 }, // seuil bas valeur par defaut
-                     //  { "param": "F11.26", "value": 1 } // seuil haut valeur par defaut
-                     //  { "param": "F11.27", "value": 950 }, // seuil bas valeur par defaut
-                     //  { "param": "F11.28", "value": 50 } // seuil haut valeur par defaut
-                 
-                      { "param": "F11.29", "value": 1 },
-                      { "param": "F11.30", "value": 340 },
-                      { "param": "F11.31", "value": 300 },   */
-
-            //   { "param": "F11.00", "value": 6,persist:true},
-            //   { "param": "F11.01", "value": 0,persist:true },
-            //   { "param": "F11.03", "value": 2,persist:true },
-            /*
-            { "param": "F11.04", "value": 100,persist:true }, //lissage de la valeur plus c'est grand environment bruité on laisse par defaut
-               { "param": "F11.05", "value": 100,persist:true }, 
-            
-            
-        
-                { "param": "F11.08", "value": 700,persist:true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-                { "param": "F11.09", "value": 300,persist:true }, //avant que le pid ne prenne la main
-            
-
-
-             { "param": "F00.11", "value": 4000,persist:true },
-             { "param": "F00.12", "value": 3000,persist:true },
-             { "param": "F00.14", "value": 2500,persist:true },
-             { "param": "F00.15", "value": 2500,persist:true }, 
-
-             { "param": "F11.17", "value": 2, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-             { "param": "F11.18", "value": 10, persist: true }, //avant que le pid ne prenne la main
-             { "param": "F11.19", "value": 300, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-             { "param": "F11.11", "value": 3000, persist: true }, //avant que le pid ne prenne la main
-             { "param": "F11.12", "value": 30, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-             { "param": "F11.13", "value": 0, persist: true }, //avant que le pid ne prenne la main
-             { "param": "F11.14", "value": 1500, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-             { "param": "F11.15", "value": 50, persist: true }, //avant que le pid ne prenne la main
-             { "param": "F11.16", "value": 0, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-
-             { "param": "F11.24", "value": 100, persist: true }, //il faut 60 pour le ballon et 32 pour l'arosage essayer 15
-
-
+////////////
+                       { "param": "F11.00", "value": 6,persist:true}, 
+                       { "param": "F11.03", "value": 2,persist:true },  
+                       { "param": "F11.04", "value": 100,persist:true },
+                       { "param": "F11.05", "value": 100,persist:true }, 
+                       { "param": "F11.08", "value": 700,persist:true },        
+                       { "param": "F11.09", "value": 300,persist:true },        
+                       { "param": "F11.11", "value": 3000, persist: true },     
+                       { "param": "F11.12", "value": 30, persist: true },       
+                       { "param": "F11.13", "value": 0, persist: true },        
+                       { "param": "F11.14", "value": 1500, persist: true },     
+                       { "param": "F11.15", "value": 50, persist: true },       
+                       { "param": "F11.16", "value": 0, persist: true },        
+                       { "param": "F11.17", "value": 2, persist: true },        
+                       { "param": "F11.18", "value": 10, persist: true },       
+                       { "param": "F11.19", "value": 300, persist: true },      
+                       { "param": "F11.24", "value": 100, persist: true },      
+                     //{ "param": "F11.25", "value": 20 },
+                     //{ "param": "F11.26", "value": 1 },
+                     //{ "param": "F11.27", "value": 950 },
+                     //{ "param": "F11.28", "value": 50 },
+                     //{ "param": "F11.29", "value": 1 },
+                     //{ "param": "F11.30", "value": 3400 },
+                     //{ "param": "F11.31", "value": 300 },
+                                       
+                       { "param": "F00.02", "value": 1,persist:true },
+                       { "param": "F00.03", "value": 8,persist:true },
+                       { "param": "F00.11", "value": 4000,persist:true },
+                       { "param": "F00.12", "value": 3000,persist:true },
+                       { "param": "F00.14", "value": 2500,persist:true },
+                       { "param": "F00.15", "value": 2500,persist:true }, 
+                                       
+                       
 
 
         ])
@@ -205,7 +174,7 @@ export class InitService {
                 //     _id: 'io8ch-do4-set-toggle-mode',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DO4 toggle mode',
-                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     type: [ComRequestType.DIGITAL_OUTPUT],
                 //     config: {
                 //         function: ModbusFunctionName.WRITE_SINGLE_REGISTER,
                 //         address: 0x1000 + DO4_CHANNEL_INDEX,
@@ -218,7 +187,7 @@ export class InitService {
                 //     _id: 'io8ch-do4-on',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DO4 ON',
-                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     type: [ComRequestType.DIGITAL_OUTPUT],
                 //     config: {
                 //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
                 //         address: DO4_CHANNEL_INDEX,
@@ -231,7 +200,7 @@ export class InitService {
                 //     _id: 'io8ch-do4-read-after-on',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DO4 read (after ON)',
-                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     type: [ComRequestType.DIGITAL_OUTPUT],
                 //     config: {
                 //         function: ModbusFunctionName.READ_COILS,
                 //         address: DO4_CHANNEL_INDEX,
@@ -245,7 +214,7 @@ export class InitService {
                 //     _id: 'io8ch-do4-off',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DO4 OFF',
-                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     type: [ComRequestType.DIGITAL_OUTPUT],
                 //     config: {
                 //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
                 //         address: DO4_CHANNEL_INDEX,
@@ -258,7 +227,7 @@ export class InitService {
                 //     _id: 'io8ch-do4-read-after-off',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DO4 read (after OFF)',
-                //     type: ComRequestType.DIGITAL_OUTPUT,
+                //     type: [ComRequestType.DIGITAL_OUTPUT],
                 //     config: {
                 //         function: ModbusFunctionName.READ_COILS,
                 //         address: DO4_CHANNEL_INDEX,
@@ -271,7 +240,7 @@ export class InitService {
                 //     _id: 'io8ch-di4-read',
                 //     deviceId: IO_8CH_DEVICE_ID,
                 //     name: 'IO 8CH - DI4 read',
-                //     type: ComRequestType.DIGITAL_INPUT,
+                //     type: [ComRequestType.DIGITAL_INPUT],
                 //     config: {
                 //         function: ModbusFunctionName.READ_DISCRETE_INPUTS,
                 //         address: DI4_CHANNEL_INDEX,
@@ -290,15 +259,17 @@ export class InitService {
                             .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
                     });
                 });
+                const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
+                await this.actuatorService.execute(actuator as ActuatorModel, 50); 
 
-            })
+            }) 
 
             .catch((error) => {
                 this.logger.error({ err: error, message: error?.message, stack: error?.stack }, 'initialization failed');
             })
     }
 
-    private _resetAllModules(): Promise<void> {
+    private _resetAllModules(): Promise<void> { 
 
         this.logger.log('Start initialize processes 1 ...');
         return this.processService.resetAllModules()
@@ -324,30 +295,7 @@ export class InitService {
         }
     }
 
-    private async _seedDefaultValves(): Promise<void> {
-        const defaultValves: { name: string; description: string; channel: number }[] = [
-            { name: 'Injection Venturi Valve 1', description: 'Vanne proportionnelle de régulation du débit d\'injection Venturi - voie 1', channel: 1 },
-            { name: 'Injection Venturi Valve 2', description: 'Vanne proportionnelle de régulation du débit d\'injection Venturi - voie 2', channel: 2 }
-        ];
-
-        for (const defaultValve of defaultValves) {
-            // identifie par nom (stable), pas par id : ActuatorRepository exige un uuid valide.
-            const isAlreadySeeded = this.configurationService.structure.actuators
-                ?.some(actuator => actuator.type === ActuatorType.CTRL && actuator.name === defaultValve.name);
-            if (isAlreadySeeded) continue;
-
-            const valve = new ActuatorModel();
-            valve.name = defaultValve.name;
-            valve.description = defaultValve.description;
-            valve.type = ActuatorType.CTRL;
-            valve.status = ModuleStatus.OFF;
-            valve.config = this._createDefaultValveConfig(defaultValve.channel);
-            const saved = await this.actuatorRepository.save(valve);
-            this.logger.log({ valveId: saved._id, name: saved.name }, 'default valve seeded');
-        }
-
-        await this._loadConfiguration();
-    }
+   
 
     /**
      * TEST - commissionnement du module Waveshare "Modbus RTU Analog Output 8CH" utilisé par
@@ -359,6 +307,7 @@ export class InitService {
         const AO1_CHANNEL = 1;
         //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
         await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL);
+    
     }
 
     private _createDefaultValveConfig(channel: number): CtrlActuatorConfigModel {

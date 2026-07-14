@@ -24,6 +24,7 @@ import {
     ComRequestDTO,
     ComRequestConfigDTO,
     ModbusTaskParams,
+    PersistenceDTO,
     IsNumberOrString
 } from '@process/infrastructure/dto/synchronize.dto';
 import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
@@ -335,6 +336,15 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
 
             expect((model.config as CtrlActuatorConfigModel).valveType).toEqual('ONOFF');
         });
+
+        it('should map actions through to the CtrlActuatorConfigModel', () => {
+            const dto = CreateDto();
+            dto.config.actions = [{ comRequestId: 'ao8ch-write-channel', digitalPort: 2 }];
+
+            const model = ValveSynchronizeDTO.mapToValveModel(dto);
+
+            expect((model.config as CtrlActuatorConfigModel).actions).toEqual([{ comRequestId: 'ao8ch-write-channel', digitalPort: 2 }]);
+        });
     });
 
     describe('ActuatorSynchronizeDTO.mapToActuatorModel', () => {
@@ -427,7 +437,7 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             const dto = Object.assign(new ComRequestDTO(), {
                 _id: 'task-1', deviceId: 'conn-1', name: 'task',
                 config: Object.assign(new ComRequestConfigDTO(), {
-                    function: 'readHoldingRegisters', address: 100,
+                    function: ['readHoldingRegisters'], address: 100,
                     params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
                 })
             });
@@ -437,6 +447,37 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model._id).toEqual('task-1');
             expect(model.deviceId).toEqual('conn-1');
             expect(model.config.params).toEqual({ length: 2, scale: 0.1, unit: '°C' });
+        });
+
+        it('should map the optional persistence field when present', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-2', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['writeRegister'], address: 100,
+                    params: Object.assign(new ModbusTaskParams(), {
+                        length: 1, scale: 1, unit: '',
+                        persistence: Object.assign(new PersistenceDTO(), { persist: true, address: 0x1000 })
+                    })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.params.persistence).toEqual({ persist: true, address: 0x1000 });
+        });
+
+        it('should leave persistence undefined when absent (backward compatibility)', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-3', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['readHoldingRegisters'], address: 100,
+                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.params.persistence).toBeUndefined();
         });
     });
 

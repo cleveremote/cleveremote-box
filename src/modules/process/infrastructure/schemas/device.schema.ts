@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
+import { DeviceType, DeviceKind, MasterProtocol } from '@process/domain/models/device.model';
 
 @Schema({ _id: false })
 export class DeviceConfig {
@@ -45,6 +45,9 @@ export class Device {
 
     @Prop({ required: true, enum: DeviceType })
     public type: DeviceType;
+
+    @Prop({ enum: DeviceKind })
+    public kind?: DeviceKind;
 
     @Prop()
     public description: string;
