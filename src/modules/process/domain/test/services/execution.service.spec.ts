@@ -562,7 +562,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(false);
         });
 
-        it('should skip executing a sequence whose condition is already satisfied', async () => {
+        it('should require confirmation instead of silently skipping a sequence whose condition is already satisfied', async () => {
             const condition = Object.assign(new ConditionModel(), {
                 name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
             });
@@ -572,11 +572,17 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             valueRepository.getDeviceValue.mockResolvedValue({ value: 10 });
 
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
-            // la sequence est immediatement "skippee" (setTimeout(...,0)) plutot que d'attendre
-            // les 5000ms de maxDuration.
             await Flush(100);
 
-            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            // la sequence n'est plus "skippee" silencieusement : elle attend une confirmation.
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION })
+                })
+            );
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
         it('should not skip the sequence and short-circuit further evaluation once an earlier condition fails', async () => {

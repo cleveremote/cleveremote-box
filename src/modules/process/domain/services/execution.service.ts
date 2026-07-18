@@ -11,7 +11,8 @@ import {
     ExecutableStatus,
     ProcessMode,
     ProcessType,
-    CycleType
+    CycleType,
+    ConditionsLogic
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel } from '../models/actuator.model';
@@ -269,6 +270,9 @@ export class ProcessService {
         if (!currentCycle && process.type === ProcessType.SKIP) {
             //skip concerne les sequences ... donc pas de cycle existant
             process.id = process.cycle._id;
+        } else if (!currentCycle && process.type === ProcessType.FORCE && this.queuedSequences.find(x => x.sequenceId === process.cycle._id)) {
+            // force peut aussi confirmer une sequence en attente de confirmation (condition de securite verifiee) ... donc pas de cycle existant
+            process.id = process.cycle._id;
         } else if (currentCycle) {
             process.cycle = currentCycle;
         } else {
@@ -281,6 +285,11 @@ export class ProcessService {
             const sequenceSkipFlag = this.queuedSequences.find(x => x.sequenceId === process.id);
             sequenceSkipFlag.flag.next(null);
         } else if (process.type === ProcessType.FORCE) {
+            const queuedSequence = process.id && this.queuedSequences.find(x => x.sequenceId === process.id);
+            if (queuedSequence?.resume) {
+                queuedSequence.resume();
+                return;
+            }
             // await this.eventRepository.save({
             //     elementId: process.cycle._id,
             //     date: new Date(),
@@ -399,6 +408,9 @@ export class ProcessService {
                 break;
             }
         }
+
+        await this._applyCycleConditionsGate(process, report);
+
         const confirmationType = report.find((x) => x.type === ProcessType.CONFIRMATION);
         if (confirmationType) {
             process.type = ProcessType.CONFIRMATION;
@@ -406,6 +418,19 @@ export class ProcessService {
         } else {
             this._manageProcessType(process);
         }
+    }
+
+    private async _applyCycleConditionsGate(process: ProcessModel, report: { id: string; type: ProcessType; cause: string }[]): Promise<void> {
+        const isConditionsVerified = await this.checkConditions(process.cycle.conditions, process.cycle.conditionsLogic);
+        if (isConditionsVerified) {
+            return;
+        }
+        process.type = ProcessType.CONFIRMATION;
+        if (!this.processList.find(x => x.cycle._id === process.cycle._id)) {
+            this.processList.push(process);
+        }
+        const cause = 'condition non vérifiée pour le cycle : ' + process.cycle.name;
+        report.push({ id: process.cycle._id, type: ProcessType.CONFIRMATION, cause });
     }
 
     private _executeProcess(process: ProcessModel): void {
@@ -809,7 +834,7 @@ export class ProcessService {
         mode: ProcessMode,
         sourceCycleId?: string
     ): Observable<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }> {
-        const ref = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
+        const ref: { sequenceId: string; flag: Subject<unknown>; resume?: () => void } = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         return of(previousSeq?.names || []).pipe(
             mergeMap((previousNames) => {
                 return of(currentSeq.names).pipe(
@@ -819,20 +844,22 @@ export class ProcessService {
                             this.queuedSequences.splice(index, 1);
                         }
                         this.queuedSequences.push(ref);
+                        ref.resume = (): void => {
+                            const previousData =
+                                { id: previousSeq?.sequenceId, names: previousNames, duration: previousSeq?.securityConfig.maxDuration };
+                            const currentData =
+                                { id: currentSeq.sequenceId, names: currentNames, duration: currentSeq.securityConfig.maxDuration };
+                            this._switchProcess(previousData, currentData, modules, timings, mode, sourceCycleId);
+                            setTimeout(() => {
+                                ref.flag.next(null);
+                            }, currentSeq.securityConfig.maxDuration);
+                        };
                         this._checkSequenceCondition(ref.sequenceId).then((skipExecSequence) => {
-
-                            if (skipExecSequence) {
-                                setTimeout(() => {
-                                    ref.flag.next(null);
-                                }, 0);
+                            if (!skipExecSequence) {
+                                this._needSequenceConfirmation(ref.sequenceId, mode);
                             } else {
-                                this._switchProcess({ id: previousSeq?.sequenceId, names: previousNames, duration: previousSeq?.securityConfig.maxDuration },
-                                    { id: currentSeq.sequenceId, names: currentNames, duration: currentSeq.securityConfig.maxDuration }, modules, timings, mode, sourceCycleId);
-                                setTimeout(() => {
-                                    ref.flag.next(null);
-                                }, currentSeq.securityConfig.maxDuration);
+                                ref.resume();
                             }
-
                         });
                         return currentSeq;
                     })
@@ -854,7 +881,7 @@ export class ProcessService {
         };
 
         if (!sequence?.securityConfig?.conditions?.length) {
-            return false;
+            return true;
         }
 
         return await asyncEvery(sequence.securityConfig.conditions, async (condition) => {
@@ -864,7 +891,7 @@ export class ProcessService {
                 ? (extractedVal as SensorValueModel).value
                 : (extractedVal as ProcessValueModel).status;
             if (value === undefined || value === null) { return false; }
-            return parser.evaluate(`(${value} ${condition.operator} ${condition.value})`);
+            return parser.evaluate(`(${value==="STOPPED"?0:1} ${condition.operator} ${condition.value})`);
         });
 
     }
@@ -1018,6 +1045,29 @@ export class ProcessService {
         });
     }
 
+    private _needSequenceConfirmation(sequenceId: string, mode: ProcessMode): Promise<string> {
+        const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
+        const cause = 'condition de sécurité vérifiée pour la séquence : ' + (sequence?.name ?? sequenceId);
+        const causes = [{ id: sequenceId, type: ProcessType.CONFIRMATION, cause }];
+        const data = { type: ExecutableType.SEQUENCE, id: sequenceId, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };
+        if (sequence) {
+            sequence.status = ExecutableStatus.WAITTING_CONFIRMATION;
+        }
+        const pro = this.eventRepository.save({
+            elementId: data.id,
+            date: new Date(),
+            elementType: ElementType.SEQUENCE,
+            additionalData: { type: mode, value: data.status, status: data.status, causes }
+        });
+        return pro.then(() => {
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)
+                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false)
+                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
+            return 'sent';
+        });
+    }
+
     private static _ofNull<T>(): Observable<T> {
         return of(null as T);
     }
@@ -1037,18 +1087,14 @@ export class ProcessService {
         return [];
     }
 
-    private async checkConditions(conditions: ConditionModel[]) {
-        // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-explicit-any
+    private async checkConditions(conditions: ConditionModel[], logic: ConditionsLogic = ConditionsLogic.AND): Promise<boolean> {
+        if (!conditions?.length) {
+            return true;
+        }
+
         const parser = math.parser();
 
-        const asyncEvery = async (arr: ConditionModel[], predicate: { (condition: any): Promise<any>; (arg0: any): any; }) => {
-            for (const e of arr) {
-                if (!await predicate(e)) return false;
-            }
-            return true;
-        };
-
-        const isVerified = await asyncEvery(conditions, async (condition) => {
+        const evaluate = async (condition: ConditionModel): Promise<boolean> => {
             const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
             if (!extractedVal) { return false; }
             const value = condition.elementType === ElementType.SENSOR
@@ -1056,11 +1102,25 @@ export class ProcessService {
                 : (extractedVal as ProcessValueModel).status;
             if (value === undefined || value === null) { return false; }
             return parser.evaluate(`(${value === ExecutableStatus.STOPPED ? 0 : 1} ${condition.operator} ${Number(condition.value)})`);
-        });
+        };
 
-        if (isVerified) {
+        const asyncEvery = async (arr: ConditionModel[], predicate: (condition: ConditionModel) => Promise<boolean>): Promise<boolean> => {
+            for (const e of arr) {
+                if (!await predicate(e)) return false;
+            }
+            return true;
+        };
 
-        }
+        const asyncSome = async (arr: ConditionModel[], predicate: (condition: ConditionModel) => Promise<boolean>): Promise<boolean> => {
+            for (const e of arr) {
+                if (await predicate(e)) return true;
+            }
+            return false;
+        };
+
+        return logic === ConditionsLogic.OR
+            ? asyncSome(conditions, evaluate)
+            : asyncEvery(conditions, evaluate);
     }
 
 }

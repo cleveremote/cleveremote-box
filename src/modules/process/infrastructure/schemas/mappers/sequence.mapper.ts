@@ -15,7 +15,7 @@ export class SequenceMapper {
         model.name = sequence.name;
         model.description = sequence.description;
         model.status = sequence.status;
-        model.order = sequence.order;
+        model.order = sequence.order; 
         model.securityConfig = {
             maxDuration: sequence.securityConfig?.maxDuration,
             ...(sequence.securityConfig?.customStacks !== undefined && { customStacks: sequence.securityConfig.customStacks.map(CustomStackMapper.mapToModel) }),

@@ -51,7 +51,7 @@ export class CycleModel implements IExecutable {
     public conditions?: ConditionModel[] = [];
     public conditionsLogic?: ConditionsLogic = ConditionsLogic.AND;
     public parentCycleId?: string = null;
-    public childCycles?: ChildCycleRef[] = [];
+    public childCycles?: ChildCycleRef[] = []; 
 
     public createdAt?: Date;
     public updatedAt?: Date;

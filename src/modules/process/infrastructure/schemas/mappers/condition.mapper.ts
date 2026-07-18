@@ -22,7 +22,7 @@ export class ConditionMapper {
         condition.elementType = model.elementType;
         condition.operator = model.operator;
         condition.value = model.value;
-        return condition;
+        return condition; 
     }
 
 }
