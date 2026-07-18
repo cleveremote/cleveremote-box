@@ -18,7 +18,6 @@ export class TriggerMapper {
         model.lastTriggeredAt = trigger.lastTriggeredAt;
         model.isPaused = trigger.isPaused;
         model.action = trigger.action;
-        model.isCheckInProgress = trigger.isCheckInProgress;
         model.createdAt = (trigger as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (trigger as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = trigger.deletedAt ?? null;
@@ -38,7 +37,6 @@ export class TriggerMapper {
         trigger.lastTriggeredAt = model.lastTriggeredAt;
         trigger.isPaused = model.isPaused;
         trigger.action = model.action;
-        trigger.isCheckInProgress = model.isCheckInProgress;
         return trigger;
     }
 

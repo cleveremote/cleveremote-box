@@ -1,6 +1,7 @@
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { Sequence, SequenceDocument } from '../sequence.schema';
 import { ConditionMapper } from './condition.mapper';
+import { CustomStackMapper } from './custom-stack.mapper';
 
 // les modules physiques vivent dans leur propre collection, partageables entre sequences :
 // seul moduleConfigs (moduleId + cfg de timing propre a cet usage) est persiste ici ; les
@@ -17,7 +18,7 @@ export class SequenceMapper {
         model.order = sequence.order;
         model.securityConfig = {
             maxDuration: sequence.securityConfig?.maxDuration,
-            ...(sequence.securityConfig?.customStack !== undefined && { customStack: sequence.securityConfig.customStack }),
+            ...(sequence.securityConfig?.customStacks !== undefined && { customStacks: sequence.securityConfig.customStacks.map(CustomStackMapper.mapToModel) }),
             ...(sequence.securityConfig?.conditions !== undefined && { conditions: sequence.securityConfig.conditions.map(ConditionMapper.mapToModel) })
         };
         model.moduleConfigs = (sequence.moduleConfigs ?? []).map((ref) => ({
@@ -45,7 +46,7 @@ export class SequenceMapper {
         sequence.order = model.order;
         sequence.securityConfig = {
             maxDuration: model.securityConfig.maxDuration,
-            ...(model.securityConfig.customStack !== undefined && { customStack: model.securityConfig.customStack }),
+            ...(model.securityConfig.customStacks !== undefined && { customStacks: model.securityConfig.customStacks.map(CustomStackMapper.mapToSchema) }),
             ...(model.securityConfig.conditions !== undefined && { conditions: model.securityConfig.conditions.map(ConditionMapper.mapToSchema) })
         };
         sequence.moduleConfigs = (model.moduleConfigs ?? []).map((ref) => ({

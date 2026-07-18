@@ -1,4 +1,5 @@
 export enum SensorType {
     FORCAST = 'FORCAST',
-    COM = 'COM'
+    COM = 'COM',
+    MASTER_COM = 'MASTER_COM'
 }

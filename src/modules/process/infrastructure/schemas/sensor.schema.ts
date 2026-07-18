@@ -7,8 +7,9 @@ import { CycleStyle, CycleStyleSchema } from './style.schema';
 
 @Schema({ _id: false })
 export class SensorConfig {
-    @Prop({ required: true })
-    public cronPattern: string;
+    // requis pour FORCAST/COM, absent pour les sensors enfants (parentId renseigne)
+    @Prop()
+    public cronPattern?: string;
 
     // FORCAST
     @Prop({ enum: forcastDataName })
@@ -17,6 +18,16 @@ export class SensorConfig {
     // COM
     @Prop()
     public comRequestId?: string;
+
+    // CHILD COM (sensor avec parentId)
+    @Prop()
+    public code?: number;
+
+    @Prop()
+    public scale?: number;
+
+    @Prop()
+    public unit?: string;
 }
 export const SensorConfigSchema = SchemaFactory.createForClass(SensorConfig);
 
@@ -41,6 +52,10 @@ export class Sensor {
 
     @Prop({ type: SensorConfigSchema, required: true })
     public config: SensorConfig;
+
+    // relation auto-referencee vers le sensor parent (device MASTER_COM)
+    @Prop({ type: String, default: null, index: true })
+    public parentId: string | null;
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

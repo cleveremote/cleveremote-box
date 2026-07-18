@@ -61,7 +61,7 @@ describe('SensorService', () => {
         triggerService = { onElementValueChanged: { next: jest.fn() } };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
         sensorRepository = { get: jest.fn().mockResolvedValue([]) };
-        forcastStrategy = { type: SensorType.FORCAST, read: jest.fn().mockResolvedValue(25) };
+        forcastStrategy = { type: SensorType.FORCAST, read: jest.fn().mockResolvedValue([{ value: 25, isFormated: true, unit: '°C', name: 'sensor' }]) };
         comStrategy = { type: SensorType.COM, read: jest.fn().mockRejectedValue(new NotImplementedError('not implemented')) };
         logger = CreateLoggerMock();
 
@@ -200,6 +200,16 @@ describe('SensorService', () => {
             const sensor = CreateSensorModel({ id: 'never-scheduled' });
 
             await expect(service.initScheduledSensor(sensor, true)).resolves.toBe(sensor);
+        });
+
+        it('should not schedule a cron job for a child sensor (parentId set)', async () => {
+            const sensor = CreateComSensorModel({ id: 'child-sensor', parentId: 'parent-1' });
+
+            const result = await service.initScheduledSensor(sensor);
+
+            expect(result).toBe(sensor);
+            expect(configurationService.structure.sensors).toContain(sensor);
+            expect(schedulerRegistry.doesExist('cron', 'child-sensor')).toBe(false);
         });
 
         it('should call the FORCAST strategy and emit its value each time the scheduled tick fires', async () => {

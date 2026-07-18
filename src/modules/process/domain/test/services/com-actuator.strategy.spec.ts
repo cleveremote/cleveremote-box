@@ -3,7 +3,6 @@ import { ActuatorType } from '@process/domain/interfaces/actuator-module.interfa
 import { ComActuatorConfigModel, ActuatorModel } from '@process/domain/models/actuator.model';
 import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { ComActuatorStrategy } from '@process/domain/services/actuator-strategies/com-actuator.strategy';
-import { buildOverrideParamsCases } from './build-override-params.spec-mock';
 
 function CreateActuatorComModel(): ActuatorModel {
     const actuator = new ActuatorModel();
@@ -73,13 +72,5 @@ describe('ComActuatorStrategy', () => {
             address: 5,
             params: expect.objectContaining({ value: 9 })
         }));
-    });
-
-    describe('buidOverrideParams (shared merge logic - see build-override-params.spec-mock.ts)', () => {
-        it.each(buildOverrideParamsCases)('$name', ({ existing, override, expected }) => {
-            const result = (strategy as unknown as { buidOverrideParams: (p: unknown, o: unknown) => unknown }).buidOverrideParams(existing, override);
-
-            expect(result).toEqual(expected);
-        });
     });
 });

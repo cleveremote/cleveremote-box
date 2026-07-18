@@ -31,9 +31,9 @@ describe('ForcastSensorStrategy', () => {
     it('should read tomorrow\'s max temperature from the weather API', async () => {
         const sensor = CreateForcastSensorModel(forcastDataName.TEMPERATURE_2M_MAX);
 
-        const value = await strategy.read(sensor);
+        const result = await strategy.read(sensor);
 
-        expect(value).toEqual(25);
+        expect(result).toEqual([{ value: 25, isFormated: true, unit: '°C', name: sensor.name }]);
         expect(httpService.get).toHaveBeenCalledWith(
             'https://api.open-meteo.com/v1/forecast',
             expect.objectContaining({ params: expect.objectContaining({ daily: 'temperature_2m_max,temperature_2m_min' }) })
@@ -43,9 +43,9 @@ describe('ForcastSensorStrategy', () => {
     it('should read tomorrow\'s min temperature from the weather API', async () => {
         const sensor = CreateForcastSensorModel(forcastDataName.TEMPERATURE_2M_MIN);
 
-        const value = await strategy.read(sensor);
+        const result = await strategy.read(sensor);
 
-        expect(value).toEqual(12);
+        expect(result).toEqual([{ value: 12, isFormated: true, unit: '°C', name: sensor.name }]);
     });
 
     it('should propagate a failing weather API call', async () => {

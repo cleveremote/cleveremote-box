@@ -11,6 +11,8 @@ import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ScheduleModel } from './schedule.model';
 import { ModuleTimingConfig, SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
+import { ComRequestConfigModel } from './com-request.model';
+import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 
 export interface ChildCycleConfig {
     order: number;
@@ -23,6 +25,13 @@ export interface ChildCycleConfig {
 export interface ChildCycleRef {
     cycleId: string;
     config: ChildCycleConfig;
+}
+
+export interface ExecutionStructure {
+    sequenceId: string;
+    names: string[],
+    duration:number,
+    customStacks:{ comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel }[]
 }
 
 export class CycleModel implements IExecutable {
@@ -80,8 +89,8 @@ export class CycleModel implements IExecutable {
         return timings;
     }
 
-    public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; duration: number }[] {
-        const executionLst: { sequenceId: string; names: string[]; duration: number }[] = [];
+    public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; securityConfig:SecurityConfig       }[] {
+        const executionLst: { sequenceId: string; names: string[]; securityConfig:SecurityConfig }[] = [];
         const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         sequences.forEach((sequence) => {
             const sequenceId = sequence._id;
@@ -89,7 +98,11 @@ export class CycleModel implements IExecutable {
                 .map((moduleId) => actuatorRegistry.get(moduleId)?.name)
                 .filter((name): name is string => name !== undefined);
             const duration = overrideDuration || sequence.securityConfig.maxDuration;
-            executionLst.push({ sequenceId, names, duration });
+            
+            sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
+            const securityConfig = sequence.securityConfig; 
+            
+            executionLst.push({ sequenceId, names, securityConfig });
         });
         return executionLst;
     }

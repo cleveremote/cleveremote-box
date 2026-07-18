@@ -31,6 +31,18 @@ export class SensorRepository {
         return this.sensorMongooseRepository.findById(id);
     }
 
+    // relation auto-referencee : acces au sensor parent et a la liste de ses enfants
+    public async getParent(sensor: SensorModel): Promise<SensorModel | null> {
+        if (!sensor.parentId) {
+            return null;
+        }
+        return this.sensorMongooseRepository.findById(sensor.parentId);
+    }
+
+    public async getChildren(parentId: string): Promise<SensorModel[]> {
+        return this.sensorMongooseRepository.findByParentId(parentId);
+    }
+
     // un sensor n'est soft-supprime que s'il est explicitement marque `delete: true` dans
     // `models` ; un sensor absent de `models` reste inchange.
     public async replaceAll(models: SynchronizeSensorModel[]): Promise<SensorModel[]> {

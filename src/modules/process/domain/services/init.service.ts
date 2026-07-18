@@ -260,7 +260,7 @@ export class InitService {
                     });
                 });
                 const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-                await this.actuatorService.execute(actuator as ActuatorModel, 50); 
+               // await this.actuatorService.execute(actuator as ActuatorModel, 50); 
 
             }) 
 

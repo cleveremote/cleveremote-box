@@ -309,6 +309,21 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model.type).toEqual(SensorType.COM);
             expect((model.config as ComSensorConfigModel).comRequestId).toEqual('request-1');
         });
+
+        it('should map a child sensor (parentId set) to a code/scale/unit config', () => {
+            const dto = Object.assign(new SensorSynchronizeDTO(), {
+                id: 'sensor-3', name: 'child sensor', description: 'd', type: SensorType.COM,
+                parentId: 'sensor-parent',
+                config: Object.assign(new SensorConfigDTO(), { code: 12, scale: 0.1, unit: 'V' })
+            });
+
+            const model = SensorSynchronizeDTO.mapToSensorModel(dto);
+
+            expect(model.parentId).toEqual('sensor-parent');
+            expect((model.config as ComSensorConfigModel).code).toEqual(12);
+            expect((model.config as ComSensorConfigModel).scale).toEqual(0.1);
+            expect((model.config as ComSensorConfigModel).unit).toEqual('V');
+        });
     });
 
     describe('ValveSynchronizeDTO.mapToValveModel', () => {

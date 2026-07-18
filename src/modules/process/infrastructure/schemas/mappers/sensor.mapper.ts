@@ -11,21 +11,32 @@ export class SensorMapper {
         model.description = sensor.description;
         model.style = sensor.style;
         model.type = sensor.type;
-        if (sensor.type === SensorType.FORCAST) {
-            const config = new ForcastSensorConfigModel();
-            config.cronPattern = sensor.config.cronPattern;
-            config.forcastData = sensor.config.forcastData;
-            model.config = config;
-        } else {
-            const config = new ComSensorConfigModel();
-            config.cronPattern = sensor.config.cronPattern;
-            config.comRequestId = sensor.config.comRequestId;
-            model.config = config;
-        }
+        model.parentId = sensor.parentId ?? null;
+        model.config = SensorMapper._mapConfigToModel(sensor);
         model.createdAt = (sensor as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (sensor as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = sensor.deletedAt ?? null;
         return model;
+    }
+
+    private static _mapConfigToModel(sensor: SensorDocument): ForcastSensorConfigModel | ComSensorConfigModel {
+        if (sensor.type === SensorType.FORCAST) {
+            const config = new ForcastSensorConfigModel();
+            config.cronPattern = sensor.config.cronPattern;
+            config.forcastData = sensor.config.forcastData;
+            return config;
+        }
+        if (sensor.parentId) {
+            const config = new ComSensorConfigModel();
+            config.code = sensor.config.code;
+            config.scale = sensor.config.scale;
+            config.unit = sensor.config.unit;
+            return config;
+        }
+        const config = new ComSensorConfigModel();
+        config.cronPattern = sensor.config.cronPattern;
+        config.comRequestId = sensor.config.comRequestId;
+        return config;
     }
 
     public static mapToSchema(model: SensorModel): Sensor {
@@ -34,9 +45,13 @@ export class SensorMapper {
         sensor.description = model.description;
         sensor.style = model.style;
         sensor.type = model.type;
+        sensor.parentId = model.parentId ?? null;
         if (model.type === SensorType.FORCAST) {
             const config = model.config as ForcastSensorConfigModel;
             sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData };
+        } else if (sensor.parentId) {
+            const config = model.config as ComSensorConfigModel;
+            sensor.config = { code: config.code, scale: config.scale, unit: config.unit };
         } else {
             const config = model.config as ComSensorConfigModel;
             sensor.config = { cronPattern: config.cronPattern, comRequestId: config.comRequestId };

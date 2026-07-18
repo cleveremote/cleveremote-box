@@ -55,9 +55,6 @@ export class Trigger {
     @Prop({ required: true, enum: ExecutableAction })
     public action: ExecutableAction;
 
-    @Prop({ default: false })
-    public isCheckInProgress: boolean;
-
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;
 }

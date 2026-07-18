@@ -1,5 +1,6 @@
 import { IActuatorModule } from './actuator-module.interface';
 import { SequenceModel } from '../models/sequence.model';
+import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 
 
 export enum ExecutableStatus {
@@ -63,5 +64,5 @@ export interface IExecutable {
     getModuleIds(): string[];
     getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[];
     exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean;
-    getExecutionStructure(duration: number, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; duration: number }[];
+    getExecutionStructure(duration: number, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; securityConfig:SecurityConfig }[];
 }

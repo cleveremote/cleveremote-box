@@ -9,6 +9,7 @@ import { ActuatorStrategy } from './actuator-strategy.interface';
 import { ModbusService } from '../modbus.service';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
+import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -148,7 +149,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
         const overrideParams: ComRequestConfigModel = { address: action.portNumber, params: { value: microAmps } }
-        this.modbusService.execute(comRequestData, this.buidOverrideParams(comRequestData.config, overrideParams));
+        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
     } 
 
     /**
@@ -246,23 +247,5 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         } finally {
             client.close(() => this.logger.log({ deviceId, channel }, 'valve modbus connection closed'));
         }
-    }
-    private buidOverrideParams(params: ComRequestConfigModel, overrideParams: ComRequestConfigModel): ComRequestConfigModel {
-        const overridedParams: ComRequestConfigModel = {
-            address: overrideParams.address || params.address,
-            function: overrideParams.function || params.function,
-            disabled: overrideParams.disabled || params.disabled,
-            params: {
-                length: overrideParams.params?.length || params.params?.length,
-                scale: overrideParams.params?.scale || params.params?.scale,
-                unit: overrideParams.params?.unit || params.params?.unit,
-                value: overrideParams.params?.value || params.params?.value,
-                persistence: {
-                    persist: overrideParams.params?.persistence?.persist ?? params.params?.persistence?.persist ?? false,
-                    address: overrideParams.params?.persistence?.address ?? params.params?.persistence?.address ?? 0
-                }
-            }
-        }; 
-        return overridedParams;
     }
 }

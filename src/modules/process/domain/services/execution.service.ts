@@ -16,7 +16,7 @@ import {
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel } from '../models/actuator.model';
 import { ComRequestType } from '../interfaces/com-request.interface';
-import { ComRequestModel } from '../models/com-request.model';
+import { ComRequestConfigModel, ComRequestModel } from '../models/com-request.model';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ModuleTimingConfig } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
@@ -37,6 +37,8 @@ import { type InverterConfigParam, ModbusService } from './modbus.service';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
+import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
+import { buildOverrideParams } from '../utils/build-override-params.util';
 
 @Injectable()
 export class ProcessService {
@@ -122,6 +124,8 @@ export class ProcessService {
             // (voir _syncParentGroupOffIfAllChildrenStopped) ; volontairement DANS ce if (uniquement
             // quand ce cycle vient reellement de transiter vers STOPPED, pas a chaque appel no-op).
             await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
+
+
         }
         // unref() : ce rappel differe est "fire and forget", il ne doit pas a lui seul empecher
         // le processus de s'arreter (ex: extinction propre, ou fuite de ce timer dans les tests).
@@ -755,8 +759,8 @@ export class ProcessService {
         const executionLst = process.cycle.getExecutionStructure(process.duration, actuators);
         // regle 2 : seul un cycle CYCLE en cours d'execution pilote son(ses) cycle(s) MODULE au fil de l'eau
         const sourceCycleId = ([CycleType.CYCLE, CycleType.MODULE].includes(process.cycle.type)) ? process.cycle._id : undefined;
-        let obs: Observable<{ sequenceId: string; names: string[]; duration: number }> =
-            ProcessService._ofNull<{ sequenceId: string; names: string[]; duration: number }>()
+        let obs: Observable<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }> =
+            ProcessService._ofNull<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }>()
                 .pipe(tap(async () => {
                     process.cycle.status = ExecutableStatus.IN_PROCCESS;
                     this.processList.push(process);
@@ -797,13 +801,13 @@ export class ProcessService {
     }
 
     private _createExecObs(
-        previousSeq: { sequenceId: string; names: string[]; duration: number },
-        currentSeq: { sequenceId: string; names: string[]; duration: number },
+        previousSeq: { sequenceId: string; names: string[]; securityConfig: SecurityConfig },
+        currentSeq: { sequenceId: string; names: string[]; securityConfig: SecurityConfig },
         modules: IActuatorModule[],
         timings: Map<string, ModuleTimingConfig>,
         mode: ProcessMode,
         sourceCycleId?: string
-    ): Observable<{ sequenceId: string; names: string[]; duration: number }> {
+    ): Observable<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }> {
         const ref = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         return of(previousSeq?.names || []).pipe(
             mergeMap((previousNames) => {
@@ -821,11 +825,11 @@ export class ProcessService {
                                     ref.flag.next(null);
                                 }, 0);
                             } else {
-                                this._switchProcess({ id: previousSeq?.sequenceId, names: previousNames, duration: previousSeq?.duration },
-                                    { id: currentSeq.sequenceId, names: currentNames, duration: currentSeq.duration }, modules, timings, mode, sourceCycleId);
+                                this._switchProcess({ id: previousSeq?.sequenceId, names: previousNames, duration: previousSeq?.securityConfig.maxDuration },
+                                    { id: currentSeq.sequenceId, names: currentNames, duration: currentSeq.securityConfig.maxDuration }, modules, timings, mode, sourceCycleId);
                                 setTimeout(() => {
                                     ref.flag.next(null);
-                                }, currentSeq.duration);
+                                }, currentSeq.securityConfig.maxDuration);
                             }
 
                         });
@@ -920,15 +924,13 @@ export class ProcessService {
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         let data = { type, id, status, startedAt, duration };
         if (type === ExecutableType.SEQUENCE) {
-            if (action === ExecutableAction.ON) {
-                // this.modBusService.execute("task-1234", { value: 96});
-                // this.modBusService.applyInverterConfig("inverter-001", [
-
-                //      { "param": "F00.11", "value": 4200,persist:true }, 
-
-
-
-                // ])
+            const customStacks = seqFound.securityConfig.customStacks;
+            for (let index = 0; index < customStacks?.length; index++) {
+                const customStack = customStacks[index];
+                const comRequest: ComRequestModel = await this.comRequestRepository.get(customStack.comRequestId) as ComRequestModel;
+                this.modBusService.execute(comRequest, action === ExecutableAction.ON ? customStack.params : customStack.defaultParams);
+                //{ value: 96}
+                //{ "param": "F00.11", "value": 4200,persist:true }, 
             }
 
             seqFound.status = status;
@@ -939,6 +941,7 @@ export class ProcessService {
             cycFound.sequences.forEach((x) => cycleDuration = cycleDuration + Number(x.securityConfig.maxDuration))
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
             data = { type, id, status, startedAt, duration: cycleDuration };
+            this.triggerService.onElementValueChanged.next(data);
         }
 
         const pro = this.eventRepository.save({
@@ -955,13 +958,14 @@ export class ProcessService {
             }
         });
 
-        if (cycFound) {
-            const st = this.configurationService.deviceListeners.find(x => x.deviceId === cycFound._id);
-            if (st) {
-                //st.subject.next(data); // pour ecouter les trigger
-            }
+        // if (cycFound) {
+        //      this.triggerService.onElementValueChanged.next(sensorValue);
+        //     const st = this.configurationService.deviceListeners.find(x => x.deviceId === cycFound._id);
+        //     if (st) {
+        //         //st.subject.next(data); // pour ecouter les trigger
+        //     }
 
-        }
+        // }
 
         return pro.then(() => {
             this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)

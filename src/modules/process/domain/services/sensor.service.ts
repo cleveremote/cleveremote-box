@@ -6,7 +6,7 @@ import { StructureService } from './configuration.service';
 import { TriggerService } from './trigger.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { SensorModel } from '../models/sensor.model';
+import { ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '../models/sensor.model';
 import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { NotImplementedError } from '../errors/not-implemented.error';
@@ -69,8 +69,21 @@ export class SensorService {
 
     private async _readAndEmit(sensor: SensorModel): Promise<void> {
         try {
-            const value = await this._resolveStrategy(sensor.type).read(sensor);
-            this.emitReceivedData(sensor, value);
+            const results = await this._resolveStrategy(sensor.type).read(sensor);
+            const children = await this.sensorRepository.getChildren(sensor.id);
+
+            if (children.length) {
+                for (let index = 0; index < children.length; index++) {
+                    const childSensor = children[index];
+                    const config = childSensor.config as ComSensorConfigModel;
+                    const value = +(results[config.code][0].value * (config.scale ?? 1)).toFixed(3);
+                    this.emitReceivedData(sensor,value);
+                }
+            } else {
+                for (const result of results) {
+                    this.emitReceivedData(sensor, result.value);
+                }
+            }
         } catch (error) {
             this.logger.warn({ error, sensorId: sensor.id }, 'sensor read failed');
         }
@@ -95,24 +108,32 @@ export class SensorService {
     }
 
     private _createScheduledSensorEvent(sensor: SensorModel): SensorModel {
-        let job: CronJob;
+        if (sensor.parentId) {
+            // sensor enfant : sa valeur est derivee de la lecture du sensor parent (pas de cronPattern propre)
+            return sensor;
+        }
+
         const isExists = this.schedulerRegistry.doesExist('cron', sensor.id);
         if (isExists) {
-            job = this.schedulerRegistry.getCronJob(sensor.id);
-            job.stop();
+            this.schedulerRegistry.getCronJob(sensor.id).stop();
             this.schedulerRegistry.deleteCronJob(sensor.id);
         }
+        this._scheduleCronJob(sensor);
+
+        return sensor;
+    }
+
+    private _scheduleCronJob(sensor: SensorModel): void {
         try {
             // waitForCompletion : un read (ex. appel HTTP meteo) ne doit pas se chevaucher avec
             // le tick suivant si la lecture precedente n'est pas terminee.
-            job = CronJob.from({ cronTime: sensor.config.cronPattern, onTick: () => this._readAndEmit(sensor), waitForCompletion: true });
+            const cronPattern = (sensor.config as ForcastSensorConfigModel | ComSensorConfigModel).cronPattern;
+            const job = CronJob.from({ cronTime: cronPattern, onTick: () => this._readAndEmit(sensor), waitForCompletion: true });
             this.schedulerRegistry.addCronJob(sensor.id, job);
             job.start();
         } catch (e) {
             this.logger.warn({ error: e, sensorId: sensor.id }, 'failed to schedule sensor cron job');
         }
-
-        return sensor;
     }
 
     // tout capteur (FORCAST ou COM) est desormais lu de maniere transparente via son

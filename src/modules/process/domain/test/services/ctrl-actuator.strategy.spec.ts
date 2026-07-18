@@ -8,7 +8,6 @@ import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/a
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { buildOverrideParamsCases } from './build-override-params.spec-mock';
 
 interface MockModbusClient {
     connectTCP: jest.Mock;
@@ -360,14 +359,6 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
             await expect(strategy.testStepOutput('ao8ch-device', 1)).rejects.toThrow('boom');
 
             expect(mockModbusClients[0].close).toHaveBeenCalled();
-        });
-    });
-
-    describe('buidOverrideParams (shared merge logic - see build-override-params.spec-mock.ts)', () => {
-        it.each(buildOverrideParamsCases)('$name', ({ existing, override, expected }) => {
-            const result = (strategy as unknown as { buidOverrideParams: (p: unknown, o: unknown) => unknown }).buidOverrideParams(existing, override);
-
-            expect(result).toEqual(expected);
         });
     });
 

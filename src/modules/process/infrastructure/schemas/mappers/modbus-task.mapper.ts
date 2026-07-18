@@ -14,6 +14,7 @@ export class ModbusTaskMapper {
             function: task.function as ModbusFunctionName[],
             address: task.address,
             disabled: task.disabled,
+            done: task.done ?? false,
             params: task.params
         };
         model.createdAt = (task as unknown as { createdAt?: Date }).createdAt;
@@ -31,6 +32,7 @@ export class ModbusTaskMapper {
         task.type = model.type;
         task.address = model.config.address;
         task.disabled = model.config.disabled;
+        task.done = model.config.done ?? false;
         task.params = model.config.params;
         return task;
     }

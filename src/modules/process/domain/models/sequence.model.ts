@@ -1,5 +1,6 @@
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
+import { ComRequestConfigModel } from './com-request.model';
 
 export interface ModuleTimingConfig {
     waitBeforeExec: number;
@@ -17,7 +18,7 @@ export interface SequenceModuleRef {
 export interface SecurityConfig {
     maxDuration: number;
     conditions?: ConditionModel[];
-    customStack?: { taskId: string; param: string | null }[];
+    customStacks?: { comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel }[];
 }
 
 export class SequenceModel {

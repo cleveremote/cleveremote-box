@@ -3,16 +3,20 @@ import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { Condition, ConditionSchema } from './condition.schema';
+import { ComRequestConfig, ComRequestConfigSchema } from './comrequest.schema';
 
 @Schema()
-export class CustomTask {
+export class CustomStack {
     @Prop({ required: true })
-    public taskId: string;
+    public comRequestId: string;
 
-    @Prop({ type: String, default: null })
-    public param: string | null;
+    @Prop({ type: ComRequestConfigSchema, default: undefined })
+    public params?: ComRequestConfig;
+
+    @Prop({ type: ComRequestConfigSchema, default: undefined })
+    public defaultParams?: ComRequestConfig;
 }
-export const CustomTaskSchema = SchemaFactory.createForClass(CustomTask);
+export const CustomStackSchema = SchemaFactory.createForClass(CustomStack);
 
 @Schema({ _id: false })
 export class ModuleTimingConfig {
@@ -53,8 +57,8 @@ export class SecurityConfig {
     @Prop({ type: [ConditionSchema], default: undefined })
     public conditions?: Condition[];
 
-    @Prop({ type: [CustomTaskSchema], default: undefined })
-    public customStack?: CustomTask[];
+    @Prop({ type: [CustomStackSchema], default: undefined })
+    public customStacks?: CustomStack[];
 }
 export const SecurityConfigSchema = SchemaFactory.createForClass(SecurityConfig);
 

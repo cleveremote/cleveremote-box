@@ -29,13 +29,79 @@ import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, 
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
 
-export class CustomTaskSync {
+export class PersistenceDTO {
+    @IsBoolean()
+    @ApiProperty({ description: "Si vrai, écriture persistante (EEPROM) plutôt que volatile" })
+    public persist: boolean;
+
+    @IsNumber()
+    @ApiProperty({ description: "Adresse cible pour l'écriture persistante" })
+    public address: number;
+}
+
+export class ModbusTaskParams {
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
+    public length: number;
+
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
+    public scale: number;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
+    public unit: string;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => PersistenceDTO)
+    @ApiProperty({ description: "Configuration de persistance (EEPROM) du paramètre, si applicable" })
+    public persistence?: PersistenceDTO;
+}
+
+export class ComRequestConfigDTO {
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsEnum(ModbusFunctionName, { each: true })
+    @ApiProperty({ description: "Fonction(s) Modbus à exécuter", enum: ModbusFunctionName, isArray: true })
+    public function: ModbusFunctionName[];
+
+    @IsNotEmpty()
+    @IsNumber()
+    @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
+    public address: number;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: "Désactive la requête sans la supprimer", required: false })
+    public disabled?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: "Indique si la requête a été traitée", required: false, default: false })
+    public done?: boolean;
+
+    @ValidateNested()
+    @Type(() => ModbusTaskParams)
+    @ApiProperty({ description: "Paramètres de la requête (longueur, échelle, unité)" })
+    public params?: ModbusTaskParams;
+}
+
+export class CustomStackSync {
     @IsString()
     @IsNotEmpty()
-    public taskId: string;
+    public comRequestId: string;
     @IsOptional()
-    @IsString()
-    public param: string | null = null;
+    @ValidateNested()
+    @Type(() => ComRequestConfigDTO)
+    public params?: ComRequestConfigDTO;
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ComRequestConfigDTO)
+    public defaultParams?: ComRequestConfigDTO;
 }
 
 export class SecurityConfigSync {
@@ -49,8 +115,8 @@ export class SecurityConfigSync {
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
-    @Type(() => CustomTaskSync)
-    public customStack?: CustomTaskSync[];
+    @Type(() => CustomStackSync)
+    public customStacks?: CustomStackSync[];
 }
 
 export class SequenceSync {
@@ -247,7 +313,29 @@ export class CycleSynchronizeDTO {
             sequence.order = sequenceSync.order;
             sequence.securityConfig = {
                 maxDuration: sequenceSync.securityConfig.maxDuration,
-                ...(sequenceSync.securityConfig.customStack !== undefined && { customStack: sequenceSync.securityConfig.customStack }),
+                ...(sequenceSync.securityConfig.customStacks !== undefined && {
+                    customStacks: sequenceSync.securityConfig.customStacks.map(customStackSync => ({
+                        comRequestId: customStackSync.comRequestId,
+                        ...(customStackSync.params !== undefined && {
+                            params: {
+                                function: customStackSync.params.function,
+                                address: customStackSync.params.address,
+                                disabled: customStackSync.params.disabled,
+                                done: customStackSync.params.done ?? false,
+                                params: customStackSync.params.params || undefined
+                            }
+                        }),
+                        ...(customStackSync.defaultParams !== undefined && {
+                            defaultParams: {
+                                function: customStackSync.defaultParams.function,
+                                address: customStackSync.defaultParams.address,
+                                disabled: customStackSync.defaultParams.disabled,
+                                done: customStackSync.defaultParams.done ?? false,
+                                params: customStackSync.defaultParams.params || undefined
+                            }
+                        })
+                    }))
+                }),
                 ...(sequenceSync.securityConfig.conditions !== undefined && {
                     conditions: sequenceSync.securityConfig.conditions.map(conditionSync => {
                         const condition = new SynchronizeConditionModel();
@@ -517,9 +605,11 @@ export class TriggerSynchronizeDTO {
 }
 
 export class SensorConfigDTO {
+    // requis pour FORCAST/COM ; absent quand le sensor est un enfant (parentId renseigne)
+    @ValidateIf(o => !o.code)
     @IsString()
     @IsNotEmpty()
-    public cronPattern: string;
+    public cronPattern?: string;
 
     // FORCAST
     @ValidateIf(o => o.type === SensorType.FORCAST)
@@ -531,6 +621,17 @@ export class SensorConfigDTO {
     @IsString()
     @IsNotEmpty()
     public comRequestId?: string;
+
+    // CHILD COM (sensor avec parentId)
+    @IsOptional()
+    @IsNumber()
+    public code?: number;
+    @IsOptional()
+    @IsNumber()
+    public scale?: number;
+    @IsOptional()
+    @IsString()
+    public unit?: string;
 }
 
 export class SensorSynchronizeDTO {
@@ -548,6 +649,10 @@ export class SensorSynchronizeDTO {
     @IsNotEmpty()
     @ApiProperty()
     public type: SensorType;
+    // relation auto-referencee : identifiant du sensor parent (device MASTER_COM)
+    @IsOptional()
+    @IsString()
+    public parentId?: string = null;
     @ValidateNested()
     @Type(() => SensorConfigDTO)
     public config: SensorConfigDTO;
@@ -562,6 +667,7 @@ export class SensorSynchronizeDTO {
         sensorModel.description = sensorSynchronizeDTO.description;
         sensorModel.style = sensorSynchronizeDTO.style;
         sensorModel.type = sensorSynchronizeDTO.type;
+        sensorModel.parentId = sensorSynchronizeDTO.parentId ?? null;
         sensorModel.config = sensorSynchronizeDTO.type === SensorType.FORCAST
             ? Object.assign(new ForcastSensorConfigModel(), sensorSynchronizeDTO.config)
             : Object.assign(new ComSensorConfigModel(), sensorSynchronizeDTO.config);
@@ -824,62 +930,6 @@ export class DeviceSynchronizeDTO {
     }
 }
 
-export class PersistenceDTO {
-    @IsBoolean()
-    @ApiProperty({ description: "Si vrai, écriture persistante (EEPROM) plutôt que volatile" })
-    public persist: boolean;
-
-    @IsNumber()
-    @ApiProperty({ description: "Adresse cible pour l'écriture persistante" })
-    public address: number;
-}
-
-export class ModbusTaskParams {
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
-    public length: number;
-
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
-    public scale: number;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
-    public unit: string;
-
-    @IsOptional()
-    @ValidateNested()
-    @Type(() => PersistenceDTO)
-    @ApiProperty({ description: "Configuration de persistance (EEPROM) du paramètre, si applicable" })
-    public persistence?: PersistenceDTO;
-}
-
-export class ComRequestConfigDTO {
-    @IsArray()
-    @ArrayNotEmpty()
-    @IsEnum(ModbusFunctionName, { each: true })
-    @ApiProperty({ description: "Fonction(s) Modbus à exécuter", enum: ModbusFunctionName, isArray: true })
-    public function: ModbusFunctionName[];
-
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
-    public address: number;
-
-    @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: "Désactive la requête sans la supprimer", required: false })
-    public disabled?: boolean;
-
-    @ValidateNested()
-    @Type(() => ModbusTaskParams)
-    @ApiProperty({ description: "Paramètres de la requête (longueur, échelle, unité)" })
-    public params?: ModbusTaskParams;
-}
-
 export class ComRequestDTO {
     @IsOptional()
     @IsNotEmpty()
@@ -929,6 +979,7 @@ export class ComRequestDTO {
             function: dto.config.function,
             address: dto.config.address,
             disabled: dto.config.disabled,
+            done: dto.config.done ?? false,
             params: dto.config.params || undefined
         };
         model.delete = dto.delete ?? false;

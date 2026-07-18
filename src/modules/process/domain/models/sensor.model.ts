@@ -1,8 +1,14 @@
 import { SensorType } from '../interfaces/sensor.interface';
 
+// tous les champs sont optionnels : un sensor COM "racine" utilise cronPattern/comRequestId,
+// un sensor enfant (parentId renseigne) utilise code/scale/unit - la valeur est alors extraite
+// de la lecture du sensor parent (device MASTER_COM) via `code`, pas lue via son propre cron.
 export class ComSensorConfigModel {
-    public cronPattern: string;
-    public comRequestId: string;
+    public comRequestId?: string;
+    public cronPattern?: string;
+    public code?: number;
+    public scale?: number;
+    public unit?: string;
 }
 
 export enum forcastDataName {
@@ -23,6 +29,10 @@ export class SensorModel {
     public style: { bgColor: string; fontColor: string; iconColor: { base: string; icon: string } };
     public type: SensorType;
     public config: ForcastSensorConfigModel | ComSensorConfigModel;
+
+    // relation auto-referencee : un sensor enfant (parentId renseigne) remplit
+    // code/scale/unit sur ComSensorConfigModel plutot que cronPattern/comRequestId.
+    public parentId?: string | null = null;
 
     public value?: number;
     public date?: Date;

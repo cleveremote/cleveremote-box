@@ -283,7 +283,8 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 service.execute(CreateModbusTaskModel())
             ]);
 
-            expect(results).toEqual([undefined, undefined, undefined]);
+            const expectedResult = { function: 'readHoldingRegisters', result: { data: [0, 0] } };
+            expect(results).toEqual([expectedResult, expectedResult, expectedResult]);
             expect(mockModbusClients).toHaveLength(3);
         });
 

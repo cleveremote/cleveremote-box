@@ -129,10 +129,10 @@ describe('CyleModel model', () => {
 
         const struct = cycle.getExecutionStructure(undefined, registry);
         const desiredStruct = [
-            { sequenceId: '11', names: ['16', '26'], duration: 10000 },
-            { sequenceId: '12', names: ['16', '19'], duration: 10000 },
-            { sequenceId: '13', names: ['16', '21'], duration: 10000 },
-            { sequenceId: '14', names: ['16', '20'], duration: 10000 }
+            { sequenceId: '11', names: ['16', '26'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '12', names: ['16', '19'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '13', names: ['16', '21'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '14', names: ['16', '20'], securityConfig: { maxDuration: 10000 } }
         ];
 
         expect(struct).toMatchObject(desiredStruct);
@@ -290,6 +290,6 @@ describe('CyleModel model', () => {
 
         const struct = cycle.getExecutionStructure(undefined, new Map());
 
-        expect(struct).toEqual([{ sequenceId: '11', names: [], duration: 10000 }]);
+        expect(struct).toEqual([{ sequenceId: '11', names: [], securityConfig: { maxDuration: 10000 } }]);
     });
 });

@@ -8,6 +8,12 @@ describe('SensorModel', () => {
         expect(sensor.deletedAt).toBeNull();
     });
 
+    it('should default parentId to null', () => {
+        const sensor = new SensorModel();
+
+        expect(sensor.parentId).toBeNull();
+    });
+
     it('should hold FORCAST-specific config fields when type is FORCAST', () => {
         const sensor = new SensorModel();
         sensor.type = SensorType.FORCAST;
@@ -34,5 +40,22 @@ describe('SensorModel', () => {
         expect(sensor.type).toEqual(SensorType.COM);
         expect(sensor.config.cronPattern).toEqual('*/30 * * * * *');
         expect(sensor.config.comRequestId).toEqual('request-1');
+    });
+
+    it('should hold child-specific config fields (code, scale, unit) when parentId is set', () => {
+        const sensor = new SensorModel();
+        sensor.type = SensorType.COM;
+        sensor.id = '3';
+        sensor.name = 'child sensor';
+        sensor.parentId = 'parent-1';
+        sensor.config = new ComSensorConfigModel();
+        sensor.config.code = 12;
+        sensor.config.scale = 0.1;
+        sensor.config.unit = 'V';
+
+        expect(sensor.parentId).toEqual('parent-1');
+        expect(sensor.config.code).toEqual(12);
+        expect(sensor.config.scale).toEqual(0.1);
+        expect(sensor.config.unit).toEqual('V');
     });
 });

@@ -6,7 +6,7 @@ import { ComRequestRepository } from '@process/infrastructure/repositories/com-r
 import ModbusRTU from "modbus-serial";
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ComRequestConfigModel, ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestConfigModel, ComRequestModel, ModbusExecuteResult, ModbusFunctionName } from '@process/domain/models/com-request.model';
 
 export interface InverterConfigParam {
     param: string;
@@ -32,7 +32,7 @@ export interface DigitalMonitorHandle {
 interface QueueEntry {
     comRequest?: ComRequestModel;
     param?: ComRequestConfigModel;
-    resolve?: () => void;
+    resolve?: (value?: ModbusExecuteResult | void) => void;
     reject?: (err: Error) => void;
     inverterConfig?: { inverterId: string; params: InverterConfigParam[] };
     run?: () => Promise<void>;
@@ -76,8 +76,8 @@ export class ModbusService {
         client.setTimeout(masterConfig.timeout || 2000);
     }
 
-    public execute(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
+    public execute(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
+        return new Promise<ModbusExecuteResult | void>((resolve, reject) => {
             this._queue.push({ comRequest, param, resolve, reject });
             if (!this._isProcessing) this._processQueue();
         });
@@ -85,7 +85,7 @@ export class ModbusService {
 
     public applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this._queue.push({ inverterConfig: { inverterId, params }, resolve, reject });
+            this._queue.push({ inverterConfig: { inverterId, params }, resolve: () => resolve(), reject });
             if (!this._isProcessing) this._processQueue();
         });
     }
@@ -117,15 +117,16 @@ export class ModbusService {
         this._isProcessing = true;
         while (this._queue.length > 0) {
             const entry = this._queue.shift();
+            let result: ModbusExecuteResult | void;
             try {
                 if (entry.run) {
                     await entry.run();
                 } else if (entry.inverterConfig) {
                     await this._applyInverterConfig(entry.inverterConfig.inverterId, entry.inverterConfig.params);
                 } else {
-                    await this._executeComRequest(entry.comRequest, entry.param);
+                    result = await this._executeComRequest(entry.comRequest, entry.param);
                 }
-                entry.resolve?.();
+                entry.resolve?.(result);
             } catch (err) {
                 entry.reject?.(err);
             }
@@ -367,14 +368,14 @@ export class ModbusService {
         };
     }
 
-    private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
-        if (!comRequest) { 
+    private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
+        if (!comRequest) {
             this.logger.error('modbus execute called without comRequest');
         }
-        await this._runComRequest(comRequest, param);
+        return this._runComRequest(comRequest, param);
     }
 
-    private async _runComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<void> {
+    private async _runComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         const taskId = comRequest?._id;
         const resolved = await this._resolveMasterConfig(comRequest.deviceId);
         if (!resolved) {
@@ -409,28 +410,30 @@ export class ModbusService {
 
             const addr = comRequest.config.address;
             const params = comRequest.config.params || null;
-            let result;
 
             // --- Lecture ---
             if (fn.startsWith("read")) {
                 const length = params.length || 1;
-                result = await client[fn](addr, length);
-                if (!result?.data) throw new Error("Aucune donnée reçue");
+                const data = await client[fn](addr, length);
+                client.readHoldingRegisters
+                if (!data?.data) throw new Error("Aucune donnée reçue");
 
                 // readCoils/readDiscreteInputs renvoient des booléens (états ON/OFF), pas des
                 // registres 16 bits : le décodage IEEE754 ne s'applique qu'aux registres.
                 if (fn === ModbusFunctionName.READ_COILS || fn === ModbusFunctionName.READ_DISCRETE_INPUTS) {
-                    this.logger.log({ label: comRequest.name, value: result.data }, 'modbus read result');
+                    this.logger.log({ label: comRequest.name, value: data.data }, 'modbus read result');
                 } else {
-                    const values = this.decodeFloats(result.data, addr, length, params.scale, true);
+                    const values = this.decodeFloats(data.data, addr, length, params.scale, true);
                     this.logger.log({ label: comRequest.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
                 }
+                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
                 const address = param.params?.persistence?.persist ? param.address+param.params?.persistence?.address: param.address;
-                await client[fn](address, param.params.value);
+                const data = await client[fn](address, param.params.value);
                 this.logger.log({ label: comRequest.name, value: param.params.value }, 'modbus write done');
+                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
             }
 
             // --- Fonction non supportée ---

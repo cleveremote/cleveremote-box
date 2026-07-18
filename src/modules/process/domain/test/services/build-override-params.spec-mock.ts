@@ -7,9 +7,10 @@ export interface BuildOverrideParamsCase {
     expected: ComRequestConfigModel;
 }
 
-// buidOverrideParams (ctrl-actuator.strategy.ts, com-actuator.strategy.ts, inverter-device.strategy.ts)
-// share the exact same merge logic: `||`-fallback fields (address/function/disabled/length/scale/
-// unit/value) and a `??`-chained persistence sub-object (override -> existing -> hard default).
+// Test cases for the shared buildOverrideParams util (domain/utils/build-override-params.util.ts),
+// used by ctrl-actuator.strategy.ts, com-actuator.strategy.ts and inverter-device.strategy.ts.
+// It merges `||`-fallback fields (address/function/disabled/length/scale/unit/value) and a
+// `??`-chained persistence sub-object (override -> existing -> hard default).
 export const buildOverrideParamsCases: BuildOverrideParamsCase[] = [
     {
         name: 'the override wins on address/value when both are truthy',

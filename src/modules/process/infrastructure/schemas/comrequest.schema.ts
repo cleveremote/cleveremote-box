@@ -33,6 +33,25 @@ export class ComRequestParams {
 }
 export const ComRequestParamsSchema = SchemaFactory.createForClass(ComRequestParams);
 
+@Schema({ _id: false })
+export class ComRequestConfig {
+    @Prop({ required: true })
+    public address: number;
+
+    @Prop({ type: [String], enum: ModbusFunctionName, default: undefined })
+    public function?: ModbusFunctionName[];
+
+    @Prop({ type: Boolean, default: undefined })
+    public disabled?: boolean;
+
+    @Prop({ type: Boolean, default: false })
+    public done?: boolean;
+
+    @Prop({ type: ComRequestParamsSchema, default: undefined })
+    public params?: ComRequestParams;
+}
+export const ComRequestConfigSchema = SchemaFactory.createForClass(ComRequestConfig);
+
 export type ComRequestDocument = ComRequest & Document;
 
 @Schema({ collection: 'comrequests', timestamps: true })
@@ -60,6 +79,9 @@ export class ComRequest {
 
     @Prop({ default: false })
     public disabled?: boolean;
+
+    @Prop({ default: false })
+    public done?: boolean;
 
     @Prop({ type: ComRequestParamsSchema })
     public params: ComRequestParams;

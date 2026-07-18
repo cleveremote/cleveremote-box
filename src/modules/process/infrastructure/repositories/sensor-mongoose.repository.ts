@@ -52,4 +52,9 @@ export class SensorMongooseRepository {
         return sensors.map(SensorMapper.mapToModel);
     }
 
+    public async findByParentId(parentId: string): Promise<SensorModel[]> {
+        const sensors = await this.sensorModel.find({ parentId, ...NOT_DELETED_FILTER });
+        return sensors.map(SensorMapper.mapToModel);
+    }
+
 }
