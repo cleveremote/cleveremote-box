@@ -39,6 +39,7 @@ import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
 import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 import { buildOverrideParams } from '../utils/build-override-params.util';
+import { ConditionModel } from '../models/condition.model';
 
 @Injectable()
 export class ProcessService {
@@ -598,7 +599,7 @@ export class ProcessService {
         childProcess.cycle = child;
         childProcess.action = ExecutableAction.OFF;
         childProcess.type = ProcessType.FORCE;
-        childProcess.mode = ProcessMode.AUTO;
+        childProcess.mode = ProcessMode.SYSTEM;
         childProcess.sourceCycleId = sourceCycleId;
         await this.execute(childProcess);
     }
@@ -1034,6 +1035,32 @@ export class ProcessService {
             //this.logger.log(`job: ${id} -> next: ${next}`);
         });
         return [];
+    }
+
+    private async checkConditions(conditions: ConditionModel[]) {
+        // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-explicit-any
+        const parser = math.parser();
+
+        const asyncEvery = async (arr: ConditionModel[], predicate: { (condition: any): Promise<any>; (arg0: any): any; }) => {
+            for (const e of arr) {
+                if (!await predicate(e)) return false;
+            }
+            return true;
+        };
+
+        const isVerified = await asyncEvery(conditions, async (condition) => {
+            const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
+            if (!extractedVal) { return false; }
+            const value = condition.elementType === ElementType.SENSOR
+                ? (extractedVal as SensorValueModel).value
+                : (extractedVal as ProcessValueModel).status;
+            if (value === undefined || value === null) { return false; }
+            return parser.evaluate(`(${value === ExecutableStatus.STOPPED ? 0 : 1} ${condition.operator} ${Number(condition.value)})`);
+        });
+
+        if (isVerified) {
+
+        }
     }
 
 }

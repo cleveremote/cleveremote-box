@@ -4,7 +4,7 @@ import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
 import { StructureService } from './configuration.service';
-import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
+import { ExecutableStatus, ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import * as math from 'mathjs';
 import { ScheduleModel } from '../models/schedule.model';
@@ -93,13 +93,13 @@ export class TriggerService {
             }
         })
     }
-   
+
     private _enqueueCheckTrigger(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): boolean {
         if (!!trigger.isCheckInProgress) {
             if (!this.triggerCheckQueue.find(x => x.trigger.id === trigger.id)) {
-                this.triggerCheckQueue.push({ trigger, data }); 
+                this.triggerCheckQueue.push({ trigger, data });
             }
-        } 
+        }
         return !!trigger.isCheckInProgress;
     }
 
@@ -127,15 +127,15 @@ export class TriggerService {
             const value = condition.elementType === ElementType.SENSOR
                 ? (extractedVal as SensorValueModel).value
                 : (extractedVal as ProcessValueModel).status;
-            if (value === undefined || value === null) { return false; }
-            return parser.evaluate(`(${value} ${condition.operator} ${Number(condition.value)})`);
+            if (value === undefined || value === null) { return false; } 
+            return parser.evaluate(`(${value === ExecutableStatus.STOPPED ? 0 : 1} ${condition.operator} ${Number(condition.value)})`);
         });
 
         if (isVerified) {
             this.logger.log({ triggerId: trigger.id }, 'trigger conditions verified, planifying execution');
             const trg = await this.triggerRepository.save({ ...trigger, lastTriggeredAt: currentDate })
-            this.triggers[this.triggers.findIndex(x=>x.id === trigger.id)] =  trg;
-            await this._planifyExecution(trg, data); 
+            this.triggers[this.triggers.findIndex(x => x.id === trigger.id)] = trg;
+            await this._planifyExecution(trg, data);
             return;
         }
 
