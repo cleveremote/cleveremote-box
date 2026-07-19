@@ -54,6 +54,8 @@ export enum TASK {
     RECURSIVE = 'RECURSIVE'
 }
 
+export type SequenceExecutionEntry = { sequenceId: string; names: string[]; securityConfig: SecurityConfig };
+
 export interface IExecutable {
     _id: string;
     name: string;
@@ -64,5 +66,5 @@ export interface IExecutable {
     getModuleIds(): string[];
     getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[];
     exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean;
-    getExecutionStructure(duration: number, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; securityConfig:SecurityConfig }[];
+    getExecutionStructure(duration: number, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[];
 }

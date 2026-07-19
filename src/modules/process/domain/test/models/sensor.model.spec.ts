@@ -19,13 +19,14 @@ describe('SensorModel', () => {
         sensor.type = SensorType.FORCAST;
         sensor.id = '1';
         sensor.name = 'forecast max';
-        sensor.config = new ForcastSensorConfigModel();
-        sensor.config.cronPattern = '0 0 * * *';
-        sensor.config.forcastData = forcastDataName.TEMPERATURE_2M_MAX;
+        const config = new ForcastSensorConfigModel();
+        config.cronPattern = '0 0 * * *';
+        config.forcastData = forcastDataName.TEMPERATURE_2M_MAX;
+        sensor.config = config;
 
         expect(sensor.type).toEqual(SensorType.FORCAST);
-        expect(sensor.config.cronPattern).toEqual('0 0 * * *');
-        expect(sensor.config.forcastData).toEqual(forcastDataName.TEMPERATURE_2M_MAX);
+        expect(config.cronPattern).toEqual('0 0 * * *');
+        expect(config.forcastData).toEqual(forcastDataName.TEMPERATURE_2M_MAX);
     });
 
     it('should hold COM-specific config fields when type is COM', () => {

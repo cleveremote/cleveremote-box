@@ -161,6 +161,17 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
                 'initialization failed'
             );
         });
+
+        it('should still log a wrapped-error entry when the final step rejects with a non-Error value', async () => {
+            modBusService.monitorDigitalOutputs.mockRejectedValue(undefined);
+
+            await expect(service.initialize()).resolves.toBeUndefined();
+
+            expect(logger.error).toHaveBeenCalledWith(
+                { err: undefined, message: undefined, stack: undefined },
+                'initialization failed'
+            );
+        });
     });
 
     describe('seedDefaultValves (via initialize)', () => {
@@ -173,6 +184,13 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             const actuators = await actuatorRepository.get() as ActuatorModel[];
             const valves = actuators.filter((a) => a.type === ActuatorType.CTRL);
             expect(valves).toEqual([]);
+        });
+
+        it('_createDefaultValveConfig should build a CTRL config for the default valve device/type', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const config = (service as any)._createDefaultValveConfig(3);
+
+            expect(config).toEqual(expect.objectContaining({ valveType: 'PROPORTIONAL', channel: 3 }));
         });
     });
 

@@ -25,7 +25,8 @@ import {
     ComRequestConfigDTO,
     ModbusTaskParams,
     PersistenceDTO,
-    IsNumberOrString
+    IsNumberOrString,
+    IsNumberOrNumberArray
 } from '@process/infrastructure/dto/synchronize.dto';
 import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
 import {
@@ -493,6 +494,54 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             const model = ComRequestDTO.mapToComRequestModel(dto);
 
             expect(model.config.params.persistence).toBeUndefined();
+        });
+
+        it('should map a scalar value', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-4', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['writeRegister'], address: 100,
+                    params: Object.assign(new ModbusTaskParams(), { length: 1, scale: 1, unit: '', value: 42 })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.params.value).toEqual(42);
+        });
+
+        it('should map an array value', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-5', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['writeRegisters'], address: 100,
+                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 1, unit: '', value: [1, 2] })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.params.value).toEqual([1, 2]);
+        });
+    });
+
+    describe('IsNumberOrNumberArray validator', () => {
+        const validator = new IsNumberOrNumberArray();
+
+        it('should accept a number', () => {
+            expect(validator.validate(42, null)).toBe(true);
+        });
+
+        it('should accept an array of numbers', () => {
+            expect(validator.validate([1, 2, 3], null)).toBe(true);
+        });
+
+        it('should reject an array containing a non-number', () => {
+            expect(validator.validate([1, '2'], null)).toBe(false);
+        });
+
+        it('should reject a string', () => {
+            expect(validator.validate('42', null)).toBe(false);
         });
     });
 

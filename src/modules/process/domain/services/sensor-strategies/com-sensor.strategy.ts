@@ -36,14 +36,19 @@ export class ComSensorStrategy implements SensorStrategy {
             }));
         }
         const res = await this.modbusService.execute(comRequestData) as ModbusExecuteResult | undefined;
+        const unit = comRequestData.config.params?.unit ?? '';
         return this._extractValues(res).map((value) => ({
             value,
             isFormated: false,
+            unit,
             name: comRequestData.name
         }));
     }
 
     private _extractValues(res: ModbusExecuteResult): number[] {
+        if (!res) {
+            throw new NotImplementedError('ComSensorStrategy: modbus execution returned no result');
+        }
         switch (res.function) {
             case ModbusFunctionName.READ_HOLDING_REGISTERS:
             case ModbusFunctionName.READ_INPUT_REGISTERS:

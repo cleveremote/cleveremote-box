@@ -39,6 +39,17 @@ export class PersistenceDTO {
     public address: number;
 }
 
+@ValidatorConstraint({ name: 'number-or-number-array', async: false })
+export class IsNumberOrNumberArray implements ValidatorConstraintInterface {
+    public validate(value: any, args: ValidationArguments) {
+        return typeof value === 'number' || (Array.isArray(value) && value.every(item => typeof item === 'number'));
+    }
+
+    public defaultMessage(args: ValidationArguments) {
+        return '($value) must be a number or an array of numbers';
+    }
+}
+
 export class ModbusTaskParams {
     @IsNotEmpty()
     @IsNumber()
@@ -54,6 +65,11 @@ export class ModbusTaskParams {
     @IsString()
     @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
     public unit: string;
+
+    @IsOptional()
+    @Validate(IsNumberOrNumberArray)
+    @ApiProperty({ description: "Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)", required: false })
+    public value?: number | number[];
 
     @IsOptional()
     @ValidateNested()

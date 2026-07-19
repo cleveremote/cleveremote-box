@@ -13,6 +13,7 @@ interface MockModbusClient {
     readCoils: jest.Mock;
     readDiscreteInputs: jest.Mock;
     writeRegister: jest.Mock;
+    writeRegisters: jest.Mock;
     close: jest.Mock;
 }
 
@@ -31,6 +32,7 @@ function CreateMockClient(overrides: Partial<MockModbusClient> = {}): MockModbus
         readCoils: jest.fn().mockResolvedValue({ data: new Array(8).fill(false) }),
         readDiscreteInputs: jest.fn().mockResolvedValue({ data: new Array(8).fill(false) }),
         writeRegister: jest.fn().mockResolvedValue({ address: 0, value: 0 }),
+        writeRegisters: jest.fn().mockResolvedValue({ address: 0, length: 0 }),
         close: jest.fn((cb?: () => void) => cb?.()),
         ...overrides
     };
@@ -172,6 +174,31 @@ describe('ModbusService (modbus-serial mocked)', () => {
             await service.execute(CreateModbusTaskModel({ function: ['readCoils', 'writeRegister'], address: 50 }), param);
 
             expect(writeRegister).toHaveBeenCalledWith(50, 42);
+        });
+
+        it('should route an array value to writeRegisters instead of writeRegister', async () => {
+            mockModbusClients.length = 0;
+            const writeRegisters = jest.fn().mockResolvedValue({ address: 50, length: 2 });
+            const writeRegister = jest.fn().mockResolvedValue({ address: 50, value: 42 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeRegisters, writeRegister }));
+            const param: ComRequestConfigModel = { address: 50, function: [], params: { value: [1, 2] } };
+
+            await service.execute(CreateModbusTaskModel({ function: ['writeRegister', 'writeRegisters'], address: 50 }), param);
+
+            expect(writeRegisters).toHaveBeenCalledWith(50, [1, 2]);
+            expect(writeRegister).not.toHaveBeenCalled();
+            expect(logger.log).toHaveBeenCalledWith(expect.objectContaining({ value: [1, 2] }), 'modbus write done');
+        });
+
+        it('should fall back to the only configured write function when an array value has no matching multi-write function', async () => {
+            mockModbusClients.length = 0;
+            const writeRegister = jest.fn().mockResolvedValue({ address: 50, value: 0 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeRegister }));
+            const param: ComRequestConfigModel = { address: 50, function: [], params: { value: [1, 2] } };
+
+            await service.execute(CreateModbusTaskModel({ function: ['writeRegister'], address: 50 }), param);
+
+            expect(writeRegister).toHaveBeenCalledWith(50, [1, 2]);
         });
 
         it('should throw when the number of decoded registers does not match the requested length', async () => {

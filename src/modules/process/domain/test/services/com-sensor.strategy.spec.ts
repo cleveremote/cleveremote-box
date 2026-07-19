@@ -61,4 +61,63 @@ describe('ComSensorStrategy', () => {
 
         await expect(strategy.read(sensor)).rejects.toThrow(NotImplementedError);
     });
+
+    it('should read coils/discrete inputs and map each boolean value to a number', async () => {
+        const sensor = CreateComSensorModel();
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_DISCRETE_INPUTS,
+            result: { data: [true, false] }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(result.map((r) => r.value)).toEqual([1, 0]);
+    });
+
+    it('should default unit to an empty string when the comrequest has no params.unit', async () => {
+        comRequestRepository.get.mockResolvedValue({ name: 'request-1', config: {} });
+        const sensor = CreateComSensorModel();
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_HOLDING_REGISTERS,
+            result: { data: [12] }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(result).toEqual([{ value: 12, isFormated: false, unit: '', name: 'request-1' }]);
+    });
+
+    it('should override the address using config.code and mark the result as formated for a child (parent) sensor', async () => {
+        comRequestRepository.get.mockResolvedValue({ name: 'request-1', config: { address: 100, params: { unit: '°C' } } });
+        const sensor = CreateComSensorModel();
+        (sensor.config as ComSensorConfigModel).code = 5;
+        sensor.parentId = null;
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_HOLDING_REGISTERS,
+            result: { data: [42] }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(modbusService.execute).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'request-1' }),
+            { address: 105, params: { length: 1 } }
+        );
+        expect(result).toEqual([{ value: 42, isFormated: true, unit: '°C', name: 'request-1' }]);
+    });
+
+    it('should default unit to an empty string for the parent-sensor branch when params.unit is absent', async () => {
+        comRequestRepository.get.mockResolvedValue({ name: 'request-1', config: { address: 100 } });
+        const sensor = CreateComSensorModel();
+        (sensor.config as ComSensorConfigModel).code = 5;
+        sensor.parentId = null;
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_HOLDING_REGISTERS,
+            result: { data: [42] }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(result).toEqual([{ value: 42, isFormated: true, unit: '', name: 'request-1' }]);
+    });
 });

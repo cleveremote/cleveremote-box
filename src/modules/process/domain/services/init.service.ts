@@ -11,12 +11,8 @@ import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
 import { ModbusService } from './modbus.service';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
-import { ActuatorType } from '../interfaces/actuator-module.interface';
-import { ModuleStatus } from '../interfaces/structure.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ModbusFunctionName } from '../models/com-request.model';
-import { ComRequestType } from '../interfaces/com-request.interface';
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from './actuator.service';
 
@@ -46,26 +42,6 @@ export class InitService {
 
     public async initialize(): Promise<void> {
         this.logger.log('patch/test-version-watchtowerd1234');
-        // const gpioPin = new Gpio(18, 'in', 'rising', { debounceTimeout: 10 });
-        // let compteurImpulsions = 0;
-        // gpioPin.watch((err, value) => {
-        //     if (err) {
-        //       console.error('Erreur dans la lecture du GPIO', err);
-        //       return;
-        //     }
-
-        //     if (value === 1) {
-        //       // Lorsqu'une impulsion (flanc montant) est détectée
-        //       compteurImpulsions++;
-        //       console.log(`Impulsion détectée! Total des impulsions: ${compteurImpulsions}`);
-        //     }
-        //   });
-
-        //   // Affiche le nombre d'impulsions toutes les secondes
-        //   setInterval(() => {
-        //     console.log(`Impulsions totales : ${compteurImpulsions}`); 
-        //   }, 1000);
-
         const wrap = (name: string, fn: () => Promise<any> | void) =>
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
@@ -79,190 +55,20 @@ export class InitService {
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
-           /*  .then(() => {
-                 return this._processService.applyInverterConfig("inverter-001", [ 
-                
-                     
-                     // { "param": "F05.02", "value": 30 }                
-                     // { "param": "F05.03", "value": 5000 },
-                     // { "param": "F05.04", "value": 2900 },
-                     // { "param": "F05.05", "value": 380 },
-                     // { "param": "F05.06", "value": 100 },
-                     
-                     // { "param": "F01.10", "value": 0 },
-                     // { "param": "F01.35", "value": 1 }, 
-                     
-                     // { "param": "F02.00", "value": 1 }, 
-                     // { "param": "F02.24", "value": 0 }, lié au F01.35 pour cas ou coupure reprise en prenant compte de l'etat actuelle
-                     // { "param": "F02.44", "value": 1 },
-                     // { "param": "F02.43", "value": 0 },
-                      
-                     //  { "param": "F03.00", "value": 50 },
-                     //  { "param": "F03.01", "value": 0 },
-                     //  { "param": "F03.02", "value": 450 },
-                     //  { "param": "F03.03", "value": 10000 },
-                     //  { "param": "F03.04", "value": 1000 },
-                     //  { "param": "F03.19", "value": 0x0000 } 
-                       
-                        
-                     
-////////////
-                       { "param": "F11.00", "value": 6,persist:true}, 
-                       { "param": "F11.03", "value": 2,persist:true },  
-                       { "param": "F11.04", "value": 100,persist:true },
-                       { "param": "F11.05", "value": 100,persist:true }, 
-                       { "param": "F11.08", "value": 700,persist:true },        
-                       { "param": "F11.09", "value": 300,persist:true },        
-                       { "param": "F11.11", "value": 3000, persist: true },     
-                       { "param": "F11.12", "value": 30, persist: true },       
-                       { "param": "F11.13", "value": 0, persist: true },        
-                       { "param": "F11.14", "value": 1500, persist: true },     
-                       { "param": "F11.15", "value": 50, persist: true },       
-                       { "param": "F11.16", "value": 0, persist: true },        
-                       { "param": "F11.17", "value": 2, persist: true },        
-                       { "param": "F11.18", "value": 10, persist: true },       
-                       { "param": "F11.19", "value": 300, persist: true },      
-                       { "param": "F11.24", "value": 100, persist: true },      
-                     //{ "param": "F11.25", "value": 20 },
-                     //{ "param": "F11.26", "value": 1 },
-                     //{ "param": "F11.27", "value": 950 },
-                     //{ "param": "F11.28", "value": 50 },
-                     //{ "param": "F11.29", "value": 1 },
-                     //{ "param": "F11.30", "value": 3400 },
-                     //{ "param": "F11.31", "value": 300 },
-                                       
-                       { "param": "F00.02", "value": 1,persist:true },
-                       { "param": "F00.03", "value": 8,persist:true },
-                       { "param": "F00.11", "value": 4000,persist:true },
-                       { "param": "F00.12", "value": 3000,persist:true },
-                       { "param": "F00.14", "value": 2500,persist:true },
-                       { "param": "F00.15", "value": 2500,persist:true }, 
-                                       
-                       
-
-
-        ])
-
-    })*/
             .then(async () => {
-                // this.modBusService.execute("task-002-bis");
-                // this.modBusService.execute("task-1234", { value: 330 });
-                // this._processService.applyInverterConfig("inverter-001", [
-
-                //     { "param": "F00.11", "value": 4200,persist:true },
-
-
-
-                // ])
-
-                // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
-                // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
-                const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
-                // DO4 = 4e sortie, index 0-based (registres de mode 0x1000-0x1007 et coils 0x0000-0x0007)
-                const DO4_CHANNEL_INDEX = 3;
-                // DI4 = 4e entrée numérique, index 0-based (Read Discrete Inputs, adresses 0x0000-0x0007)
-                const DI4_CHANNEL_INDEX = 3;
-
-
-
-
-                // 4) Surveille en continu l'état des 8 DO et log uniquement les changements
-                //await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID);
-
-                // 1) Configure DO4 en "Toggle mode" (registre de mode = 0x1000 + index canal, valeur 0x0002)
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-do4-set-toggle-mode',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DO4 toggle mode',
-                //     type: [ComRequestType.DIGITAL_OUTPUT],
-                //     config: {
-                //         function: ModbusFunctionName.WRITE_SINGLE_REGISTER,
-                //         address: 0x1000 + DO4_CHANNEL_INDEX,
-                //         params: {}
-                //     }
-                // }, { value: 0x0002 });
-
-                // 2) Actionne DO4 : ON puis OFF (Write Single Coil, adresse 0x0000-0x0007)
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-do4-on',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DO4 ON',
-                //     type: [ComRequestType.DIGITAL_OUTPUT],
-                //     config: {
-                //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
-                //         address: DO4_CHANNEL_INDEX,
-                //         params: {}
-                //     }
-                // }, { value: 1 });
-
-                // Lit l'état de DO4 après le ON (Read Coils, adresse 0x0000-0x0007)
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-do4-read-after-on',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DO4 read (after ON)',
-                //     type: [ComRequestType.DIGITAL_OUTPUT],
-                //     config: {
-                //         function: ModbusFunctionName.READ_COILS,
-                //         address: DO4_CHANNEL_INDEX,
-                //         params: { length: 1 }
-                //     }
+                // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
+                // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
+                // const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
+                // await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
+                //     changes.forEach((change) => {
+                //         this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
+                //             .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
+                //     });
                 // });
 
-                // await new Promise(resolve => setTimeout(resolve, 1000));
-
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-do4-off',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DO4 OFF',
-                //     type: [ComRequestType.DIGITAL_OUTPUT],
-                //     config: {
-                //         function: ModbusFunctionName.WRITE_SINGLE_COIL,
-                //         address: DO4_CHANNEL_INDEX,
-                //         params: {}
-                //     }
-                // }, { value: 0 });
-
-                // // Lit l'état de DO4 après le OFF (Read Coils, adresse 0x0000-0x0007)
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-do4-read-after-off',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DO4 read (after OFF)',
-                //     type: [ComRequestType.DIGITAL_OUTPUT],
-                //     config: {
-                //         function: ModbusFunctionName.READ_COILS,
-                //         address: DO4_CHANNEL_INDEX,
-                //         params: { length: 1 }
-                //     }
-                // });
-
-                // // 3) Lit l'état de DI4 (Read Discrete Inputs, adresse 0x0000-0x0007)
-                // await this.modBusService.testExecuteTask({
-                //     _id: 'io8ch-di4-read',
-                //     deviceId: IO_8CH_DEVICE_ID,
-                //     name: 'IO 8CH - DI4 read',
-                //     type: [ComRequestType.DIGITAL_INPUT],
-                //     config: {
-                //         function: ModbusFunctionName.READ_DISCRETE_INPUTS,
-                //         address: DI4_CHANNEL_INDEX,
-                //         params: { length: 1 }
-                //     }
-                // });
-
-                // Un appui long (5s) n'a pas besoin d'un polling agressif : 500ms suffit très
-                // largement (marge x10 sur le seuil) et réduit la charge sur la passerelle.
-                // await this.modBusService.monitorDigitalInputs(IO_8CH_DEVICE_ID, 500, 8, 5000, ({ channel, heldMs }) => {
-                //     this.logger.log({ channel, heldMs }, 'IO 8CH - long press detected');
-                // });
-                await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
-                    changes.forEach((change) => {
-                        this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
-                            .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
-                    });
-                });
                 const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-               // await this.actuatorService.execute(actuator as ActuatorModel, 50); 
-
-            }) 
+                await this.actuatorService.execute(actuator as ActuatorModel, 50); 
+            })
 
             .catch((error) => {
                 this.logger.error({ err: error, message: error?.message, stack: error?.stack }, 'initialization failed');

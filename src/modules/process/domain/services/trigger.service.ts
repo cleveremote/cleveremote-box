@@ -127,8 +127,9 @@ export class TriggerService {
             const value = condition.elementType === ElementType.SENSOR
                 ? (extractedVal as SensorValueModel).value
                 : (extractedVal as ProcessValueModel).status;
-            if (value === undefined || value === null) { return false; } 
-            return parser.evaluate(`(${value === ExecutableStatus.STOPPED ? 0 : 1} ${condition.operator} ${Number(condition.value)})`);
+            if (value === undefined || value === null) { return false; }
+            const comparedValue = condition.elementType === ElementType.SENSOR ? Number(value) : (value === ExecutableStatus.STOPPED ? 0 : 1);
+            return parser.evaluate(`(${comparedValue} ${condition.operator} ${Number(condition.value)})`);
         });
 
         if (isVerified) {

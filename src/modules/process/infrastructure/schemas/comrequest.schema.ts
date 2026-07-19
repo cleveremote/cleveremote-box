@@ -25,8 +25,8 @@ export class ComRequestParams {
     @Prop()
     public unit?: string;
 
-    @Prop()
-    public value?: number;
+    @Prop({ type: Object })
+    public value?: number | number[];
 
     @Prop({ type: ComRequestPersistenceConfigSchema })
     public persistence?: ComRequestPersistenceConfig;

@@ -12,7 +12,8 @@ import {
     ProcessMode,
     ProcessType,
     CycleType,
-    ConditionsLogic
+    ConditionsLogic,
+    SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel } from '../models/actuator.model';
@@ -33,14 +34,15 @@ import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import * as math from 'mathjs';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
-import { ElementType } from '../models/event.model';
+import { ElementType, EventModel } from '../models/event.model';
 import { type InverterConfigParam, ModbusService } from './modbus.service';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 import { buildOverrideParams } from '../utils/build-override-params.util';
 import { ConditionModel } from '../models/condition.model';
+
+type ProcessReport = { id: string; type: ProcessType; cause: string }[];
 
 @Injectable()
 export class ProcessService {
@@ -79,7 +81,24 @@ export class ProcessService {
         return this.actuatorService.resolve(this.configurationService.structure.getModuleIds());
     }
 
-    public async reset(process: ProcessModel, causes?: { id: string; type: ProcessType; cause: string }[]): Promise<void> {
+    private _buildManualPushButtonReport(process: ProcessModel): ProcessReport {
+        if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.type === ProcessType.FORCE) {
+            return [{ id: process.id, type: process.type, cause: 'manual push button : ' + process.cycle.name }];
+        }
+        return [];
+    }
+
+    private _publishStatusEvent(eventPayload: EventModel, wsData: unknown): Promise<string> {
+        return this.eventRepository.save(eventPayload).then(() => {
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, true)
+                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
+            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, false)
+                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
+            return 'sent';
+        });
+    }
+
+    public async reset(process: ProcessModel, causes?: ProcessReport): Promise<void> {
         const index = this.processList.map(x => x.cycle._id).indexOf(process.cycle._id);
         this._clearQueuedSequences(process);
         // le statut peut etre reserve (IN_PROCCESS) avant que processList ne contienne l'entree
@@ -97,17 +116,6 @@ export class ProcessService {
             // tentative future de l'arreter. Un cycle MODULE repris manuellement/schedule/trigger a
             // un mode different et reste protege (cf. test "actuator still used by another active
             // MODULE cycle").
-            // const ownAutoStartedModules = this.processList.filter((proc) =>
-            //     proc.cycle.type === CycleType.MODULE &&
-            //     proc.cycle.status === ExecutableStatus.IN_PROCCESS &&
-            //     proc.mode === ProcessMode.AUTO &&
-            //     proc.sourceCycleId === process.cycle._id &&
-            //     modules.some((actuator) => proc.cycle.exists(actuator, actuators))
-            // );
-            // for (const ownModule of ownAutoStartedModules) {
-            //     await this.reset(ownModule, [{ id: process.id, type: process.type, cause: 'parent cycle stop : ' + process.cycle.name }]);
-            // }
-
             const modulesToStop = modules
                 .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
@@ -132,7 +140,6 @@ export class ProcessService {
         // unref() : ce rappel differe est "fire and forget", il ne doit pas a lui seul empecher
         // le processus de s'arreter (ex: extinction propre, ou fuite de ce timer dans les tests).
         setTimeout(() => {
-            //this.modBusService.execute("task-1234", { value: 300 });
         }, 20000).unref();
 
     }
@@ -233,23 +240,12 @@ export class ProcessService {
         }
 
         const data = { type: ExecutableType.CYCLE, id: process.cycle._id, status: ExecutableStatus.STOPPED };
-        const pro = this.eventRepository.save({
+        return this._publishStatusEvent({
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
             additionalData: { type: process.mode, value: data.status, status: data.status }
-        });
-        //const process: { id: string; causes: { type: ProcessType; cause: string }[] } = { id: processModel.cycle.id, causes };
-        return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
-            return 'sent';
-        }
-            //test if connected ... to not hang nya
-
-        );
+        }, data);
     }
 
     private async _initialReset(cycleModel: CycleModel): Promise<void> {
@@ -290,12 +286,6 @@ export class ProcessService {
                 queuedSequence.resume();
                 return;
             }
-            // await this.eventRepository.save({
-            //     elementId: process.cycle._id,
-            //     date: new Date(),
-            //     elementType: ElementType.CYCLE,
-            //     additionalData: { type: process.mode, value: process.action }
-            // })
             if (process.cycle.type === CycleType.MODULE && process.mode !== ProcessMode.AUTO) {
                 await this._cascadeStopConflictingCycles(process);
             }
@@ -303,16 +293,12 @@ export class ProcessService {
                 await this._cascadeStopOwningModules(process);
             }
             if (process.action === ExecutableAction.OFF) {
-                let report: { id: string; type: ProcessType; cause: string }[];
+                let report: ProcessReport;
                 if (process.sourceCycleId) {
                     report = [];
                     report.push({ id: process.id, type: process.type, cause: 'stopped by parent : ' + this.configurationService.structure.cycles.find(x => x._id === process.sourceCycleId)?.name });
                 } else {
-
-                    if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.type === ProcessType.FORCE) {
-                        report = [];
-                        report.push({ id: process.id, type: process.type, cause: 'manual push button : ' + process.cycle.name });
-                    }
+                    report = this._buildManualPushButtonReport(process);
                 }
                 if (process.cycle.type === CycleType.GROUP) {
                     await this._stopGroupChildren(process.cycle);
@@ -383,7 +369,7 @@ export class ProcessService {
 
     private async _manageProcessMode(process: ProcessModel): Promise<void> {
         const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
-        const report: { id: string; type: ProcessType; cause: string }[] = [];
+        const report: ProcessReport = [];
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
         if (!conflictedProcesses.length) {
             process.type = ProcessType.FORCE;
@@ -420,7 +406,7 @@ export class ProcessService {
         }
     }
 
-    private async _applyCycleConditionsGate(process: ProcessModel, report: { id: string; type: ProcessType; cause: string }[]): Promise<void> {
+    private async _applyCycleConditionsGate(process: ProcessModel, report: ProcessReport): Promise<void> {
         const isConditionsVerified = await this.checkConditions(process.cycle.conditions, process.cycle.conditionsLogic);
         if (isConditionsVerified) {
             return;
@@ -438,19 +424,13 @@ export class ProcessService {
         process.instance = this._execute(process).subscribe(
             {
                 next: async () => {
-                    const report: { id: string; type: ProcessType; cause: string }[] = [];
+                    const report: ProcessReport = [];
                     report.push({ id: process.id, type: process.type, cause: 'end lifecycle normal stop : ' + process.cycle.name });
                     await this.reset(process, report);
-                    // await this.eventRepository.save({
-                    //     elementId: process.cycle._id,
-                    //     date: new Date(),
-                    //     elementType: ElementType.CYCLE,
-                    //     additionalData: { type: process.mode, value: ExecutableAction.OFF }
-                    // })
                 },
                 error: async (_err) => {
                     this.logger.error({ err: _err }, 'execution error');
-                    const report: { id: string; type: ProcessType; cause: string }[] = [];
+                    const report: ProcessReport = [];
                     report.push({ id: process.id, type: process.type, cause: 'abnormal stop : ' + process.cycle.name + 'detail:=>' + _err });
                     await this.reset(process, report);
                 }
@@ -647,7 +627,7 @@ export class ProcessService {
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
         for (const proc of conflictedProcesses) {
             proc.mode = ProcessMode.SYSTEM; // pour que la regle 1 (_cascadeStopConflictingCycles) s'applique aussi a ces arrets
-            const report: { id: string; type: ProcessType; cause: string }[] = [];
+            const report: ProcessReport = [];
             report.push({ id: proc.id, type: process.type, cause: 'stopped by conflicted cycle : ' + process.cycle.name });
             await this.reset(proc, report);
         }
@@ -672,17 +652,14 @@ export class ProcessService {
         const actuators = await this._resolveActuators();
         const modules = process.cycle.getModules(actuators);
         modules.forEach((module) => {
-            if (module.name !== '23') {
-                this.processList.forEach((proc) => { // and not in confirmation state
-                    const isConflicting = process.type !== ProcessType.CONFIRMATION && proc.type !== ProcessType.CONFIRMATION
-                        && proc.cycle.type !== CycleType.MODULE && proc.cycle.exists(module, actuators)
-                        && !conflictedExecutable.find((x) => x.cycle._id === proc.cycle._id) && process.action !== 'OFF';
-                    if (isConflicting) { //&& (proc.cycle.id !== process.cycle.id)
-                        conflictedExecutable.push(proc);
-                    }
-                })
-            }
-
+            this.processList.forEach((proc) => { // and not in confirmation state
+                const isConflicting = process.type !== ProcessType.CONFIRMATION && proc.type !== ProcessType.CONFIRMATION
+                    && proc.cycle.type !== CycleType.MODULE && proc.cycle.exists(module, actuators)
+                    && !conflictedExecutable.find((x) => x.cycle._id === proc.cycle._id) && process.action !== 'OFF';
+                if (isConflicting) {
+                    conflictedExecutable.push(proc);
+                }
+            });
         });
 
         return conflictedExecutable;
@@ -705,7 +682,7 @@ export class ProcessService {
         );
 
         for (const proc of conflicting) {
-            const report: { id: string; type: ProcessType; cause: string }[] = [];
+            const report: ProcessReport = [];
             report.push({ id: proc.id, type: process.type, cause: 'single module stop  : ' + process.cycle.name });
 
             await this.reset(proc, report);
@@ -729,7 +706,7 @@ export class ProcessService {
         );
 
         for (const proc of owningModules) {
-            const report: { id: string; type: ProcessType; cause: string }[] = [];
+            const report: ProcessReport = [];
             report.push({ id: proc.id, type: process.type, cause: 'parent cycle stop : ' + process.cycle.name });
 
             await this.reset(proc, report);
@@ -766,12 +743,7 @@ export class ProcessService {
 
     private _execute(process: ProcessModel): Observable<void> {
         if (process.action === ExecutableAction.OFF) {
-            let report: { id: string; type: ProcessType; cause: string }[] = [];
-            if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.type === ProcessType.FORCE) {
-                report = [];
-                report.push({ id: process.id, type: process.type, cause: 'manual push button : ' + process.cycle.name });
-            }
-            return from(this.reset(process, report));
+            return from(this.reset(process, this._buildManualPushButtonReport(process)));
         }
         return from(this._resolveActuators()).pipe(
             mergeMap((actuators) => this._executeWithActuators(process, actuators))
@@ -785,16 +757,12 @@ export class ProcessService {
         const executionLst = process.cycle.getExecutionStructure(process.duration, actuators);
         // regle 2 : seul un cycle CYCLE en cours d'execution pilote son(ses) cycle(s) MODULE au fil de l'eau
         const sourceCycleId = ([CycleType.CYCLE, CycleType.MODULE].includes(process.cycle.type)) ? process.cycle._id : undefined;
-        let obs: Observable<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }> =
-            ProcessService._ofNull<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }>()
+        let obs: Observable<SequenceExecutionEntry> =
+            ProcessService._ofNull<SequenceExecutionEntry>()
                 .pipe(tap(async () => {
                     process.cycle.status = ExecutableStatus.IN_PROCCESS;
                     this.processList.push(process);
-                    let report: { id: string; type: ProcessType; cause: string }[] = [];
-                    if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.type === ProcessType.FORCE) {
-                        report = [];
-                        report.push({ id: process.id, type: process.type, cause: 'manual push button : ' + process.cycle.name });
-                    }
+                    const report = this._buildManualPushButtonReport(process);
 
                     await this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, report);
                 }));
@@ -827,13 +795,13 @@ export class ProcessService {
     }
 
     private _createExecObs(
-        previousSeq: { sequenceId: string; names: string[]; securityConfig: SecurityConfig },
-        currentSeq: { sequenceId: string; names: string[]; securityConfig: SecurityConfig },
+        previousSeq: SequenceExecutionEntry,
+        currentSeq: SequenceExecutionEntry,
         modules: IActuatorModule[],
         timings: Map<string, ModuleTimingConfig>,
         mode: ProcessMode,
         sourceCycleId?: string
-    ): Observable<{ sequenceId: string; names: string[]; securityConfig: SecurityConfig }> {
+    ): Observable<SequenceExecutionEntry> {
         const ref: { sequenceId: string; flag: Subject<unknown>; resume?: () => void } = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         return of(previousSeq?.names || []).pipe(
             mergeMap((previousNames) => {
@@ -869,31 +837,9 @@ export class ProcessService {
         );
     }
 
-    private async _checkSequenceCondition(sequenceId: string): Promise<boolean> {
+    private _checkSequenceCondition(sequenceId: string): Promise<boolean> {
         const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
-        const parser = math.parser();
-
-        const asyncEvery = async (arr: any[], predicate: { (condition: any): Promise<any>; (arg0: any): any; }) => {
-            for (const e of arr) {
-                if (!await predicate(e)) return false;
-            }
-            return true;
-        };
-
-        if (!sequence?.securityConfig?.conditions?.length) {
-            return true;
-        }
-
-        return await asyncEvery(sequence.securityConfig.conditions, async (condition) => {
-            const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
-            if (!extractedVal) { return false; }
-            const value = condition.elementType === ElementType.SENSOR
-                ? (extractedVal as SensorValueModel).value
-                : (extractedVal as ProcessValueModel).status;
-            if (value === undefined || value === null) { return false; }
-            return parser.evaluate(`(${value==="STOPPED"?0:1} ${condition.operator} ${condition.value})`);
-        });
-
+        return this.checkConditions(sequence?.securityConfig?.conditions);
     }
 
     private async _switchProcess(previousData: { id: string; names: string[]; duration: number },
@@ -940,7 +886,9 @@ export class ProcessService {
     }
 
     // eslint-disable-next-line complexity
-    private async _processProgress(id: string, action: ExecutableAction, mode: ProcessMode | 'SYSTEM', causes?: { id: string; type: ProcessType; cause: string }[], duration?: number): Promise<string> {
+    private async _processProgress(
+        id: string, action: ExecutableAction, mode: ProcessMode, causes?: ProcessReport, duration?: number
+    ): Promise<string> {
         const seqFound = this.configurationService.sequences.find(seq => seq._id === id);
         const cycFound = this.configurationService.structure.cycles.find(cyc => cyc._id === id);
         if (!seqFound && !cycFound) {
@@ -948,7 +896,6 @@ export class ProcessService {
         }
         const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const startedAt = new Date();
-        //const endedAt = action === ExecutableAction.ON && duration ? startedAt.setMilliseconds(startedAt.getMilliseconds() + duration) : undefined;
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
         let data = { type, id, status, startedAt, duration };
         if (type === ExecutableType.SEQUENCE) {
@@ -957,8 +904,6 @@ export class ProcessService {
                 const customStack = customStacks[index];
                 const comRequest: ComRequestModel = await this.comRequestRepository.get(customStack.comRequestId) as ComRequestModel;
                 this.modBusService.execute(comRequest, action === ExecutableAction.ON ? customStack.params : customStack.defaultParams);
-                //{ value: 96}
-                //{ "param": "F00.11", "value": 4200,persist:true }, 
             }
 
             seqFound.status = status;
@@ -972,7 +917,7 @@ export class ProcessService {
             this.triggerService.onElementValueChanged.next(data);
         }
 
-        const pro = this.eventRepository.save({
+        return this._publishStatusEvent({
             elementId: id,
             date: startedAt,
             elementType: type === ExecutableType.SEQUENCE ? ElementType.SEQUENCE : ElementType.CYCLE,
@@ -984,45 +929,11 @@ export class ProcessService {
                 duration: data.duration,
                 causes: causes
             }
-        });
-
-        // if (cycFound) {
-        //      this.triggerService.onElementValueChanged.next(sensorValue);
-        //     const st = this.configurationService.deviceListeners.find(x => x.deviceId === cycFound._id);
-        //     if (st) {
-        //         //st.subject.next(data); // pour ecouter les trigger
-        //     }
-
-        // }
-
-        return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
-            return 'sent';
-        });
+        }, data);
     }
     public async applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
         return this.modBusService.applyInverterConfig(inverterId, params);
     }
-
-    // private percentToFrequencyRegister(taskId, percent) {
-    //     const MAX_HZ = 50;
-    //     const SCALE = 100; // 0.01 Hz
-
-    //     // sécurité
-    //     if (percent < 0) percent = 0;
-    //     if (percent > 100) percent = 100;
-
-    //     // calcul fréquence
-    //     const frequencyHz = (percent / 100) * MAX_HZ;
-
-    //     // valeur registre Modbus
-    //     const registerValue = Math.round(frequencyHz * SCALE);
-    //     this.modBusService.execute(taskId, { value: registerValue, adress: 0 });
-
-    // }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
         const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };
@@ -1030,19 +941,12 @@ export class ProcessService {
         if (cycFound) {
             cycFound.status = ExecutableStatus.WAITTING_CONFIRMATION;
         }
-        const pro = this.eventRepository.save({
+        return this._publishStatusEvent({
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
             additionalData: { type: processModel.mode, value: data.status, status: data.status, causes: causes }
-        });
-        return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
-            return 'sent';
-        });
+        }, data);
     }
 
     private _needSequenceConfirmation(sequenceId: string, mode: ProcessMode): Promise<string> {
@@ -1053,38 +957,16 @@ export class ProcessService {
         if (sequence) {
             sequence.status = ExecutableStatus.WAITTING_CONFIRMATION;
         }
-        const pro = this.eventRepository.save({
+        return this._publishStatusEvent({
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.SEQUENCE,
             additionalData: { type: mode, value: data.status, status: data.status, causes }
-        });
-        return pro.then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, true)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(data) }, false)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
-            return 'sent';
-        });
+        }, data);
     }
 
     private static _ofNull<T>(): Observable<T> {
         return of(null as T);
-    }
-
-    private _getConflictedSchedules(): ScheduleModel[] {
-        const jobs = this.schedulerRegistry.getCronJobs();
-        jobs.forEach((value, id) => {
-            let next;
-            try {
-                next = value.nextDate().toJSDate();
-            } catch (e) {
-                // les job  deja execute ou qui ne seront plus execute sont là
-                next = 'error: next fire date is in the past!';
-            }
-            //this.logger.log(`job: ${id} -> next: ${next}`);
-        });
-        return [];
     }
 
     private async checkConditions(conditions: ConditionModel[], logic: ConditionsLogic = ConditionsLogic.AND): Promise<boolean> {

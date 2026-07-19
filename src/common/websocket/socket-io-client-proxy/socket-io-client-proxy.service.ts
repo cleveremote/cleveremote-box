@@ -9,11 +9,11 @@ export class SocketIoClientProxyService extends ClientProxy {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async connect(): Promise<any> {
-        // this._client.getSocket(true);
+        // no-op: required ClientProxy override, connection is managed by SocketIoClientProvider
     }
 
     public async close(): Promise<void> {
-       // this._client.getSocket(true).disconnect();
+        // no-op: required ClientProxy override, connection is managed by SocketIoClientProvider
     }
 
     /**
@@ -23,7 +23,7 @@ export class SocketIoClientProxyService extends ClientProxy {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async dispatchEvent(packet: ReadPacket<string>): Promise<any> {
-        // return this._emitMessage(packet,false);
+        // no-op: required ClientProxy override, not used by this proxy
     }
 
     public async sendMessage(packet: ReadPacket<string>,isLocal:boolean): Promise<string> {

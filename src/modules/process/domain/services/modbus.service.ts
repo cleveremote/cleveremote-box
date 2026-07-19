@@ -179,17 +179,6 @@ export class ModbusService {
         return result;
     }
 
-
-
-    // /**
-    //  * Exécute directement une tâche Modbus à partir d'un ComRequestModel déjà construit,
-    //  * sans passer par le repository (utile pour tester manuellement une configuration
-    //  * avant de la persister).
-    //  */
-    // public async testExecuteTask(comRequest: ComRequestModel, param?: { value: number, adress: number }): Promise<void> {
-    //     return this._enqueue(() => this._runComRequest(comRequest, param));
-    // }
-
     /**
      * Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
      * `length` premières sorties (Read Coils, adresses 0x0000-0x0007). Ne logue qu'au moment où
@@ -404,7 +393,16 @@ export class ModbusService {
             this.logger.log({ task: comRequest.name }, 'executing modbus task');
 
             const isWrite = param !== undefined;
-            const fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
+            let fn: string;
+            if (isWrite && Array.isArray(param.params?.value)) {
+                // écriture multiple : un tableau de valeurs doit passer par writeCoils/writeRegisters,
+                // pas par writeCoil/writeRegister (qui n'acceptent qu'une valeur unique).
+                fn = comRequest.config.function.find(f =>
+                    f === ModbusFunctionName.WRITE_MULTIPLE_COILS || f === ModbusFunctionName.WRITE_MULTIPLE_REGISTERS
+                ) as string || comRequest.config.function.find(f => f.startsWith('write')) as string;
+            } else {
+                fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
+            }
             if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? "d'écriture" : "de lecture"} configurée pour cette tâche`);
             if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
 

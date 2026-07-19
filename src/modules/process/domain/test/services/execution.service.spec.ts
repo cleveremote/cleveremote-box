@@ -1,3 +1,4 @@
+import { BehaviorSubject } from 'rxjs';
 import { Connection } from 'mongoose';
 import { SchedulerRegistry, ScheduleModule } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
@@ -129,7 +130,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let wsService: { sendMessage: jest.Mock };
     let valueRepository: { getDeviceValue: jest.Mock };
     let eventRepository: { save: jest.Mock; getLast: jest.Mock; getByDeviceAndDateRange: jest.Mock };
-    let triggerService: { setPaused: jest.Mock };
+    let triggerService: { setPaused: jest.Mock; onElementValueChanged: BehaviorSubject<unknown> };
     let scheduleService: { setPaused: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: ProcessService;
@@ -212,7 +213,10 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             getLast: jest.fn().mockResolvedValue(null),
             getByDeviceAndDateRange: jest.fn().mockResolvedValue([])
         };
-        triggerService = { setPaused: jest.fn().mockImplementation((trigger) => Promise.resolve(trigger)) };
+        triggerService = {
+            setPaused: jest.fn().mockImplementation((trigger) => Promise.resolve(trigger)),
+            onElementValueChanged: new BehaviorSubject<unknown>(null)
+        };
         scheduleService = { setPaused: jest.fn().mockImplementation((schedule) => Promise.resolve(schedule)) };
         logger = CreateLoggerMock();
 

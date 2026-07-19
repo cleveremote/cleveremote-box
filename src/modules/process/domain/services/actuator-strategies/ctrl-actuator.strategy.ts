@@ -204,14 +204,14 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
      * en broadcast (unit id 0) pour ne pas dépendre de l'adresse actuellement configurée.
      */
     public async testSetDeviceAddress(deviceId: string, newAddress: number): Promise<void> {
-        const client = await this._connectClient(deviceId, BROADCAST_UNIT_ID);
+        const client = await this._connectClient(deviceId, 0);
         try {
             await client.writeRegister(AO8CH_DEVICE_ADDRESS_REGISTER, newAddress);
             this.logger.log({ deviceId, newAddress }, 'waveshare AO8CH device address written (broadcast)');
         } catch (err) {
             this.logger.error({ deviceId, newAddress, err: err.message }, 'valve device address write error');
             throw err;
-        } finally {
+        } finally { 
             client.close(() => this.logger.log({ deviceId }, 'valve modbus connection closed'));
         }
     }
@@ -243,7 +243,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
             this.logger.error({ deviceId, channel, err: err.message }, 'valve output write error');
             const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
             if (err.modbusCode !== undefined) return;
-            if (!networkCodes.includes(err.code)) throw err;
+            if (!networkCodes.includes(err.code)) throw err; 
         } finally {
             client.close(() => this.logger.log({ deviceId, channel }, 'valve modbus connection closed'));
         }

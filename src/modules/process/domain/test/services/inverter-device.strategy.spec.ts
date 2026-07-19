@@ -143,6 +143,29 @@ describe('InverterDeviceStrategy', () => {
         expect(comRequestRepository.save).toHaveBeenCalledWith(comRequest);
     });
 
+    it('reset() should log the error and not persist done when execute fails', async () => {
+        const device = CreateInverterDeviceModel();
+        const comRequest: ComRequestModel = {
+            _id: 'com-request-1',
+            deviceId: device._id,
+            name: 'inverter-write',
+            type: [ComRequestType.INVERTER_WRITE],
+            config: { address: 10, function: [], params: { value: 42 } },
+            deletedAt: null
+        } as ComRequestModel;
+        comRequestRepository.getComRequestsByDeviceIdAndTypes.mockResolvedValue([comRequest]);
+        modbusService.execute.mockRejectedValueOnce(new Error('modbus write failed'));
+
+        await strategy.reset(device);
+
+        expect(comRequest.config.done).toBeFalsy();
+        expect(comRequestRepository.save).not.toHaveBeenCalled();
+        expect(logger.error).toHaveBeenCalledWith(
+            expect.objectContaining({ comRequestId: comRequest._id }),
+            'inverter reset write failed'
+        );
+    });
+
     it('should execute an override for each INVERTER_WRITE comRequest of the device', async () => {
         const device = CreateInverterDeviceModel();
         const comRequest: ComRequestModel = {

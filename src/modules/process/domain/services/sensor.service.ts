@@ -76,8 +76,8 @@ export class SensorService {
                 for (let index = 0; index < children.length; index++) {
                     const childSensor = children[index];
                     const config = childSensor.config as ComSensorConfigModel;
-                    const value = +(results[config.code][0].value * (config.scale ?? 1)).toFixed(3);
-                    this.emitReceivedData(sensor,value);
+                    const value = +(results[config.code].value * (config.scale ?? 1)).toFixed(3);
+                    this.emitReceivedData(childSensor,value);
                 }
             } else {
                 for (const result of results) {

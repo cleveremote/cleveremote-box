@@ -4,15 +4,14 @@ import {
     ExecutionMode,
     CycleType,
     IExecutable,
-    ProcessMode
+    ProcessMode,
+    SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
 import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ScheduleModel } from './schedule.model';
 import { ModuleTimingConfig, SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
-import { ComRequestConfigModel } from './com-request.model';
-import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 
 export interface ChildCycleConfig {
     order: number;
@@ -25,13 +24,6 @@ export interface ChildCycleConfig {
 export interface ChildCycleRef {
     cycleId: string;
     config: ChildCycleConfig;
-}
-
-export interface ExecutionStructure {
-    sequenceId: string;
-    names: string[],
-    duration:number,
-    customStacks:{ comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel }[]
 }
 
 export class CycleModel implements IExecutable {
@@ -51,7 +43,7 @@ export class CycleModel implements IExecutable {
     public conditions?: ConditionModel[] = [];
     public conditionsLogic?: ConditionsLogic = ConditionsLogic.AND;
     public parentCycleId?: string = null;
-    public childCycles?: ChildCycleRef[] = []; 
+    public childCycles?: ChildCycleRef[] = [];
 
     public createdAt?: Date;
     public updatedAt?: Date;
@@ -89,19 +81,17 @@ export class CycleModel implements IExecutable {
         return timings;
     }
 
-    public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): { sequenceId: string; names: string[]; securityConfig:SecurityConfig       }[] {
-        const executionLst: { sequenceId: string; names: string[]; securityConfig:SecurityConfig }[] = [];
+    public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[] {
+        const executionLst: SequenceExecutionEntry[] = [];
         const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         sequences.forEach((sequence) => {
             const sequenceId = sequence._id;
             const names = sequence.getActuatorIds()
                 .map((moduleId) => actuatorRegistry.get(moduleId)?.name)
                 .filter((name): name is string => name !== undefined);
-            const duration = overrideDuration || sequence.securityConfig.maxDuration;
-            
             sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
-            const securityConfig = sequence.securityConfig; 
-            
+            const securityConfig = sequence.securityConfig;
+
             executionLst.push({ sequenceId, names, securityConfig });
         });
         return executionLst;

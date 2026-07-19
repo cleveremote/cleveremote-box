@@ -3,6 +3,7 @@ import { ComRequestkMongooseRepository } from '@process/infrastructure/repositor
 import { ComRequest, ComRequestSchema } from '@process/infrastructure/schemas/comrequest.schema';
 import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 
 function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
@@ -206,5 +207,115 @@ describe('ComRequestkMongooseRepository.findByDeviceIdAndTypes (integration mong
         const result = await repository.findByDeviceIdAndTypes('device-1', []);
 
         expect(result).toEqual([]);
+    });
+});
+
+describe('ComRequestkMongooseRepository CRUD (integration mongodb-memory-server)', () => {
+    let mongod: Awaited<ReturnType<typeof StartMongoMemory>>['mongod'];
+    let connection: Connection;
+    let repository: ComRequestkMongooseRepository;
+
+    beforeAll(async () => {
+        ({ mongod, connection } = await StartMongoMemory());
+    }, 120000);
+
+    afterAll(async () => {
+        await StopMongoMemory(mongod, connection);
+    });
+
+    beforeEach(async () => {
+        await connection.collection('comrequests').deleteMany({});
+        const comRequestModel = connection.model(ComRequest.name, ComRequestSchema);
+        repository = new ComRequestkMongooseRepository(comRequestModel as never, CreateLoggerMock() as never);
+    });
+
+    function CreateComRequestModel(overrides: Partial<ComRequestModel>): ComRequestModel {
+        return Object.assign(new ComRequestModel(), {
+            deviceId: 'device-1',
+            name: 'req',
+            type: [ComRequestType.ANALOG_INPUT],
+            config: {
+                function: [ModbusFunctionName.READ_INPUT_REGISTERS],
+                address: 10,
+                params: {}
+            },
+            ...overrides
+        });
+    }
+
+    describe('update', () => {
+        it('should update an existing comrequest', async () => {
+            const created = await repository.create(CreateComRequestModel({ name: 'original' }));
+
+            const updated = await repository.update(created._id, CreateComRequestModel({ name: 'renamed' }));
+
+            expect(updated.name).toEqual('renamed');
+        });
+
+        it('should throw ElementNotFoundExeception when the comrequest does not exist', async () => {
+            await expect(repository.update('missing-id', CreateComRequestModel({}))).rejects.toThrow(ElementNotFoundExeception);
+        });
+    });
+
+    describe('upsert', () => {
+        it('should insert a new comrequest when the id does not exist yet', async () => {
+            const upserted = await repository.upsert('new-id', CreateComRequestModel({ name: 'upserted' }));
+
+            expect(upserted._id).toEqual('new-id');
+            expect(upserted.name).toEqual('upserted');
+        });
+    });
+
+    describe('findById', () => {
+        it('should return the comrequest when found and not deleted', async () => {
+            const created = await repository.create(CreateComRequestModel({}));
+
+            expect((await repository.findById(created._id))._id).toEqual(created._id);
+        });
+
+        it('should return null when not found', async () => {
+            expect(await repository.findById('missing-id')).toBeNull();
+        });
+    });
+
+    describe('findAll', () => {
+        it('should return only non-deleted comrequests', async () => {
+            const kept = await repository.create(CreateComRequestModel({ name: 'kept' }));
+            const deleted = await repository.create(CreateComRequestModel({ name: 'deleted' }));
+            await repository.delete(deleted._id);
+
+            const all = await repository.findAll();
+
+            expect(all.map((t) => t._id)).toEqual([kept._id]);
+        });
+    });
+
+    describe('delete', () => {
+        it('should throw ElementNotFoundExeception when the comrequest does not exist', async () => {
+            await expect(repository.delete('missing-id')).rejects.toThrow(ElementNotFoundExeception);
+        });
+    });
+
+    describe('findByDeviceIdAndTypes', () => {
+        it('should return an empty array when types is undefined', async () => {
+            await repository.create(CreateComRequestModel({ deviceId: 'device-1' }));
+
+            const result = await repository.findByDeviceIdAndTypes('device-1', undefined as never);
+
+            expect(result).toEqual([]);
+        });
+    });
+
+    describe('migrateMissingType (function stored as an array)', () => {
+        it('should backfill type when the legacy document stores function as an array', async () => {
+            await connection.collection('comrequests').insertOne({
+                _id: 'req-array', connectionId: 'device-1', function: ['writeCoil'], label: 'DO1', address: 0, deletedAt: null
+            } as never);
+
+            await repository.migrateMissingType();
+
+            const doc = await connection.collection('comrequests').findOne({ _id: 'req-array' as never });
+            expect(doc.type).toEqual(['DIGITAL_OUTPUT']);
+        });
     });
 });

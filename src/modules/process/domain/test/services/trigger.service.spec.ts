@@ -21,6 +21,7 @@ import { ConditionModel } from '@process/domain/models/condition.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ElementType } from '@process/domain/models/event.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
+import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateTriggerModel } from './trigger.spec-mock';
 
@@ -335,6 +336,12 @@ describe('TriggerService', () => {
             await Flush(100);
             expect(service.triggerCheckQueue).toContainEqual(expect.objectContaining({ trigger }));
 
+            // le trigger est deja en queue : un troisieme declenchement pendant que le check est
+            // toujours en cours doit trouver l'entree existante (find() non vide) et ne pas la dupliquer.
+            service.onElementValueChanged.next(CreateSensorValue({ value: 2 }));
+            await Flush(100);
+            expect(service.triggerCheckQueue.filter((x) => x.trigger === trigger)).toHaveLength(1);
+
             resolveFirstCheck(CreateSensorValue({ value: 2 }));
             await Flush();
 
@@ -434,6 +441,22 @@ describe('TriggerService', () => {
             expect(valueRepository.getDeviceValue).toHaveBeenCalled();
         });
 
+        it('should allow checking regardless of recency when trigger.delay is undefined (NaN falls back to 0)', async () => {
+            const trigger = CreateTriggerModel({
+                lastTriggeredAt: new Date(),
+                delay: undefined,
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
+
+            service.onElementValueChanged.next(CreateSensorValue({ value: 10 }));
+            await Flush();
+
+            expect(valueRepository.getDeviceValue).toHaveBeenCalled();
+        });
+
         it('should not verify the condition when the device value resolves to undefined', async () => {
             const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
             configurationService.triggers = [trigger];
@@ -453,6 +476,20 @@ describe('TriggerService', () => {
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue({ status: 1 } as never);
+
+            service.onElementValueChanged.next({ id: 'cycle-x', value: 10 } as never);
+            await Flush();
+
+            expect(schedulerRegistry.getCronJobs().size).toEqual(1);
+        });
+
+        it('should compare a STOPPED status as 0 for a non-SENSOR condition element type', async () => {
+            const trigger = CreateTriggerModel({
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 0 })]
+            });
+            configurationService.triggers = [trigger];
+            service.initilize();
+            valueRepository.getDeviceValue.mockResolvedValue({ status: ExecutableStatus.STOPPED } as never);
 
             service.onElementValueChanged.next({ id: 'cycle-x', value: 10 } as never);
             await Flush();

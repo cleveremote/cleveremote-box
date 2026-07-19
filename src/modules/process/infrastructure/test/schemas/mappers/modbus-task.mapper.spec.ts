@@ -13,7 +13,10 @@ describe('ModbusTaskMapper', () => {
 
         expect(model).toEqual(expect.objectContaining({
             _id: 'task-1', deviceId: 'conn-1', name: 'task',
-            config: { function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 100, disabled: undefined, params: { length: 2, scale: 0.1, unit: '°C' } }
+            config: {
+                function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 100, disabled: undefined, done: false,
+                params: { length: 2, scale: 0.1, unit: '°C' }
+            }
         }));
     });
 
@@ -28,5 +31,18 @@ describe('ModbusTaskMapper', () => {
         expect(schema).toEqual(expect.objectContaining({
             deviceId: 'conn-1', address: 50, function: [ModbusFunctionName.WRITE_SINGLE_REGISTER]
         }));
+    });
+
+    it('should carry an array value through both mapping directions', () => {
+        const document = {
+            _id: 'task-1', deviceId: 'conn-1', name: 'task',
+            function: [ModbusFunctionName.WRITE_MULTIPLE_REGISTERS], address: 50, params: { value: [1, 2, 3] }
+        } as unknown as ComRequestDocument;
+
+        const model = ModbusTaskMapper.mapToModel(document);
+        expect(model.config.params).toEqual(expect.objectContaining({ value: [1, 2, 3] }));
+
+        const schema = ModbusTaskMapper.mapToSchema(model);
+        expect(schema.params).toEqual(expect.objectContaining({ value: [1, 2, 3] }));
     });
 });

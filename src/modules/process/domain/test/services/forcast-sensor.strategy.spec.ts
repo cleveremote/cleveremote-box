@@ -6,9 +6,10 @@ import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategie
 function CreateForcastSensorModel(forcastData: forcastDataName): SensorModel {
     const sensor = new SensorModel();
     sensor.type = SensorType.FORCAST;
-    sensor.config = new ForcastSensorConfigModel();
-    sensor.config.cronPattern = '0 0 * * *';
-    sensor.config.forcastData = forcastData;
+    const config = new ForcastSensorConfigModel();
+    config.cronPattern = '0 0 * * *';
+    config.forcastData = forcastData;
+    sensor.config = config;
     return sensor;
 }
 

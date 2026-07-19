@@ -20,11 +20,6 @@ export class AuthenticationService {
 
     private async _managePassword(): Promise<AuthenticationModel> {
         const salt = bcrypt.genSaltSync(13);
-        // const palainPassword = generator.generate({
-        //     length: 13,
-        //     numbers: true,
-        //     symbols: true
-        // });
         const password = bcrypt.hashSync(this._config.get('INITIAL_PASSWORD'), salt);
         const login: string = this._getSerial();
         return { id: login, login, password }; 

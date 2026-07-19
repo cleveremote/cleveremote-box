@@ -12,9 +12,10 @@ function CreateSensorModel(overrides: Partial<SensorModel> = {}): SensorModel {
     sensor.id = 'sensor-1';
     sensor.name = 'sensor';
     sensor.type = SensorType.FORCAST;
-    sensor.config = new ForcastSensorConfigModel();
-    sensor.config.cronPattern = '*/30 * * * * *';
-    sensor.config.forcastData = forcastDataName.TEMPERATURE_2M_MAX;
+    const config = new ForcastSensorConfigModel();
+    config.cronPattern = '*/30 * * * * *';
+    config.forcastData = forcastDataName.TEMPERATURE_2M_MAX;
+    sensor.config = config;
     return Object.assign(sensor, overrides);
 }
 
@@ -38,7 +39,7 @@ describe('SensorService', () => {
     let configurationService: { structure: { sensors: SensorModel[] } };
     let triggerService: { onElementValueChanged: { next: jest.Mock } };
     let wsService: { sendMessage: jest.Mock };
-    let sensorRepository: { get: jest.Mock };
+    let sensorRepository: { get: jest.Mock; getChildren: jest.Mock };
     let forcastStrategy: SensorStrategy;
     let comStrategy: SensorStrategy;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -60,7 +61,7 @@ describe('SensorService', () => {
         configurationService = { structure: { sensors: [] } };
         triggerService = { onElementValueChanged: { next: jest.fn() } };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
-        sensorRepository = { get: jest.fn().mockResolvedValue([]) };
+        sensorRepository = { get: jest.fn().mockResolvedValue([]), getChildren: jest.fn().mockResolvedValue([]) };
         forcastStrategy = { type: SensorType.FORCAST, read: jest.fn().mockResolvedValue([{ value: 25, isFormated: true, unit: '°C', name: 'sensor' }]) };
         comStrategy = { type: SensorType.COM, read: jest.fn().mockRejectedValue(new NotImplementedError('not implemented')) };
         logger = CreateLoggerMock();
@@ -254,6 +255,40 @@ describe('SensorService', () => {
 
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ sensorId: 'unsupported-type-sensor' }), 'sensor read failed');
             schedulerRegistry.getCronJob('unsupported-type-sensor').stop();
+        });
+
+        it('should compute a scaled value from the parent read results for each child sensor', async () => {
+            const sensor = CreateComSensorModel({ id: 'cron-sensor-6' });
+            const child = CreateComSensorModel({ id: 'child-a', parentId: 'cron-sensor-6' });
+            (child.config as ComSensorConfigModel).code = 0;
+            (child.config as ComSensorConfigModel).scale = 2;
+            sensorRepository.getChildren.mockResolvedValue([child]);
+            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-6').fireOnTick();
+
+            expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'child-a', value: 20 })
+            );
+            schedulerRegistry.getCronJob('cron-sensor-6').stop();
+        });
+
+        it('should default the child scale to 1 when not configured', async () => {
+            const sensor = CreateComSensorModel({ id: 'cron-sensor-7' });
+            const child = CreateComSensorModel({ id: 'child-b', parentId: 'cron-sensor-7' });
+            (child.config as ComSensorConfigModel).code = 0;
+            (child.config as ComSensorConfigModel).scale = undefined;
+            sensorRepository.getChildren.mockResolvedValue([child]);
+            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-7').fireOnTick();
+
+            expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'child-b', value: 10 })
+            );
+            schedulerRegistry.getCronJob('cron-sensor-7').stop();
         });
     });
 

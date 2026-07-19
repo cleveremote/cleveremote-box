@@ -64,7 +64,7 @@ export class ComRequestConfigModel {
         length?: number,
         scale?: number,
         unit?: string,
-        value?: number,
+        value?: number | number[],
         persistence?: {
             persist: boolean,
             address: number
