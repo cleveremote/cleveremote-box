@@ -1,15 +1,15 @@
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
-import { DeviceModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 
 describe('DeviceRepository', () => {
-    let mongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock };
+    let mongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByType: jest.Mock };
     let repository: DeviceRepository;
 
     beforeEach(() => {
-        mongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn() };
+        mongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByType: jest.fn() };
         repository = new DeviceRepository(mongooseRepository as never as DeviceMongooseRepository);
     });
 
@@ -85,6 +85,18 @@ describe('DeviceRepository', () => {
 
             expect(mongooseRepository.findById).toHaveBeenCalledWith('id-1');
             expect(result).toEqual(model);
+        });
+    });
+
+    describe('getByType', () => {
+        it('should delegate to mongooseRepository.findByType with the given type', async () => {
+            const models = [new DeviceModel()];
+            mongooseRepository.findByType.mockResolvedValue(models);
+
+            const result = await repository.getByType(DeviceType.MASTER);
+
+            expect(mongooseRepository.findByType).toHaveBeenCalledWith(DeviceType.MASTER);
+            expect(result).toEqual(models);
         });
     });
 });

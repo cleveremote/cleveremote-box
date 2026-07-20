@@ -115,7 +115,7 @@ describe('ComRequestkMongooseRepository params.persistence round-trip (integrati
         const created = await repository.create(model);
 
         const doc = await connection.collection('comrequests').findOne({ _id: created._id as never });
-        expect(doc.params.persistence).toEqual({ persist: true, address: 0x1000 });
+        expect(doc.config.params.persistence).toEqual({ persist: true, address: 0x1000 });
     });
 
     it('should leave params.persistence undefined when not provided', async () => {
@@ -133,7 +133,7 @@ describe('ComRequestkMongooseRepository params.persistence round-trip (integrati
         const created = await repository.create(model);
 
         const doc = await connection.collection('comrequests').findOne({ _id: created._id as never });
-        expect(doc.params.persistence).toBeUndefined();
+        expect(doc.config.params.persistence).toBeUndefined();
     });
 });
 

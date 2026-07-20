@@ -5,8 +5,9 @@ import { Logger } from 'nestjs-pino';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import ModbusRTU from "modbus-serial";
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { ComRequestConfigModel, ComRequestModel, ModbusExecuteResult, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
 export interface InverterConfigParam {
     param: string;
@@ -26,6 +27,10 @@ export interface DigitalInputLongPress {
 }
 
 export interface DigitalMonitorHandle {
+    stop: () => Promise<void>;
+}
+
+export interface SlaveDiscoveryHandle {
     stop: () => Promise<void>;
 }
 
@@ -64,7 +69,7 @@ export class ModbusService {
         return { masterConfig: masterDevice.config as MasterConfigModel, slaveConfig };
     }
 
-    private async _connectClient(client: ModbusRTU, masterConfig: MasterConfigModel, slaveConfig: SlaveConfigModel): Promise<void> {
+    private async _connectClient(client: ModbusRTU, masterConfig: MasterConfigModel, unitId: number): Promise<void> {
         if (masterConfig.protocol === MasterProtocol.TCP) {
             await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
         } else if (masterConfig.protocol === MasterProtocol.RTU) {
@@ -72,7 +77,7 @@ export class ModbusService {
         } else {
             throw new Error(`Protocole inconnu: ${masterConfig.protocol}`);
         }
-        client.setID(Number(slaveConfig.slaveId));
+        client.setID(unitId);
         client.setTimeout(masterConfig.timeout || 2000);
     }
 
@@ -197,7 +202,7 @@ export class ModbusService {
         const { masterConfig, slaveConfig } = resolved;
 
         const client = new ModbusRTU();
-        await this._connectClient(client, masterConfig, slaveConfig);
+        await this._connectClient(client, masterConfig, slaveConfig.slaveId);
 
         let previousStates: boolean[] | null = null;
         let stopped = false;
@@ -214,7 +219,7 @@ export class ModbusService {
                     // de la passerelle, idle timeout...) : modbus-serial ne se reconnecte jamais
                     // tout seul et rejette alors toute requête avec "Port Not Open". On la rouvre ici.
                     if (!client.isOpen) {
-                        await this._connectClient(client, masterConfig, slaveConfig);
+                        await this._connectClient(client, masterConfig, slaveConfig.slaveId);
                     }
                     const result = await client.readCoils(0, length);
                     return result.data.slice(0, length);
@@ -288,7 +293,7 @@ export class ModbusService {
         const { masterConfig, slaveConfig } = resolved;
 
         const client = new ModbusRTU();
-        await this._connectClient(client, masterConfig, slaveConfig);
+        await this._connectClient(client, masterConfig, slaveConfig.slaveId);
 
         // Horodatage du début de l'appui en cours par canal (null = relâché), et flag pour ne
         // déclencher l'événement long-press qu'une seule fois par appui.
@@ -304,7 +309,7 @@ export class ModbusService {
                 // RS485 partagé, et reconnexion si la connexion s'est fermée entre deux polls.
                 const states = await this._enqueue(async () => {
                     if (!client.isOpen) {
-                        await this._connectClient(client, masterConfig, slaveConfig);
+                        await this._connectClient(client, masterConfig, slaveConfig.slaveId);
                     }
                     const result = await client.readDiscreteInputs(0, length);
                     return result.data.slice(0, length);
@@ -357,6 +362,180 @@ export class ModbusService {
         };
     }
 
+    /**
+     * Surveille tous les devices MASTER enregistrés en base pour détecter un nouveau module
+     * Waveshare AO8CH non configuré (répond à l'unit id DEFAULT_UNCONFIGURED_UNIT_ID) et lui
+     * attribue automatiquement une adresse esclave unique. Un watcher indépendant est lancé par
+     * Master : aucun état n'est partagé entre eux hormis la file `_enqueue` commune (qui sérialise
+     * déjà tout le trafic Modbus de l'application, cf. monitorDigitalOutputs) - la détection ou le
+     * provisioning sur un Master ne met donc jamais en pause la surveillance des autres.
+     */
+    public async watchForNewSlaveDevices(pollIntervalMs = 3000): Promise<SlaveDiscoveryHandle> {
+        const masters = await this.deviceRepository.getByType(DeviceType.MASTER);
+        // opt-in par Master : sans discoveryRegisters renseigné, pas de watcher (pas de fallback
+        // silencieux sur un registre par défaut) - cf. modbus-registers.util.ts.
+        const eligibleMasters = masters.filter((master) => ((master.config as MasterConfigModel).discoveryRegisters?.length ?? 0) > 0);
+        masters
+            .filter((master) => !eligibleMasters.includes(master))
+            .forEach((master) => this.logger.debug({ masterId: master._id }, 'slave discovery disabled: no discoveryRegisters configured'));
+
+        if (eligibleMasters.length === 0) {
+            this.logger.log('no master devices with discoveryRegisters configured, slave discovery not started');
+            return { stop: () => Promise.resolve() };
+        }
+
+        const handles = await Promise.all(
+            eligibleMasters.map((master) => this._watchMasterForNewSlave(master, pollIntervalMs))
+        );
+
+        return {
+            stop: async () => {
+                await Promise.all(handles.map((handle) => handle.stop()));
+                this.logger.log('slave device discovery stopped for all masters');
+            }
+        };
+    }
+
+    private async _watchMasterForNewSlave(master: DeviceModel, pollIntervalMs: number): Promise<SlaveDiscoveryHandle> {
+        const masterConfig = master.config as MasterConfigModel;
+        // eligibleMasters (cf. watchForNewSlaveDevices) garantit une liste non vide ici.
+        const registersToProbe = masterConfig.discoveryRegisters ?? [];
+        const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
+        let stopped = false;
+        let paused = false;
+        let timer: NodeJS.Timeout | null = null;
+
+        const poll = async (): Promise<void> => {
+            if (paused || stopped) return;
+
+            const client = new ModbusRTU();
+            const detectedRegister = await this._enqueue(async () => {
+                try {
+                    await this._connectClient(client, masterConfig, DEFAULT_UNCONFIGURED_UNIT_ID);
+                    // Timeout court dédié à la sonde : on ne veut pas bloquer les autres
+                    // transactions en file quand rien ne répond (cas nominal, à chaque poll).
+                    client.setTimeout(200);
+                    // Un seul connect pour tous les registres de la liste : on les essaie l'un
+                    // après l'autre sur la même connexion déjà ouverte, jusqu'au premier qui répond.
+                    for (const register of registersToProbe) {
+                        try {
+                            await client.readHoldingRegisters(register, 1);
+                            client.setTimeout(masterConfig.timeout || 2000);
+                            return register;
+                        } catch (err) {
+                            // cas nominal : ce registre ne répond pas - on essaie le suivant sans
+                            // remonter d'erreur (cf. watchForNewDevice d'origine:
+                            // `catch { /* aucun nouveau module */ }`).
+                            if (err.modbusCode === undefined && !networkCodes.includes(err.code)) {
+                                this.logger.warn({ masterId: master._id, register, err: err.message }, 'slave discovery probe failed unexpectedly');
+                            }
+                        }
+                    }
+                    client.setTimeout(masterConfig.timeout || 2000);
+                    return null;
+                } catch (err) {
+                    this.logger.warn({ masterId: master._id, err: err.message }, 'slave discovery connection failed');
+                    return null;
+                }
+            });
+
+            if (detectedRegister !== null) {
+                paused = true;
+                this.logger.log({ masterId: master._id, register: detectedRegister }, 'new unconfigured modbus slave detected');
+                try {
+                    await this._provisionNewSlaveDevice(master, client, detectedRegister);
+                } finally {
+                    paused = false;
+                    client.close();
+                }
+            } else {
+                client.close();
+            }
+        };
+
+        // setTimeout auto-replanifié (cf. monitorDigitalOutputs) : jamais de setInterval, pour ne
+        // jamais empiler deux sondes si un module répond lentement ou si un provisioning est en cours.
+        const runPoll = async (): Promise<void> => {
+            try {
+                await poll();
+            } catch (err) {
+                // filet de sécurité : une erreur inattendue ne doit jamais arrêter la surveillance
+                // de ce Master (les autres Masters ne sont de toute façon jamais affectés).
+                this.logger.error({ masterId: master._id, err: err.message }, 'slave discovery poll failed unexpectedly');
+            }
+            if (!stopped) {
+                timer = setTimeout(runPoll, pollIntervalMs);
+            }
+        };
+
+        timer = setTimeout(runPoll, pollIntervalMs);
+
+        return {
+            stop: () => new Promise<void>((resolve) => {
+                stopped = true;
+                if (timer) clearTimeout(timer);
+                resolve();
+            })
+        };
+    }
+
+    /**
+     * Adresse un nouveau module détecté à DEFAULT_UNCONFIGURED_UNIT_ID : calcule le prochain
+     * slaveId libre pour ce Master (plancher à DEFAULT_UNCONFIGURED_UNIT_ID pour ne jamais
+     * réattribuer l'adresse réservée à la détection), écrit la nouvelle adresse puis enregistre
+     * le device SLAVE correspondant. En cas d'échec de sauvegarde après une écriture réussie,
+     * tente un rollback best-effort vers DEFAULT_UNCONFIGURED_UNIT_ID pour garder le module
+     * détectable au prochain cycle.
+     */
+    private async _provisionNewSlaveDevice(master: DeviceModel, client: ModbusRTU, detectedRegister: number): Promise<void> {
+        const existingSlaves = await this.deviceRepository.getByType(DeviceType.SLAVE);
+        const siblingIds = existingSlaves
+            .filter((device) => (device.config as SlaveConfigModel).masterDeviceId === master._id)
+            .map((device) => (device.config as SlaveConfigModel).slaveId)
+            .filter((id) => !Number.isNaN(id));
+        const newSlaveId = Math.max(DEFAULT_UNCONFIGURED_UNIT_ID, ...siblingIds) + 1;
+
+        try {
+            await this._enqueue(() => client.writeRegister(detectedRegister, newSlaveId));
+        } catch (err) {
+            this.logger.error(
+                { masterId: master._id, newSlaveId, register: detectedRegister, err: err.message },
+                'new slave address write failed, device left unconfigured for retry'
+            );
+            return;
+        }
+
+        const slaveConfig = new SlaveConfigModel();
+        slaveConfig.slaveId = newSlaveId;
+        slaveConfig.masterDeviceId = master._id;
+
+        const slaveModel = new DeviceModel();
+        slaveModel.name = `Slave ${newSlaveId} (auto-detected)`;
+        slaveModel.type = DeviceType.SLAVE;
+        slaveModel.kind = DeviceKind.MODBUS_SLAVE;
+        slaveModel.description = `Auto-detected on master "${master.name}" via register 0x${detectedRegister.toString(16)}`;
+        slaveModel.config = slaveConfig;
+
+        try {
+            const saved = await this.deviceRepository.save(slaveModel);
+            this.logger.log({ masterId: master._id, deviceId: saved._id, newSlaveId }, 'new slave device provisioned');
+        } catch (err) {
+            this.logger.error(
+                { masterId: master._id, newSlaveId, err: err.message },
+                'db save failed after address write, attempting rollback to unconfigured unit id'
+            );
+            try {
+                await this._enqueue(() => client.writeRegister(detectedRegister, DEFAULT_UNCONFIGURED_UNIT_ID));
+                this.logger.error({ masterId: master._id, newSlaveId }, 'rollback succeeded, device remains discoverable');
+            } catch (rollbackErr) {
+                this.logger.error(
+                    { masterId: master._id, newSlaveId, err: rollbackErr.message },
+                    'CRITICAL: rollback failed after db save failure - device now at an orphaned address, manual recovery required'
+                );
+            }
+        }
+    }
+
     private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         if (!comRequest) {
             this.logger.error('modbus execute called without comRequest');
@@ -385,7 +564,7 @@ export class ModbusService {
                 throw new Error(`Protocole inconnu: ${masterConfig.protocol}`);
             }
 
-            client.setID(Number(slaveConfig.slaveId));
+            client.setID(slaveConfig.slaveId);
             client.setTimeout(masterConfig.timeout || 2000);
             client.setTimeout(2000);
 
@@ -400,9 +579,9 @@ export class ModbusService {
                 fn = comRequest.config.function.find(f =>
                     f === ModbusFunctionName.WRITE_MULTIPLE_COILS || f === ModbusFunctionName.WRITE_MULTIPLE_REGISTERS
                 ) as string || comRequest.config.function.find(f => f.startsWith('write')) as string;
-            } else {
+            } else { 
                 fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
-            }
+            } 
             if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? "d'écriture" : "de lecture"} configurée pour cette tâche`);
             if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
@@ -431,7 +610,7 @@ export class ModbusService {
                 const address = param.params?.persistence?.persist ? param.address+param.params?.persistence?.address: param.address;
                 const data = await client[fn](address, param.params.value);
                 this.logger.log({ label: comRequest.name, value: param.params.value }, 'modbus write done');
-                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
+                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult; 
             }
 
             // --- Fonction non supportée ---
@@ -467,7 +646,7 @@ export class ModbusService {
             } else {
                 throw new Error(`Unknown protocol: ${masterConfig.protocol}`);
             }
-            client.setID(Number(slaveConfig.slaveId));
+            client.setID(slaveConfig.slaveId);
             client.setTimeout(masterConfig.timeout || 2000);
 
             for (const { param, value, persist } of params) {

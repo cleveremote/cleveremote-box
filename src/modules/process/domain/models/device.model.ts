@@ -22,10 +22,13 @@ export class MasterConfigModel {
     baudRate?: number;
     path?:string;
     timeout?: number;
+    // Registres à sonder (unit id DEFAULT_UNCONFIGURED_UNIT_ID) pour détecter un nouveau slave
+    // non configuré : vide/absent = découverte désactivée pour ce Master.
+    discoveryRegisters?: number[];
 }
 
 export class SlaveConfigModel {
-    public slaveId: string;
+    public slaveId: number;
     public masterDeviceId?: string;
 }
 

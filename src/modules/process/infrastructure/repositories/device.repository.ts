@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DeviceModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -41,6 +41,10 @@ export class DeviceRepository {
             return this.deviceMongooseRepository.findAll();
         }
         return this.deviceMongooseRepository.findById(id);
+    }
+
+    public async getByType(type: DeviceType): Promise<DeviceModel[]> {
+        return this.deviceMongooseRepository.findByType(type);
     }
 
 }

@@ -46,5 +46,10 @@ export class DeviceService {
         }
         return strategy;
     }
+    
+    public async initAll(): Promise<void> {
+       const deviceModel  = await this.deviceRepository.get('8d6f3fe2-af41-405b-9523-a0a6fb589b70') as DeviceModel
+        return this._resolveStrategy(deviceModel.kind).init(deviceModel); 
+    }
 
 }

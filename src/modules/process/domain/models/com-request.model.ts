@@ -60,7 +60,7 @@ export class ComRequestConfigModel {
     public function?: ModbusFunctionName[];
     public disabled?: boolean;
     public done?: boolean;
-    public params: {
+    public params?: {
         length?: number,
         scale?: number,
         unit?: string,

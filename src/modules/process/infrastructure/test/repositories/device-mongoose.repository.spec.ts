@@ -44,6 +44,19 @@ describe('DeviceMongooseRepository (integration mongodb-memory-server)', () => {
             expect(created._id).toBeDefined();
             expect(created.name).toEqual('device-1');
         });
+
+        it('should round-trip discoveryRegisters for a MASTER device', async () => {
+            const config = new MasterConfigModel();
+            config.protocol = MasterProtocol.TCP;
+            config.ipAddress = '192.168.1.20';
+            config.port = 502;
+            config.discoveryRegisters = [0x1000, 0x4000];
+            const created = await repository.create(CreateDeviceModel({ name: 'master-multi', config }));
+
+            const found = await repository.findById(created._id);
+
+            expect((found.config as MasterConfigModel).discoveryRegisters).toEqual([0x1000, 0x4000]);
+        });
     });
 
     describe('update', () => {
@@ -99,6 +112,26 @@ describe('DeviceMongooseRepository (integration mongodb-memory-server)', () => {
             const all = await repository.findAll();
 
             expect(all.map((d) => d._id)).toEqual([kept._id]);
+        });
+    });
+
+    describe('findByType', () => {
+        it('should return only devices of the given type, excluding soft-deleted ones', async () => {
+            const master = await repository.create(CreateDeviceModel({ name: 'master', type: DeviceType.MASTER }));
+            const keptSlave = await repository.create(CreateDeviceModel({ name: 'slave-kept', type: DeviceType.SLAVE }));
+            const deletedSlave = await repository.create(CreateDeviceModel({ name: 'slave-deleted', type: DeviceType.SLAVE }));
+            await repository.delete(deletedSlave._id);
+
+            const slaves = await repository.findByType(DeviceType.SLAVE);
+
+            expect(slaves.map((d) => d._id)).toEqual([keptSlave._id]);
+            expect(slaves.map((d) => d._id)).not.toContain(master._id);
+        });
+
+        it('should return an empty array when no device of that type exists', async () => {
+            const slaves = await repository.findByType(DeviceType.SLAVE);
+
+            expect(slaves).toEqual([]);
         });
     });
 });

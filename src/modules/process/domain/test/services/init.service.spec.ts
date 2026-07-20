@@ -10,6 +10,7 @@ import { BleService } from '@process/domain/services/ble.service';
 import { ModbusService } from '@process/domain/services/modbus.service';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from '@process/domain/services/actuator.service';
+import { DeviceService } from '@process/domain/services/device.service';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
@@ -51,10 +52,11 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
     let bleService: { initialize: jest.Mock };
-    let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock };
+    let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock; watchForNewSlaveDevices: jest.Mock };
     let comRequestRepository: { migrateMissingType: jest.Mock };
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
     let actuatorService: { execute: jest.Mock };
+    let deviceService: { initAll: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: InitService;
 
@@ -92,7 +94,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         modBusService = {
             execute: jest.fn().mockResolvedValue(undefined),
             testExecuteTask: jest.fn().mockResolvedValue(undefined),
-            monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined)
+            monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined),
+            watchForNewSlaveDevices: jest.fn().mockResolvedValue({ stop: jest.fn() })
         };
         comRequestRepository = { migrateMissingType: jest.fn().mockResolvedValue(undefined) };
         ctrlActuatorStrategy = {
@@ -100,6 +103,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             testStepOutput: jest.fn().mockResolvedValue(undefined)
         };
         actuatorService = { execute: jest.fn().mockResolvedValue(undefined) };
+        deviceService = { initAll: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
 
         service = new InitService(
@@ -115,6 +119,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             comRequestRepository as unknown as ComRequestRepository,
             ctrlActuatorStrategy as unknown as CtrlActuatorStrategy,
             actuatorService as unknown as ActuatorService,
+            deviceService as unknown as DeviceService,
             logger as never,
             processService as unknown as ProcessService
         );
@@ -131,6 +136,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             expect(processService.resetAllModules).toHaveBeenCalledTimes(1);
             expect(scheduleService.restartAllSchedules).toHaveBeenCalledTimes(1);
             expect(sensorService.restartAllScheduledSensors).toHaveBeenCalledTimes(1);
+            expect(deviceService.initAll).toHaveBeenCalledTimes(1);
+            expect(modBusService.watchForNewSlaveDevices).toHaveBeenCalledTimes(1);
         });
 
         it('should load the configuration once (default valve seeding is currently disabled)', async () => {
@@ -162,15 +169,25 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             );
         });
 
-        it('should still log a wrapped-error entry when the final step rejects with a non-Error value', async () => {
-            modBusService.monitorDigitalOutputs.mockRejectedValue(undefined);
+        it('should never reject when watchForNewSlaveDevices fails, and should log the wrapped error', async () => {
+            modBusService.watchForNewSlaveDevices.mockRejectedValue(new Error('discovery boom'));
 
             await expect(service.initialize()).resolves.toBeUndefined();
 
             expect(logger.error).toHaveBeenCalledWith(
-                { err: undefined, message: undefined, stack: undefined },
+                expect.objectContaining({ message: expect.stringContaining('[ModbusService.watchForNewSlaveDevices] Error: discovery boom') }),
                 'initialization failed'
             );
+        });
+
+        // le monitoring monitorDigitalOutputs est actuellement desactive dans initialize()
+        // (cf. le .then(...) commente) : un rejet de ce mock ne peut donc plus se propager.
+        it('should not call monitorDigitalOutputs while the monitoring step stays disabled', async () => {
+            modBusService.monitorDigitalOutputs.mockRejectedValue(undefined);
+
+            await expect(service.initialize()).resolves.toBeUndefined();
+
+            expect(modBusService.monitorDigitalOutputs).not.toHaveBeenCalled();
         });
     });
 
@@ -194,8 +211,11 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         });
     });
 
+    // le mapping digital-output -> module cycle est actuellement desactive dans initialize()
+    // (cf. le .then(...) commente sur monitorDigitalOutputs) : ces tests verrouillent ce
+    // comportement intentionnel plutot que de tester un mapping qui ne se declenche plus au demarrage.
     describe('digital-output -> module cycle mapping (via initialize)', () => {
-        it('should map a monitored digital output change to executeModuleCycleForDigitalOutput', async () => {
+        it('should not map any digital output change while the monitoring step stays disabled', async () => {
             const change = { channel: 3, previous: false, current: true };
             modBusService.monitorDigitalOutputs.mockImplementation((_deviceId, _interval, _length, onChange) => {
                 onChange([change]);
@@ -205,26 +225,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             await service.initialize();
             await new Promise((resolve) => setImmediate(resolve));
 
-            expect(processService.executeModuleCycleForDigitalOutput).toHaveBeenCalledWith(
-                expect.any(String), change.channel, change.current
-            );
-        });
-
-        it('should log a warning when mapping a digital output change to a module cycle fails', async () => {
-            const change = { channel: 3, previous: false, current: true };
-            modBusService.monitorDigitalOutputs.mockImplementation((_deviceId, _interval, _length, onChange) => {
-                onChange([change]);
-                return Promise.resolve(undefined);
-            });
-            processService.executeModuleCycleForDigitalOutput.mockRejectedValue(new Error('boom'));
-
-            await service.initialize();
-            await new Promise((resolve) => setImmediate(resolve));
-
-            expect(logger.warn).toHaveBeenCalledWith(
-                expect.objectContaining({ error: expect.any(Error), change }),
-                'digital output -> module cycle mapping failed'
-            );
+            expect(processService.executeModuleCycleForDigitalOutput).not.toHaveBeenCalled();
         });
     });
 

@@ -15,6 +15,7 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from './actuator.service';
+import { DeviceService } from './device.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -35,6 +36,7 @@ export class InitService {
         private comRequestRepository: ComRequestRepository,
         private ctrlActuatorStrategy: CtrlActuatorStrategy,
         private actuatorService: ActuatorService,
+        private deviceService: DeviceService,
         private readonly logger: Logger,
         private readonly _processService: ProcessService
     ) { }
@@ -46,7 +48,7 @@ export class InitService {
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
         return wrap('StructureService.getStructure', () => this._loadConfiguration())
-            .then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+            //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
@@ -55,7 +57,9 @@ export class InitService {
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
-            .then(async () => {
+            .then(() => wrap('init devices', () => this.deviceService.initAll()))
+            .then(() => wrap('ModbusService.watchForNewSlaveDevices', () => this.modBusService.watchForNewSlaveDevices()))
+            .then(async () => { 
                 // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
                 // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
                 // const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
@@ -66,8 +70,8 @@ export class InitService {
                 //     });
                 // });
 
-                const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-                await this.actuatorService.execute(actuator as ActuatorModel, 50); 
+                //  const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
+                // await this.actuatorService.execute(actuator as ActuatorModel, 50); 
             })
 
             .catch((error) => {
@@ -77,7 +81,7 @@ export class InitService {
 
     private _resetAllModules(): Promise<void> { 
 
-        this.logger.log('Start initialize processes 1 ...');
+        this.logger.log('Start initialize processes 1 ...'); 
         return this.processService.resetAllModules()
             .then(() => {
                 this.logger.log('processes initialized');
@@ -111,8 +115,8 @@ export class InitService {
      */
     private async _testAo8ch(): Promise<void> {
         const AO1_CHANNEL = 1;
-        //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
-        await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL);
+       //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
+       await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL); 
     
     }
 

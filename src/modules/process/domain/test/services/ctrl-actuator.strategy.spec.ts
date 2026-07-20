@@ -61,7 +61,7 @@ function CreateSlaveDeviceModel(overrides: Partial<SlaveConfigModel> = {}): Devi
     device.name = 'slave';
     device.type = DeviceType.SLAVE;
     const config = new SlaveConfigModel();
-    config.slaveId = '3';
+    config.slaveId = 3;
     config.masterDeviceId = 'master-1';
     device.config = Object.assign(config, overrides);
     return device;

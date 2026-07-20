@@ -893,9 +893,9 @@ export class DeviceConfigDTO {
     // SLAVE
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()
-    @IsString()
+    @IsNumber()
     @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
-    public slaveId?: string;
+    public slaveId?: number;
 
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()

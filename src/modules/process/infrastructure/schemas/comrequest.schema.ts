@@ -62,9 +62,6 @@ export class ComRequest {
     @Prop({ required: true })
     public deviceId: string;
 
-    @Prop({ type: [String], enum: ModbusFunctionName, required: true })
-    public function: ModbusFunctionName[];
-
     @Prop({ required: true })
     public name: string;
 
@@ -74,17 +71,8 @@ export class ComRequest {
     @Prop({ type: [String], enum: ComRequestType, required: true })
     public type: ComRequestType[];
 
-    @Prop({ required: true })
-    public address: number;
-
-    @Prop({ default: false })
-    public disabled?: boolean;
-
-    @Prop({ default: false })
-    public done?: boolean;
-
-    @Prop({ type: ComRequestParamsSchema })
-    public params: ComRequestParams;
+    @Prop({ type: ComRequestConfigSchema, required: true })
+    public config: ComRequestConfig;
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

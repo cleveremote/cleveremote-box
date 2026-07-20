@@ -24,10 +24,10 @@ export class ComActuatorStrategy implements ActuatorStrategy {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public async execute(actuator: ActuatorModel, action: number): Promise<void> {
-        const { deviceId, actions } = actuator.config as ComActuatorConfigModel;
+        const { actions } = actuator.config as ComActuatorConfigModel;
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(actions[0].comRequestId) as ComRequestModel;
-        const overrideParams: ComRequestConfigModel = {address: actions[0].portNumber,params: {value: action} }
-        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
+        const overrideParams: ComRequestConfigModel = {address: actions[0].portNumber,params: {value: action} };
+        this.modbusService.execute(comRequestData,buildOverrideParams(comRequestData.config, overrideParams));
         
     }
 

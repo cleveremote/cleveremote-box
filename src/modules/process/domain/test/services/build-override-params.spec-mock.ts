@@ -3,14 +3,16 @@ import { ComRequestConfigModel, ModbusFunctionName } from '@process/domain/model
 export interface BuildOverrideParamsCase {
     name: string;
     existing: ComRequestConfigModel;
-    override: ComRequestConfigModel;
+    override: Partial<ComRequestConfigModel>;
     expected: ComRequestConfigModel;
 }
 
 // Test cases for the shared buildOverrideParams util (domain/utils/build-override-params.util.ts),
 // used by ctrl-actuator.strategy.ts, com-actuator.strategy.ts and inverter-device.strategy.ts.
-// It merges `||`-fallback fields (address/function/disabled/length/scale/unit/value) and a
-// `??`-chained persistence sub-object (override -> existing -> hard default).
+// Every field (address/function/disabled/length/scale/unit/value, and the persistence sub-object)
+// is merged with `??`: an explicitly-provided override value always wins - including `0`/`false`/
+// `[]`, which are legitimate values (e.g. address/channel 0, writeCoil value 0) - and the existing
+// config is only used as a fallback when the override field is truly absent (`undefined`).
 export const buildOverrideParamsCases: BuildOverrideParamsCase[] = [
     {
         name: 'the override wins on address/value when both are truthy',
@@ -30,9 +32,26 @@ export const buildOverrideParamsCases: BuildOverrideParamsCase[] = [
         }
     },
     {
-        name: 'the existing config wins on address/value when the override is falsy/absent',
+        name: 'the override wins on address/value even when explicitly 0',
         existing: { address: 5, function: [ModbusFunctionName.READ_HOLDING_REGISTERS], params: { value: 42, length: 2, scale: 10, unit: 'C' } },
         override: { address: 0, params: { value: 0 } },
+        expected: {
+            address: 0,
+            function: [ModbusFunctionName.READ_HOLDING_REGISTERS],
+            disabled: undefined,
+            params: {
+                length: 2,
+                scale: 10,
+                unit: 'C',
+                value: 0,
+                persistence: { persist: false, address: 0 }
+            }
+        }
+    },
+    {
+        name: 'the existing config wins on address/value when the override omits them entirely',
+        existing: { address: 5, function: [ModbusFunctionName.READ_HOLDING_REGISTERS], params: { value: 42, length: 2, scale: 10, unit: 'C' } },
+        override: {},
         expected: {
             address: 5,
             function: [ModbusFunctionName.READ_HOLDING_REGISTERS],

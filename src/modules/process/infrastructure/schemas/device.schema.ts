@@ -24,9 +24,12 @@ export class DeviceConfig {
     @Prop()
     public timeout?: number;
 
+    @Prop({ type: [Number] })
+    public discoveryRegisters?: number[];
+
     // SLAVE
     @Prop()
-    public slaveId?: string;
+    public slaveId?: number;
 
     @Prop()
     public masterDeviceId?: string;

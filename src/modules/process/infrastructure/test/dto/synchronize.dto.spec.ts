@@ -437,14 +437,14 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
         it('should map a SLAVE device with a SlaveConfigModel config', () => {
             const dto = Object.assign(new DeviceSynchronizeDTO(), {
                 _id: 'device-2', name: 'slave', description: 'd', type: DeviceType.SLAVE,
-                config: Object.assign(new DeviceConfigDTO(), { slaveId: '1', masterDeviceId: 'device-1' })
+                config: Object.assign(new DeviceConfigDTO(), { slaveId: 1, masterDeviceId: 'device-1' })
             });
 
             const model = DeviceSynchronizeDTO.mapToDeviceModel(dto);
 
             expect(model._id).toEqual('device-2');
             expect(model.type).toEqual(DeviceType.SLAVE);
-            expect(model.config).toEqual(expect.objectContaining({ slaveId: '1', masterDeviceId: 'device-1' }));
+            expect(model.config).toEqual(expect.objectContaining({ slaveId: 1, masterDeviceId: 'device-1' }));
         });
     });
 

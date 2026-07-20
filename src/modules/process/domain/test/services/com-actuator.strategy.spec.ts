@@ -57,7 +57,7 @@ describe('ComActuatorStrategy', () => {
         await expect(strategy.configure(actuator)).resolves.toBeUndefined();
     });
 
-    it('should fall back to the existing com request address/value when the action portNumber/action are falsy', async () => {
+    it('should use the explicit portNumber/action of 0 rather than falling back to the existing com request address/value', async () => {
         const actuator = CreateActuatorComModel();
         (actuator.config as ComActuatorConfigModel).actions = [{ comRequestId: 'req-1', portNumber: 0 }];
         const comRequest = Object.assign(new ComRequestModel(), {
@@ -69,8 +69,25 @@ describe('ComActuatorStrategy', () => {
         await strategy.execute(actuator, 0);
 
         expect(modBusService.execute).toHaveBeenCalledWith(comRequest, expect.objectContaining({
-            address: 5,
-            params: expect.objectContaining({ value: 9 })
+            address: 0,
+            params: expect.objectContaining({ value: 0 })
+        }));
+    });
+
+    it('should still resolve params.value when the existing com request config has no params at all', async () => {
+        const actuator = CreateActuatorComModel();
+        (actuator.config as ComActuatorConfigModel).actions = [{ comRequestId: 'req-1', portNumber: 0 }];
+        const comRequest = Object.assign(new ComRequestModel(), {
+            _id: 'com-request-1',
+            config: { address: 5, function: [], params: undefined }
+        });
+        comRequestRepository.get.mockResolvedValue(comRequest);
+
+        await strategy.execute(actuator, 0);
+
+        expect(modBusService.execute).toHaveBeenCalledWith(comRequest, expect.objectContaining({
+            address: 0,
+            params: expect.objectContaining({ value: 0 })
         }));
     });
 });

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DeviceModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
 import { Device, DeviceDocument } from '../schemas/device.schema';
 import { DeviceMapper } from '../schemas/mappers/device.mapper';
@@ -49,6 +49,11 @@ export class DeviceMongooseRepository {
 
     public async findAll(): Promise<DeviceModel[]> {
         const devices = await this.deviceModel.find(NOT_DELETED_FILTER);
+        return devices.map(DeviceMapper.mapToModel);
+    }
+
+    public async findByType(type: DeviceType): Promise<DeviceModel[]> {
+        const devices = await this.deviceModel.find({ type, ...NOT_DELETED_FILTER });
         return devices.map(DeviceMapper.mapToModel);
     }
 

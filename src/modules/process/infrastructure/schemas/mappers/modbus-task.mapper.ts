@@ -1,5 +1,6 @@
-import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { ComRequest, ComRequestDocument } from '../comrequest.schema';
+import { mapComRequestConfigToModel, mapComRequestConfigToSchema } from './com-request-config.mapper';
 
 export class ModbusTaskMapper {
 
@@ -10,13 +11,7 @@ export class ModbusTaskMapper {
         model.name = task.name;
         model.description = task.description;
         model.type = task.type;
-        model.config = {
-            function: task.function as ModbusFunctionName[],
-            address: task.address,
-            disabled: task.disabled,
-            done: task.done ?? false,
-            params: task.params
-        };
+        model.config = mapComRequestConfigToModel(task.config);
         model.createdAt = (task as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (task as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = task.deletedAt ?? null;
@@ -26,14 +21,10 @@ export class ModbusTaskMapper {
     public static mapToSchema(model: ComRequestModel): ComRequest {
         const task = new ComRequest();
         task.deviceId = model.deviceId;
-        task.function = model.config.function;
         task.name = model.name;
         task.description = model.description;
         task.type = model.type;
-        task.address = model.config.address;
-        task.disabled = model.config.disabled;
-        task.done = model.config.done ?? false;
-        task.params = model.config.params;
+        task.config = mapComRequestConfigToSchema(model.config);
         return task;
     }
 

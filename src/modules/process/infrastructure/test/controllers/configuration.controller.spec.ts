@@ -68,7 +68,7 @@ describe('ConfigurationController', () => {
         });
         const slaveDto = Object.assign(new DeviceSynchronizeDTO(), {
             _id: 'device-2', name: 'slave', description: 'd', type: DeviceType.SLAVE,
-            config: Object.assign(new DeviceConfigDTO(), { slaveId: '1', masterDeviceId: 'device-1' })
+            config: Object.assign(new DeviceConfigDTO(), { slaveId: 1, masterDeviceId: 'device-1' })
         });
 
         const result = await controller.synchroniseDevice([masterDto, slaveDto]);

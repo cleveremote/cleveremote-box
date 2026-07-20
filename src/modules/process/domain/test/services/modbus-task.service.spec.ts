@@ -1,7 +1,8 @@
 import ModbusRTU from 'modbus-serial';
 import { ModbusService } from '@process/domain/services/modbus.service';
 import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
-import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { AO8CH_DEVICE_ADDRESS_REGISTER, DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
 interface MockModbusClient {
     isOpen: boolean;
@@ -82,7 +83,7 @@ function CreateSlaveDeviceModel(overrides: Partial<SlaveConfigModel> = {}): Devi
     device.name = 'slave';
     device.type = DeviceType.SLAVE;
     const config = new SlaveConfigModel();
-    config.slaveId = '1';
+    config.slaveId = 1;
     config.masterDeviceId = 'master-1';
     device.config = Object.assign(config, overrides);
     return device;
@@ -94,7 +95,7 @@ function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock
 
 describe('ModbusService (modbus-serial mocked)', () => {
     let modbusTaskRepository: { get: jest.Mock };
-    let deviceRepository: { get: jest.Mock };
+    let deviceRepository: { get: jest.Mock; getByType: jest.Mock; save: jest.Mock };
     let masterDevice: DeviceModel;
     let slaveDevice: DeviceModel;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -108,7 +109,9 @@ describe('ModbusService (modbus-serial mocked)', () => {
         deviceRepository = {
             get: jest.fn((id: string) => Promise.resolve(
                 id === masterDevice._id ? masterDevice : id === slaveDevice._id ? slaveDevice : null
-            ))
+            )),
+            getByType: jest.fn().mockResolvedValue([]),
+            save: jest.fn()
         };
         logger = CreateLoggerMock();
 
@@ -713,6 +716,360 @@ describe('ModbusService (modbus-serial mocked)', () => {
             await handle.stop();
 
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ deviceId: 'slave-1' }), 'digital input monitor read failed');
+        });
+    });
+
+    // watchForNewSlaveDevices: contrairement aux describe precedents, la plupart des tests
+    // s'appuient sur un mock ModbusRTU par defaut qui NE detecte jamais rien (readHoldingRegisters
+    // rejette), pour ne pas declencher de provisioning parasite a chaque cycle de poll ; chaque
+    // test qui veut simuler une detection injecte un client dedie via mockImplementationOnce en
+    // tete de file, consomme une seule fois avant de retomber sur ce defaut "rien detecte".
+    describe('watchForNewSlaveDevices', () => {
+        function Wait(ms: number): Promise<void> {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function CreateUndetectedClient(overrides: Partial<MockModbusClient> = {}): MockModbusClient {
+            return CreateMockClient({
+                readHoldingRegisters: jest.fn().mockRejectedValue(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })),
+                ...overrides
+            });
+        }
+
+        function CreateDiscoveryMasterModel(id: string, overrides: Partial<MasterConfigModel> = {}): DeviceModel {
+            const device = new DeviceModel();
+            device._id = id;
+            device.name = id;
+            device.type = DeviceType.MASTER;
+            const config = new MasterConfigModel();
+            config.protocol = MasterProtocol.TCP;
+            config.ipAddress = '192.0.2.1';
+            config.port = 502;
+            config.timeout = 2000;
+            config.discoveryRegisters = [AO8CH_DEVICE_ADDRESS_REGISTER];
+            device.config = Object.assign(config, overrides);
+            return device;
+        }
+
+        function CreateDiscoverySlaveModel(id: string, slaveId: number, masterDeviceId: string): DeviceModel {
+            const device = new DeviceModel();
+            device._id = id;
+            device.name = id;
+            device.type = DeviceType.SLAVE;
+            const config = new SlaveConfigModel();
+            config.slaveId = slaveId;
+            config.masterDeviceId = masterDeviceId;
+            device.config = config;
+            return device;
+        }
+
+        beforeEach(() => {
+            mockModbusClients.length = 0;
+            deviceRepository.getByType = jest.fn().mockResolvedValue([]);
+            deviceRepository.save = jest.fn();
+            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateUndetectedClient());
+        });
+
+        it('should log and return a no-op handle when no MASTER devices exist', async () => {
+            const handle = await service.watchForNewSlaveDevices(20);
+
+            expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
+            await expect(handle.stop()).resolves.toBeUndefined();
+            expect(mockModbusClients).toHaveLength(0);
+        });
+
+        it('should never poll a master with no discoveryRegisters configured (opt-in, no fallback)', async () => {
+            const masterWithout = CreateDiscoveryMasterModel('master-no-discovery', { discoveryRegisters: undefined });
+            const masterWithEmpty = CreateDiscoveryMasterModel('master-empty-discovery', { discoveryRegisters: [] });
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [masterWithout, masterWithEmpty] : [])
+            );
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(40);
+            await handle.stop();
+
+            expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
+            expect(mockModbusClients).toHaveLength(0);
+        });
+
+        it('should probe multiple registers sequentially on the same connection and write to the one that responded', async () => {
+            const master = CreateDiscoveryMasterModel('master-multi', { discoveryRegisters: [0x1000, 0x4000] });
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+            deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-multi'));
+
+            const connectTCP = jest.fn().mockResolvedValue(undefined);
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            const readHoldingRegisters = jest.fn()
+                .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))
+                .mockResolvedValueOnce({ data: [1] });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                connectTCP,
+                readHoldingRegisters,
+                writeRegister
+            }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(50);
+            await handle.stop();
+
+            expect(connectTCP).toHaveBeenCalledTimes(1);
+            expect(readHoldingRegisters).toHaveBeenNthCalledWith(1, 0x1000, 1);
+            expect(readHoldingRegisters).toHaveBeenNthCalledWith(2, 0x4000, 1);
+            expect(writeRegister).toHaveBeenCalledWith(0x4000, 2);
+        });
+
+        it('should assign slaveId 2 (floor) and persist a new device when a master with no existing slaves detects an unconfigured module', async () => {
+            const master = CreateDiscoveryMasterModel('master-x');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+            deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-x'));
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
+                writeRegister
+            }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(50);
+            await handle.stop();
+
+            expect(writeRegister).toHaveBeenCalledWith(AO8CH_DEVICE_ADDRESS_REGISTER, 2);
+            expect(deviceRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+                type: DeviceType.SLAVE,
+                kind: DeviceKind.MODBUS_SLAVE,
+                config: expect.objectContaining({ slaveId: 2, masterDeviceId: 'master-x' })
+            }));
+        });
+
+        it('should assign sequential unique slaveIds across successive detections on the same master', async () => {
+            const master = CreateDiscoveryMasterModel('master-seq');
+            let currentSlaves: DeviceModel[] = [];
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : currentSlaves)
+            );
+            deviceRepository.save = jest.fn((model: DeviceModel) => {
+                const saved = Object.assign(new DeviceModel(), model, { _id: `slave-${(model.config as SlaveConfigModel).slaveId}` });
+                currentSlaves = [...currentSlaves, saved];
+                return Promise.resolve(saved);
+            });
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            (ModbusRTU as unknown as jest.Mock)
+                .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }), writeRegister }))
+                .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }), writeRegister }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(120);
+            await handle.stop();
+
+            expect(writeRegister).toHaveBeenNthCalledWith(1, AO8CH_DEVICE_ADDRESS_REGISTER, 2);
+            expect(writeRegister).toHaveBeenNthCalledWith(2, AO8CH_DEVICE_ADDRESS_REGISTER, 3);
+        });
+
+        it('should only count existing slaves belonging to the same master when computing newSlaveId (no cross-master leakage)', async () => {
+            const masterA = CreateDiscoveryMasterModel('master-a', { ipAddress: '10.0.0.1' });
+            const masterB = CreateDiscoveryMasterModel('master-b', { ipAddress: '10.0.0.2' });
+            const siblingsOfB = [
+                CreateDiscoverySlaveModel('slave-b1', 5, 'master-b'),
+                CreateDiscoverySlaveModel('slave-b2', 6, 'master-b')
+            ];
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : siblingsOfB)
+            );
+            deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-a'));
+
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            // Seul le master A (10.0.0.1) "detecte" un module ; le master B ne detecte jamais rien.
+            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => {
+                const client = CreateUndetectedClient();
+                const originalConnectTCP = client.connectTCP;
+                client.connectTCP = jest.fn((ip: string, opts: unknown) => {
+                    if (ip === '10.0.0.1') {
+                        client.readHoldingRegisters = jest.fn()
+                            .mockResolvedValueOnce({ data: [1] })
+                            .mockRejectedValue(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
+                        client.writeRegister = writeRegister;
+                    }
+                    return originalConnectTCP(ip, opts);
+                });
+                return client;
+            });
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(60);
+            await handle.stop();
+
+            expect(writeRegister).toHaveBeenCalledWith(AO8CH_DEVICE_ADDRESS_REGISTER, 2);
+        });
+
+        it('should isolate masters: a stuck provisioning on one master must not pause polling on another', async () => {
+            const masterA = CreateDiscoveryMasterModel('master-iso-a', { ipAddress: '10.0.0.1' });
+            const masterB = CreateDiscoveryMasterModel('master-iso-b', { ipAddress: '10.0.0.2' });
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : [])
+            );
+            // save() ne se resout jamais : le provisioning du master A reste bloque en pause pendant tout le test.
+            deviceRepository.save = jest.fn(() => new Promise(() => { /* never resolves */ }));
+
+            let bPollCount = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => {
+                const client = CreateUndetectedClient();
+                const originalConnectTCP = client.connectTCP;
+                client.connectTCP = jest.fn((ip: string, opts: unknown) => {
+                    if (ip === '10.0.0.1') {
+                        client.readHoldingRegisters = jest.fn().mockResolvedValue({ data: [1] });
+                        client.writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+                    } else {
+                        client.readHoldingRegisters = jest.fn(() => {
+                            bPollCount += 1;
+                            return Promise.reject(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
+                        });
+                    }
+                    return originalConnectTCP(ip, opts);
+                });
+                return client;
+            });
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(80);
+            await handle.stop();
+
+            expect(bPollCount).toBeGreaterThanOrEqual(2);
+        });
+
+        it('should leave the device unconfigured for retry (no save) and resume polling when the address write fails', async () => {
+            const master = CreateDiscoveryMasterModel('master-w');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
+                writeRegister: jest.fn().mockRejectedValue(new Error('write boom'))
+            }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(60);
+            await handle.stop();
+
+            expect(deviceRepository.save).not.toHaveBeenCalled();
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({ masterId: 'master-w', err: 'write boom' }),
+                'new slave address write failed, device left unconfigured for retry'
+            );
+            // la surveillance doit reprendre : d'autres clients sont construits apres l'echec.
+            expect(mockModbusClients.length).toBeGreaterThan(1);
+        });
+
+        it('should attempt a best-effort rollback to the unconfigured unit id when the db save fails after a successful write', async () => {
+            const master = CreateDiscoveryMasterModel('master-r');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+            deviceRepository.save = jest.fn().mockRejectedValue(new Error('db boom'));
+
+            const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
+                writeRegister
+            }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(50);
+            await handle.stop();
+
+            expect(writeRegister).toHaveBeenNthCalledWith(1, AO8CH_DEVICE_ADDRESS_REGISTER, 2);
+            expect(writeRegister).toHaveBeenNthCalledWith(2, AO8CH_DEVICE_ADDRESS_REGISTER, DEFAULT_UNCONFIGURED_UNIT_ID);
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({ masterId: 'master-r', newSlaveId: 2 }),
+                'rollback succeeded, device remains discoverable'
+            );
+        });
+
+        it('should log a critical error and keep the watcher alive when both the db save and the rollback write fail', async () => {
+            const master = CreateDiscoveryMasterModel('master-c');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+            deviceRepository.save = jest.fn().mockRejectedValue(new Error('db boom'));
+
+            const writeRegister = jest.fn()
+                .mockResolvedValueOnce({ address: 0, value: 0 })
+                .mockRejectedValueOnce(new Error('rollback boom'));
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
+                writeRegister
+            }));
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(50);
+            await handle.stop();
+
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.objectContaining({ masterId: 'master-c', err: 'rollback boom' }),
+                expect.stringContaining('CRITICAL')
+            );
+            expect(mockModbusClients.length).toBeGreaterThan(1);
+        });
+
+        it('should stop polling on all masters once stop() is called', async () => {
+            const masterA = CreateDiscoveryMasterModel('master-stop-a');
+            const masterB = CreateDiscoveryMasterModel('master-stop-b');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : [])
+            );
+
+            const handle = await service.watchForNewSlaveDevices(15);
+            await Wait(40);
+            await handle.stop();
+            const countAfterStop = mockModbusClients.length;
+            await Wait(60);
+
+            expect(mockModbusClients.length).toEqual(countAfterStop);
+        });
+
+        it('should serialize the discovery probe behind an in-flight execute() call on the same bus', async () => {
+            const order: string[] = [];
+            let resolveExecuteRead!: (value: { data: number[] }) => void;
+            const executeReadPromise = new Promise<{ data: number[] }>((resolve) => { resolveExecuteRead = resolve; });
+
+            const master = CreateDiscoveryMasterModel('master-order');
+            deviceRepository.getByType = jest.fn((type: DeviceType) =>
+                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
+            );
+
+            (ModbusRTU as unknown as jest.Mock)
+                .mockImplementationOnce(() => CreateMockClient({
+                    readHoldingRegisters: jest.fn(() => {
+                        order.push('execute-start');
+                        return executeReadPromise.then((data) => { order.push('execute-end'); return data; });
+                    })
+                }))
+                .mockImplementationOnce(() => CreateMockClient({
+                    readHoldingRegisters: jest.fn(() => {
+                        order.push('probe-start');
+                        return Promise.reject(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
+                    })
+                }));
+
+            const executeCall = service.execute(CreateModbusTaskModel());
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(order).toEqual(['execute-start']);
+
+            const handle = await service.watchForNewSlaveDevices(5);
+            await Wait(30);
+            // la sonde de decouverte doit toujours attendre derriere la lecture execute() en cours.
+            expect(order).toEqual(['execute-start']);
+
+            resolveExecuteRead({ data: [0, 0] });
+            await executeCall;
+            await Wait(20);
+            await handle.stop();
+
+            expect(order).toEqual(['execute-start', 'execute-end', 'probe-start']);
         });
     });
 });

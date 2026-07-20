@@ -12,6 +12,7 @@ export class DeviceMapper {
             config.baudRate = device.config.baudRate;
             config.path = device.config.path;
             config.timeout = device.config.timeout;
+            config.discoveryRegisters = device.config.discoveryRegisters;
             return config;
         }
         const config = new SlaveConfigModel();
@@ -48,7 +49,8 @@ export class DeviceMapper {
                 port: config.port,
                 baudRate: config.baudRate,
                 path: config.path,
-                timeout: config.timeout
+                timeout: config.timeout,
+                discoveryRegisters: config.discoveryRegisters
             };
         } else {
             const config = model.config as SlaveConfigModel;

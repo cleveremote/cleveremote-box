@@ -10,6 +10,7 @@ import { ModbusService } from '../modbus.service';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
 import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
+import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -24,12 +25,6 @@ const MIN_OUTPUT_MA = 4;
 const MAX_OUTPUT_MA = 20;
 const MIN_OUTPUT_UA = MIN_OUTPUT_MA * 1000;
 const MAX_OUTPUT_UA = MAX_OUTPUT_MA * 1000;
-
-// Registre d'adresse esclave (0x0001-0x00FF). Le module répond même quand on l'adresse en
-// broadcast (unit id 0), ce qui permet de (re)configurer son adresse sans connaître l'adresse
-// actuelle - pratique en commissionning tant qu'un seul module AO8CH est présent sur le bus.
-const AO8CH_DEVICE_ADDRESS_REGISTER = 0x4000;
-const BROADCAST_UNIT_ID = 0;
 
 export interface ValveAdjustmentResult {
     targetFlowRate: number;
@@ -194,7 +189,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         } else {
             throw new Error(`Unknown protocol: ${masterConfig.protocol}`);
         }
-        client.setID(unitIdOverride ?? Number(slaveConfig.slaveId));
+        client.setID(unitIdOverride ?? slaveConfig.slaveId);
         client.setTimeout(masterConfig.timeout || 2000);
         return client;
     }
@@ -204,7 +199,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
      * en broadcast (unit id 0) pour ne pas dépendre de l'adresse actuellement configurée.
      */
     public async testSetDeviceAddress(deviceId: string, newAddress: number): Promise<void> {
-        const client = await this._connectClient(deviceId, 0);
+        const client = await this._connectClient(deviceId, BROADCAST_UNIT_ID);
         try {
             await client.writeRegister(AO8CH_DEVICE_ADDRESS_REGISTER, newAddress);
             this.logger.log({ deviceId, newAddress }, 'waveshare AO8CH device address written (broadcast)');
@@ -228,7 +223,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         //     await this._delay(stepDelayMs);
         // }
         // await this._writeChannelOutput(deviceId, channel, 4);
-        // await this._delay(10000);
+        // await this._delay(10000); 
     }
 
     private async _writeChannelOutput(deviceId: string, channel: number, milliAmps: number): Promise<void> {

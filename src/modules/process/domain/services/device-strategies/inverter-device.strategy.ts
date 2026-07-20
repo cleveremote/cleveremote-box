@@ -25,7 +25,7 @@ export class InverterDeviceStrategy implements DeviceStrategy {
             if (comRequest.config.done) {
                 continue;
             }
-            const overrideParams: ComRequestConfigModel = { address: 0, params: { value: 0 } };
+            const overrideParams: Partial<ComRequestConfigModel> = { params: { value: 0 } };
             try {
                 await this.modbusService.execute(comRequest, buildOverrideParams(comRequest.config, overrideParams));
                 comRequest.config.done = true;
@@ -40,7 +40,7 @@ export class InverterDeviceStrategy implements DeviceStrategy {
         const comRequests: ComRequestModel[] = await this.comRequestRepository.getComRequestsByDeviceIdAndTypes(device._id, [ComRequestType.INVERTER_WRITE]);
         for (let index = 0; index < comRequests.length; index++) {
             const comRequest = comRequests[index];
-            const overrideParams: ComRequestConfigModel = { address: 0, params: { value: 0 } };
+            const overrideParams: Partial<ComRequestConfigModel> = { params: { value: 0 } };
             try {
                 await this.modbusService.execute(comRequest, buildOverrideParams(comRequest.config, overrideParams));
                 comRequest.config.done = true;
