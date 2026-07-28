@@ -41,7 +41,7 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should persist and return the mapped sensor', async () => {
             const created = await repository.create(CreateSensorModel({ name: 'sensor-1' }));
 
-            expect(created.id).toBeDefined();
+            expect(created._id).toBeDefined();
             expect(created.name).toEqual('sensor-1');
             expect(created.type).toEqual(SensorType.COM);
         });
@@ -51,7 +51,7 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should update an existing sensor', async () => {
             const created = await repository.create(CreateSensorModel());
 
-            const updated = await repository.update(created.id, CreateSensorModel({ name: 'renamed' }));
+            const updated = await repository.update(created._id, CreateSensorModel({ name: 'renamed' }));
 
             expect(updated.name).toEqual('renamed');
         });
@@ -65,14 +65,14 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should insert a new sensor when the id does not exist yet', async () => {
             const upserted = await repository.upsert('new-id', CreateSensorModel({ name: 'upserted' }));
 
-            expect(upserted.id).toEqual('new-id');
+            expect(upserted._id).toEqual('new-id');
             expect(upserted.name).toEqual('upserted');
         });
 
         it('should update the sensor when the id already exists', async () => {
             const created = await repository.create(CreateSensorModel());
 
-            const upserted = await repository.upsert(created.id, CreateSensorModel({ name: 'updated-via-upsert' }));
+            const upserted = await repository.upsert(created._id, CreateSensorModel({ name: 'updated-via-upsert' }));
 
             expect(upserted.name).toEqual('updated-via-upsert');
         });
@@ -82,10 +82,10 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should soft-delete an existing sensor', async () => {
             const created = await repository.create(CreateSensorModel());
 
-            const result = await repository.delete(created.id);
+            const result = await repository.delete(created._id);
 
             expect(result).toEqual(true);
-            expect(await repository.findById(created.id)).toBeNull();
+            expect(await repository.findById(created._id)).toBeNull();
         });
 
         it('should throw ElementNotFoundExeception when the sensor does not exist', async () => {
@@ -97,9 +97,9 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should return the sensor when found and not deleted', async () => {
             const created = await repository.create(CreateSensorModel());
 
-            const found = await repository.findById(created.id);
+            const found = await repository.findById(created._id);
 
-            expect(found.id).toEqual(created.id);
+            expect(found._id).toEqual(created._id);
         });
 
         it('should return null when not found', async () => {
@@ -111,24 +111,24 @@ describe('SensorMongooseRepository (integration mongodb-memory-server)', () => {
         it('should return only non-deleted sensors', async () => {
             const kept = await repository.create(CreateSensorModel({ name: 'kept' }));
             const deleted = await repository.create(CreateSensorModel({ name: 'deleted' }));
-            await repository.delete(deleted.id);
+            await repository.delete(deleted._id);
 
             const all = await repository.findAll();
 
-            expect(all.map((s) => s.id)).toEqual([kept.id]);
+            expect(all.map((s) => s._id)).toEqual([kept._id]);
         });
     });
 
     describe('findByParentId', () => {
         it('should return only non-deleted sensors matching the parentId', async () => {
             const parent = await repository.create(CreateSensorModel({ name: 'parent' }));
-            const child = await repository.create(CreateSensorModel({ name: 'child', parentId: parent.id }));
+            const child = await repository.create(CreateSensorModel({ name: 'child', parentId: parent._id }));
             const otherParentChild = await repository.create(CreateSensorModel({ name: 'other-child', parentId: 'other-parent' }));
 
-            const children = await repository.findByParentId(parent.id);
+            const children = await repository.findByParentId(parent._id);
 
-            expect(children.map((s) => s.id)).toEqual([child.id]);
-            expect(children.map((s) => s.id)).not.toContain(otherParentChild.id);
+            expect(children.map((s) => s._id)).toEqual([child._id]);
+            expect(children.map((s) => s._id)).not.toContain(otherParentChild._id);
         });
     });
 });

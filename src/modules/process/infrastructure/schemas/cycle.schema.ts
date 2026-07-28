@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { ConditionsLogic, CycleType, ExecutableStatus, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType, ExecutableStatus, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { Condition, ConditionSchema } from './condition.schema';
 import { ChildCycle, ChildCycleSchema } from './child-cycle.schema';
 import { CycleStyle, CycleStyleSchema } from './style.schema';
 
-export { ConditionsLogic, CycleType, ExecutionMode };
+export { CycleType, ExecutionMode };
 
 @Schema()
 export class ModePriority { 
@@ -34,6 +34,9 @@ export class Cycle {
     @Prop()
     public description: string;
 
+    @Prop({ type: Boolean, default: true })
+    public display: boolean;
+
     @Prop({ required: true, enum: ExecutableStatus, default: ExecutableStatus.STOPPED })
     public status: ExecutableStatus;
 
@@ -45,9 +48,6 @@ export class Cycle {
 
     @Prop({ type: [ConditionSchema], default: [] })
     public conditions: Condition[];
-
-    @Prop({ required: true, enum: ConditionsLogic, default: ConditionsLogic.AND })
-    public conditionsLogic: ConditionsLogic;
 
     @Prop({ type: [ModePrioritySchema], default: [] })
     public modePriority: ModePriority[];

@@ -36,6 +36,10 @@ export class SynchronizeSensorModel extends SensorModel {
 
 export class SynchronizeDeviceModel extends DeviceModel {
     public delete?: boolean = false;
+    // devices imbriques (slaves) et comrequests imbriques : uniquement presents lors d'une synchro
+    // recursive via box/synchronize/device ; undefined = non fourni, ne cascade pas (retro-compat).
+    public devices?: SynchronizeDeviceModel[];
+    public comrequests?: SynchronizeComRequestModel[];
 }
 
 export class SynchronizeComRequestModel extends ComRequestModel {

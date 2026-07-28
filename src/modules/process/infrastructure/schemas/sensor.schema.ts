@@ -53,6 +53,12 @@ export class Sensor {
     @Prop({ type: SensorConfigSchema, required: true })
     public config: SensorConfig;
 
+    @Prop({ type: Boolean, default: true })
+    public isEnabled: boolean;
+
+    @Prop({ type: Boolean, default: true })
+    public display: boolean;
+
     // relation auto-referencee vers le sensor parent (device MASTER_COM)
     @Prop({ type: String, default: null, index: true })
     public parentId: string | null;

@@ -52,11 +52,11 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
     let bleService: { initialize: jest.Mock };
-    let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock; watchForNewSlaveDevices: jest.Mock };
+    let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock };
     let comRequestRepository: { migrateMissingType: jest.Mock };
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
     let actuatorService: { execute: jest.Mock };
-    let deviceService: { initAll: jest.Mock };
+    let deviceService: { initAll: jest.Mock; watchMasterDevicesForNewSlaves: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: InitService;
 
@@ -94,8 +94,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         modBusService = {
             execute: jest.fn().mockResolvedValue(undefined),
             testExecuteTask: jest.fn().mockResolvedValue(undefined),
-            monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined),
-            watchForNewSlaveDevices: jest.fn().mockResolvedValue({ stop: jest.fn() })
+            monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined)
         };
         comRequestRepository = { migrateMissingType: jest.fn().mockResolvedValue(undefined) };
         ctrlActuatorStrategy = {
@@ -103,7 +102,10 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             testStepOutput: jest.fn().mockResolvedValue(undefined)
         };
         actuatorService = { execute: jest.fn().mockResolvedValue(undefined) };
-        deviceService = { initAll: jest.fn().mockResolvedValue(undefined) };
+        deviceService = {
+            initAll: jest.fn().mockResolvedValue(undefined),
+            watchMasterDevicesForNewSlaves: jest.fn().mockResolvedValue({ stop: jest.fn() })
+        };
         logger = CreateLoggerMock();
 
         service = new InitService(
@@ -137,7 +139,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             expect(scheduleService.restartAllSchedules).toHaveBeenCalledTimes(1);
             expect(sensorService.restartAllScheduledSensors).toHaveBeenCalledTimes(1);
             expect(deviceService.initAll).toHaveBeenCalledTimes(1);
-            expect(modBusService.watchForNewSlaveDevices).toHaveBeenCalledTimes(1);
+            expect(deviceService.watchMasterDevicesForNewSlaves).toHaveBeenCalledTimes(1);
         });
 
         it('should load the configuration once (default valve seeding is currently disabled)', async () => {
@@ -169,13 +171,13 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             );
         });
 
-        it('should never reject when watchForNewSlaveDevices fails, and should log the wrapped error', async () => {
-            modBusService.watchForNewSlaveDevices.mockRejectedValue(new Error('discovery boom'));
+        it('should never reject when watchMasterDevicesForNewSlaves fails, and should log the wrapped error', async () => {
+            deviceService.watchMasterDevicesForNewSlaves.mockRejectedValue(new Error('discovery boom'));
 
             await expect(service.initialize()).resolves.toBeUndefined();
 
             expect(logger.error).toHaveBeenCalledWith(
-                expect.objectContaining({ message: expect.stringContaining('[ModbusService.watchForNewSlaveDevices] Error: discovery boom') }),
+                expect.objectContaining({ message: expect.stringContaining('[DeviceService.watchMasterDevicesForNewSlaves] Error: discovery boom') }),
                 'initialization failed'
             );
         });

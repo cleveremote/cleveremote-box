@@ -1,0 +1,1229 @@
+const now = new Date();
+
+db.sensors.insertMany([
+    {
+        "_id": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "name": "C00 VALUES",
+        "description": "C00 VALUES",
+        "type": "COM",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "config": {
+            "comRequestId": "bed6d3e9-88c9-422f-9ad0-ad12eb81916a",
+            "cronPattern": "*/30 * * * *"
+        },
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "2eabb018-e210-4039-90c6-30486016000e",
+        "name": "C00.00",
+        "description": "Fréquence consigne",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 0,
+            "scale": 0.01,
+            "unit": "Hz"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "386d49c8-9ad8-47e8-b91a-d52e374b8207",
+        "name": "C00.01",
+        "description": "Fréquence sortie",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 1,
+            "scale": 0.01,
+            "unit": "Hz"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "b4516326-441b-4a5b-b872-849515f03b2f",
+        "name": "C00.02",
+        "description": "Courant sortie",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 2,
+            "scale": 0.1,
+            "unit": "A"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "efb9fb24-9fac-4a05-a418-615b02e64789",
+        "name": "C00.03",
+        "description": "Tension entrée",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 3,
+            "scale": 0.1,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "bcf7a9ca-7bc8-4408-ae09-95c661620355",
+        "name": "C00.04",
+        "description": "Tension sortie",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 4,
+            "scale": 0.1,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "be106bfa-c0fc-49d7-beda-1669491652a0",
+        "name": "C00.05",
+        "description": "Vitesse moteur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 5,
+            "scale": 1,
+            "unit": "tr/min"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "09f0fe66-68f2-444e-9884-ddd77a520bc5",
+        "name": "C00.06",
+        "description": "Couple consigne",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 6,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "0aef6965-8c5d-4d4a-84b6-47b759351b5e",
+        "name": "C00.07",
+        "description": "Couple sortie",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 7,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "87459bf2-7e9f-4a2f-b187-74ff17363a4f",
+        "name": "C00.08",
+        "description": "Consigne PID",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 8,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "42ac3f49-1067-4cfd-83e1-8db3ce9ee9e9",
+        "name": "C00.09",
+        "description": "Retour PID",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 9,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "170dd4d5-90eb-4244-a798-e3d64a1210a5",
+        "name": "C00.10",
+        "description": "Puissance sortie",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 10,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "1f5302c5-4002-43ff-a111-9614d4e4e2f9",
+        "name": "C00.11",
+        "description": "Tension bus DC",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 11,
+            "scale": 0.1,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "b552a2e2-6487-4fc2-b07c-6515fa736187",
+        "name": "C00.12",
+        "description": "Température module 1",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 12,
+            "scale": 0.1,
+            "unit": "°C"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "33ea5adf-382d-41d0-94bc-4f0a164c1f4e",
+        "name": "C00.13",
+        "description": "Température module 2",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 13,
+            "scale": 0.1,
+            "unit": "°C"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "a508f358-e7c0-48ce-b5e9-aa3aa59b99fa",
+        "name": "C00.14",
+        "description": "Bornes X",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 14
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "6bef697c-8210-4820-a000-ffe4a547c3c2",
+        "name": "C00.15",
+        "description": "Sorties Y",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 15
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "8c203122-b1c6-46ea-b011-f57042ceee9a",
+        "name": "C00.16",
+        "description": "Entrée AI1",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 16,
+            "scale": 0.001,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "0553c600-0749-46cb-8b6d-afad34d55fe2",
+        "name": "C00.17",
+        "description": "Entrée AI2",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 17,
+            "scale": 0.001,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "064394ee-113b-4cd4-8061-6a0439f2842c",
+        "name": "C00.19",
+        "description": "Entrée PUL",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 19,
+            "scale": 0.001,
+            "unit": "kHz"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "a30ab689-4c86-495c-8d9e-bf9b00c0996c",
+        "name": "C00.20",
+        "description": "Sortie AO1",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 20,
+            "scale": 0.01,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "46efeac7-c774-4ae1-996d-a7255256c422",
+        "name": "C00.21",
+        "description": "Sortie AO2",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 21,
+            "scale": 0.01,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "919ffc83-c5e3-4524-a004-84315c08f87a",
+        "name": "C00.22",
+        "description": "Compteur d'impulsions",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 22,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "2de47d2b-7df6-487e-8df6-5815c4cdc20f",
+        "name": "C00.23",
+        "description": "Marche depuis power-on",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 23,
+            "scale": 0.1,
+            "unit": "h"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "aafbf45d-fc0e-4c8d-b4a5-8da6351de666",
+        "name": "C00.24",
+        "description": "Heures cumulées",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 24,
+            "scale": 1,
+            "unit": "h"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "22c3f5e6-a0b2-4597-8e48-c376635f2c76",
+        "name": "C00.25",
+        "description": "Calibre variateur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 25,
+            "scale": 1,
+            "unit": "kW"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "eedb30bc-e6ad-4e3c-9666-f625eb3ba6af",
+        "name": "C00.26",
+        "description": "Tension nominale variateur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 26,
+            "scale": 1,
+            "unit": "V"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "87f3a1ad-d78a-4334-b7f1-15df26022812",
+        "name": "C00.27",
+        "description": "Courant nominal variateur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 27,
+            "scale": 1,
+            "unit": "A"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "fe176eaf-8a4f-4534-bb47-634ce3ef8cab",
+        "name": "C00.28",
+        "description": "Version logicielle",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 28,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "1eccd562-f018-4a7d-ba68-941824b3e2b7",
+        "name": "C00.29",
+        "description": "Fréquence retour codeur PG",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 29,
+            "scale": 0.01,
+            "unit": "Hz"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "95d555b0-0145-45fb-9f55-fe7b5082304b",
+        "name": "C00.30",
+        "description": "Timer interne",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 30,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "d13734f7-35df-4ae4-87dd-0084faa17a93",
+        "name": "C00.31",
+        "description": "Sortie PID",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 31,
+            "scale": 0.01,
+            "unit": "%"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "9f6ab3c0-c305-47af-aa48-b2f45f60ad0a",
+        "name": "C00.32",
+        "description": "Sous-version logicielle",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 32,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "583ff82e-8fdb-4625-a869-d1cdc9926e33",
+        "name": "C00.33",
+        "description": "Angle codeur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 33,
+            "scale": 0.1,
+            "unit": "°"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "72360b24-6c46-4a7c-ab88-83634ba9ff66",
+        "name": "C00.34",
+        "description": "Cumul écart codeur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 34,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "85a84175-de61-42ac-8d9b-c2a0cdd00b5d",
+        "name": "C00.35",
+        "description": "Compteur impulsions Z codeur",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 35,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "71dd62d6-bab9-4e97-9336-3ae11dc25f9f",
+        "name": "C00.36",
+        "description": "Code pré-alarme",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 36,
+            "scale": 1,
+            "unit": ""
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "6e7ace32-3a7f-4230-8545-49ff64d768bc",
+        "name": "C00.37",
+        "description": "Énergie consommée (mot bas)",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 37,
+            "scale": 1,
+            "unit": "kWh"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "9c3b34f9-93d2-4ce7-8fa1-48fe75be9726",
+        "name": "C00.38",
+        "description": "Énergie consommée (mot haut)",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 38,
+            "scale": 10000,
+            "unit": "kWh"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "54f52892-009e-4802-ba46-47233e313481",
+        "name": "C00.39",
+        "description": "Angle facteur de puissance",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 39,
+            "scale": 1,
+            "unit": "°"
+        },
+        "parentId": "deb15042-6e92-4016-a60b-a52f0d1a3429",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+
+    /////////
+    {
+        "_id": "54f52892-009e-4802-ba46-47233e313481",
+        "name": "Temperature_Humidity",
+        "description": "Temperature_Humidity",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "comRequestId": "1d652b69-806d-4ced-ab6a-495d69191727",
+            "cronPattern": "*/30 * * * *"
+        },
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+
+    {
+        "_id": "2018ea41-98c1-4a12-96cb-90b642650d56",
+        "name": "Moisture (Local)",
+        "description": "Moisture (Local)",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 0,
+            "scale": 0.1,
+            "unit": "%"
+        },
+        "parentId": "54f52892-009e-4802-ba46-47233e313481",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+
+    {
+        "_id": "02771f05-a047-4d67-93a1-ba9d0f3193f3",
+        "name": "Temperature (Local)",
+        "description": "Temperature (Local)",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "code": 1,
+            "scale": 0.1,
+            "unit": "°"
+        },
+        "parentId": "54f52892-009e-4802-ba46-47233e313481",
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    /////////////
+
+    {
+        "_id": "6b983e1d-f430-40a7-99b0-aab52da272bb",
+        "name": "Pressure",
+        "description": "Pressure",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "comRequestId": "52d3677b-7b2b-46b3-b7e6-b715267d73fb",
+            "cronPattern": "*/5 * * * *"
+        },
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    /////////////////
+    {
+        "_id": "bcf7b970-aa1d-4bc2-a581-0b75f273e3a4",
+        "name": "VENTURI FLOWMETER 1",
+        "description": "VENTURI FLOWMETER 1",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "comRequestId": "c6acc84b-9a6e-47f6-a8da-3989969917fc",
+            "cronPattern": "*/5 * * * *"
+        },
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+    {
+        "_id": "08e9478e-19d7-417d-855e-b4e7ea41be86",
+        "name": "VENTURI FLOWMETER 2",
+        "description": "VENTURI FLOWMETER 2",
+        "style": {
+            "bgColor": "#43A047",
+            "fontColor": "#FFFFFF",
+            "iconColor": {
+                "base": "#2E7D32",
+                "icon": "#FFFFFF"
+            }
+        },
+        "type": "COM",
+        "config": {
+            "comRequestId": "118c3200-7667-4972-b011-26343535c0ea",
+            "cronPattern": "*/5 * * * *"
+        },
+        "createdAt": "2026-07-20T08:00:00.000Z",
+        "updatedAt": "2026-07-21T10:30:00.000Z",
+        "deletedAt": null
+    },
+
+
+    ////////
+
+    {
+    "_id": "2e8480b5-4e54-4c91-92cc-4c0d6d54d55f",
+    "name": "instantFlow",
+    "description": "instantFlow",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "9e907bc2-53d7-4e5f-9d08-1b7f9ef3a0f6",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "3bc8960d-6ec5-4d56-a53c-f1d731fe4e62",
+    "name": "fluidVelocity",
+    "description": "fluidVelocity",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "4b0d6bb9-3b4d-4f18-bd63-2a0f90d8db4d",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "cbf22b4b-7c7e-4268-a5d6-9d7cb4afdb62",
+    "name": "positiveCumulative",
+    "description": "positiveCumulative",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "e9c5dd73-2d8d-4c95-a7cc-3aef2b50e14d",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "fddce2df-c6ba-4875-90c5-0c7747b4a9b2",
+    "name": "netCumulative",
+    "description": "netCumulative",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "8cb8af8d-7b7b-4c4d-a0d2-10baf5d8dce2",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "b9c291f3-0d3f-4f2d-98fb-fd6f598eaf89",
+    "name": "todayCumulative",
+    "description": "todayCumulative",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "fb0d14d5-80c9-4dbd-8e66-8dd78cf6e1e0",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "71b54ad8-a4fc-4d76-a68f-b0a88653b56f",
+    "name": "monthCumulative",
+    "description": "monthCumulative",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "0ef08b6f-7c53-4d2f-a82f-8e5d70d33d7f",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "7fdbe8d1-936d-4b2b-9204-a5d799b34b03",
+    "name": "batteryVoltage",
+    "description": "batteryVoltage",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "da98e41b-95d7-4688-aac9-fd3bcb7d97f2",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "1d912c5a-5f63-4308-a8d8-f706cb58b854",
+    "name": "workingTimeHours",
+    "description": "workingTimeHours",
+    "style": {
+      "bgColor": "#43A047",
+      "fontColor": "#FFFFFF",
+      "iconColor": {
+        "base": "#2E7D32",
+        "icon": "#FFFFFF"
+      }
+    },
+    "type": "COM",
+    "config": {
+      "comRequestId": "55d8c7d4-bbfd-451d-a56d-cb5f7f29a30c",
+      "cronPattern": "*/5 * * * *"
+    },
+    "createdAt": "2026-07-20T08:00:00.000Z",
+    "updatedAt": "2026-07-21T10:30:00.000Z",
+    "deletedAt": null
+  }
+
+]);
+

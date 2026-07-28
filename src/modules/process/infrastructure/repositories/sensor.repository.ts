@@ -11,11 +11,11 @@ export class SensorRepository {
     public constructor(private sensorMongooseRepository: SensorMongooseRepository) { }
 
     public async save(model: SensorModel): Promise<SensorModel> {
-        if (model.id) {
-            if (!isValidUuid(model.id)) {
-                throw new InvalidIdException(model.id, 'sensor');
+        if (model._id) {
+            if (!isValidUuid(model._id)) {
+                throw new InvalidIdException(model._id, 'sensor');
             }
-            return this.sensorMongooseRepository.upsert(model.id, model);
+            return this.sensorMongooseRepository.upsert(model._id, model);
         }
         return this.sensorMongooseRepository.create(model);
     }
@@ -48,7 +48,7 @@ export class SensorRepository {
     public async replaceAll(models: SynchronizeSensorModel[]): Promise<SensorModel[]> {
         for (const model of models) {
             if (model.delete) {
-                await this.sensorMongooseRepository.delete(model.id);
+                await this.sensorMongooseRepository.delete(model._id);
                 continue;
             }
             await this.save(model);

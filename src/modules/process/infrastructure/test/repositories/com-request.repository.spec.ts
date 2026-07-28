@@ -7,13 +7,15 @@ import { InvalidIdException } from '@process/domain/errors/db-errors';
 
 describe('ComRequestRepository', () => {
     let mongooseRepository: {
-        create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByDeviceIdAndTypes: jest.Mock;
+        create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock;
+        findByDeviceIdAndTypes: jest.Mock; findByDeviceId: jest.Mock;
     };
     let repository: ComRequestRepository;
 
     beforeEach(() => {
         mongooseRepository = {
-            create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByDeviceIdAndTypes: jest.fn()
+            create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(),
+            findByDeviceIdAndTypes: jest.fn(), findByDeviceId: jest.fn()
         };
         repository = new ComRequestRepository(mongooseRepository as never as ComRequestkMongooseRepository);
     });
@@ -112,6 +114,34 @@ describe('ComRequestRepository', () => {
 
             expect(mongooseRepository.findByDeviceIdAndTypes).toHaveBeenCalledWith('device-1', [ComRequestType.ANALOG_INPUT]);
             expect(result).toEqual(models);
+        });
+    });
+
+    describe('replaceForDevice', () => {
+        it('should soft-delete existing comrequests absent from the incoming models, and save the rest with deviceId forced', async () => {
+            const staleId = 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a';
+            const keptId = 'a1b2c3d4-1b2c-4d3e-9f4a-5b6c7d8e9f0a';
+            const staleExisting = Object.assign(new ComRequestModel(), { _id: staleId, deviceId: 'device-1' });
+            const keptExisting = Object.assign(new ComRequestModel(), { _id: keptId, deviceId: 'device-1' });
+            mongooseRepository.findByDeviceId.mockResolvedValueOnce([staleExisting, keptExisting]).mockResolvedValueOnce(['final']);
+            const incoming = Object.assign(new SynchronizeComRequestModel(), { _id: keptId, deviceId: 'other-device' });
+
+            const result = await repository.replaceForDevice('device-1', [incoming]);
+
+            expect(mongooseRepository.delete).toHaveBeenCalledWith(staleId);
+            expect(mongooseRepository.delete).not.toHaveBeenCalledWith(keptId);
+            expect(mongooseRepository.upsert).toHaveBeenCalledWith(keptId, expect.objectContaining({ deviceId: 'device-1' }));
+            expect(result).toEqual(['final']);
+        });
+
+        it('should soft-delete a model explicitly flagged delete instead of saving it', async () => {
+            mongooseRepository.findByDeviceId.mockResolvedValue([]);
+            const toDelete = Object.assign(new SynchronizeComRequestModel(), { _id: 'id-1', delete: true });
+
+            await repository.replaceForDevice('device-1', [toDelete]);
+
+            expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
+            expect(mongooseRepository.upsert).not.toHaveBeenCalled();
         });
     });
 });

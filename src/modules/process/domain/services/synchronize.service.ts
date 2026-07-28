@@ -24,7 +24,7 @@ import { TriggerRepository } from '@process/infrastructure/repositories/trigger.
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
 import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
-import { DeviceModel } from '../models/device.model';
+import { DeviceModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestModel } from '../models/com-request.model';
@@ -116,9 +116,50 @@ export class SynchronizeService {
     }
 
     public async synchronizeDeviceList(deviceModels: SynchronizeDeviceModel[]): Promise<DeviceModel[]> {
-        const devices = await this.deviceRepository.saveMany(deviceModels);
+        for (const model of deviceModels) {
+            await this._synchronizeDeviceTree(model);
+        }
         await this.configurationService.getStructure();
-        return devices;
+        return this.deviceRepository.get() as Promise<DeviceModel[]>;
+    }
+
+    // cascade recursive : sauvegarde le device puis, uniquement si le champ correspondant est
+    // explicitement fourni (undefined = non fourni = pas touche, retro-compat clients non migres),
+    // remplace completement ses comrequests et/ou ses devices slaves imbriques.
+    private async _synchronizeDeviceTree(model: SynchronizeDeviceModel): Promise<DeviceModel> {
+        if (model.delete) {
+            await this.deviceRepository.delete(model._id);
+            return { ...model, deletedAt: new Date() } as DeviceModel;
+        }
+        const device = await this.deviceRepository.save(model);
+
+        if (model.comrequests !== undefined) {
+            await this.modbusTaskRepository.replaceForDevice(device._id, model.comrequests);
+        }
+        if (model.devices !== undefined) {
+            await this._replaceChildDevices(device._id, model.devices);
+        }
+        return device;
+    }
+
+    // remplacement complet scope au device parent : tout slave existant absent de `childModels`
+    // est soft-supprime, les autres sont sauvegardes avec masterDeviceId force sur le parent reel.
+    private async _replaceChildDevices(masterId: string, childModels: SynchronizeDeviceModel[]): Promise<DeviceModel[]> {
+        const existing = await this.deviceRepository.getSlavesByMasterId(masterId);
+        const incomingIds = new Set(childModels.filter(child => child._id).map(child => child._id));
+        for (const existingChild of existing) {
+            if (!incomingIds.has(existingChild._id)) {
+                await this.deviceRepository.delete(existingChild._id);
+            }
+        }
+        const saved: DeviceModel[] = [];
+        for (const childModel of childModels) {
+            if (!childModel.delete) {
+                (childModel.config as SlaveConfigModel).masterDeviceId = masterId;
+            }
+            saved.push(await this._synchronizeDeviceTree(childModel));
+        }
+        return saved;
     }
 
     public async synchronizeModbusTaskList(modbusTaskModels: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
@@ -161,7 +202,7 @@ export class SynchronizeService {
 
     public async sychronizeSensor(sensorData: SynchronizeSensorModel): Promise<SensorModel> {
         if (sensorData.delete) {
-            await this._deleteSensor(sensorData.id);
+            await this._deleteSensor(sensorData._id);
             return { ...sensorData, deletedAt: new Date() } as SensorModel;
         }
         const sensor = await this.sensorRepository.save(sensorData);
@@ -170,7 +211,7 @@ export class SynchronizeService {
 
     private async _deleteSensor(id: string): Promise<void> {
         await this.sensorRepository.delete(id);
-        await this.sensorService.initScheduledSensor({ id } as SensorModel, true);
+        await this.sensorService.initScheduledSensor({ _id: id } as SensorModel, true);
     }
 
 }

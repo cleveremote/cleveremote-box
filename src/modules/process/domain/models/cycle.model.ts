@@ -1,5 +1,4 @@
 import {
-    ConditionsLogic,
     ExecutableStatus,
     ExecutionMode,
     CycleType,
@@ -32,6 +31,7 @@ export class CycleModel implements IExecutable {
     public type: CycleType = CycleType.CYCLE;
     public style: { bgColor: string; fontColor: string; iconColor: { icon: string; base: string } };
     public description: string;
+    public display?: boolean = true;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public modePriority: { mode: ProcessMode; priority: number }[] = [];
     public progression?: { startedAt: Date; duration: number };
@@ -41,7 +41,6 @@ export class CycleModel implements IExecutable {
 
     public executionMode?: ExecutionMode = ExecutionMode.SEQUENTIAL;
     public conditions?: ConditionModel[] = [];
-    public conditionsLogic?: ConditionsLogic = ConditionsLogic.AND;
     public parentCycleId?: string = null;
     public childCycles?: ChildCycleRef[] = [];
 

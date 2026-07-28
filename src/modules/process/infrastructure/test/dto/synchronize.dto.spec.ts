@@ -30,18 +30,19 @@ import {
 } from '@process/infrastructure/dto/synchronize.dto';
 import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
 import {
-    ConditionsLogic,
     CycleType,
     ExecutableAction,
     ExecutionMode,
     ProcessMode
 } from '@process/domain/interfaces/executable.interface';
+import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
+import { ModbusValueType } from '@process/domain/models/com-request.model';
 
 describe('synchronize.dto (mapping vers les modeles domaine)', () => {
     describe('CycleSynchronizeDTO.mapToCycleModel', () => {
@@ -60,20 +61,18 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model.name).toEqual('cycle');
         });
 
-        it('should default type/executionMode/conditionsLogic/parentCycleId when absent', () => {
+        it('should default type/executionMode/parentCycleId when absent', () => {
             const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto());
 
             expect(model.type).toEqual(CycleType.CYCLE);
             expect(model.executionMode).toEqual(ExecutionMode.SEQUENTIAL);
-            expect(model.conditionsLogic).toEqual(ConditionsLogic.AND);
             expect(model.parentCycleId).toBeNull();
         });
 
-        it('should keep the explicit type/executionMode/conditionsLogic/parentCycleId when provided', () => {
+        it('should keep the explicit type/executionMode/parentCycleId when provided', () => {
             const dto = CreateMinimalDto({
                 type: CycleType.GROUP,
                 executionMode: ExecutionMode.PARALLEL,
-                conditionsLogic: ConditionsLogic.OR,
                 parentCycleId: 'parent-1'
             });
 
@@ -81,8 +80,19 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
 
             expect(model.type).toEqual(CycleType.GROUP);
             expect(model.executionMode).toEqual(ExecutionMode.PARALLEL);
-            expect(model.conditionsLogic).toEqual(ConditionsLogic.OR);
             expect(model.parentCycleId).toEqual('parent-1');
+        });
+
+        it('should default display to true when absent', () => {
+            const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto());
+
+            expect(model.display).toBe(true);
+        });
+
+        it('should keep the explicit display value when provided', () => {
+            const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto({ display: false }));
+
+            expect(model.display).toBe(false);
         });
 
         it('should default modePriority to MANUAL/SCHEDULED/TRIGGER (0/1/2) when absent', () => {
@@ -102,13 +112,25 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model.modePriority).toEqual([{ mode: ProcessMode.MANUAL, priority: 5 }]);
         });
 
-        it('should map every condition', () => {
-            const first = Object.assign(new ConditionSync(), { name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 5 });
-            const second = Object.assign(new ConditionSync(), { name: 'c2', elementId: 'dev-2', elementType: 'SENSOR', operator: '<', value: 1 });
+        it('should map every condition, including order/symbolStart/symbolEnd', () => {
+            const first = Object.assign(new ConditionSync(), {
+                name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 5,
+                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN, symbolEnd: ConditionSymbolEnd.AND
+            });
+            const second = Object.assign(new ConditionSync(), {
+                name: 'c2', elementId: 'dev-2', elementType: 'SENSOR', operator: '<', value: 1,
+                order: 1, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
+            });
             const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto({ conditions: [first, second] }));
 
             expect(model.conditions).toHaveLength(2);
-            expect(model.conditions[0]).toEqual(expect.objectContaining({ name: 'c1', elementId: 'dev-1', elementType: 'SENSOR' }));
+            expect(model.conditions[0]).toEqual(expect.objectContaining({
+                name: 'c1', elementId: 'dev-1', elementType: 'SENSOR',
+                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN, symbolEnd: ConditionSymbolEnd.AND
+            }));
+            expect(model.conditions[1]).toEqual(expect.objectContaining({
+                name: 'c2', order: 1, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
+            }));
         });
 
         it('should map childCycles one-to-one', () => {
@@ -292,7 +314,7 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
 
             const model = SensorSynchronizeDTO.mapToSensorModel(dto);
 
-            expect(model.id).toEqual('sensor-1');
+            expect(model._id).toEqual('sensor-1');
             expect(model.name).toEqual('sensor');
             expect(model.type).toEqual(SensorType.FORCAST);
             expect((model.config as ForcastSensorConfigModel).cronPattern).toEqual('0 0 * * *');
@@ -409,7 +431,7 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model.cycles).toHaveLength(1);
             expect(model.cycles[0]._id).toEqual('cycle-1');
             expect(model.sensors).toHaveLength(1);
-            expect(model.sensors[0].id).toEqual('sensor-1');
+            expect(model.sensors[0]._id).toEqual('sensor-1');
         });
 
         it('should default cycles/sensors to empty arrays when absent', () => {
@@ -522,6 +544,38 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             const model = ComRequestDTO.mapToComRequestModel(dto);
 
             expect(model.config.params.value).toEqual([1, 2]);
+        });
+
+        it('should map type and formula', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-6', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['readHoldingRegisters'], address: 100, type: ModbusValueType.CUMULATIVE,
+                    params: Object.assign(new ModbusTaskParams(), {
+                        length: 4, scale: 1, unit: 'm³', formula: '(N + Nf) * 10^(n - 3)'
+                    })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.type).toEqual(ModbusValueType.CUMULATIVE);
+            expect(model.config.params.formula).toEqual('(N + Nf) * 10^(n - 3)');
+        });
+
+        it('should leave type and formula undefined when absent (backward compatibility)', () => {
+            const dto = Object.assign(new ComRequestDTO(), {
+                _id: 'task-7', deviceId: 'conn-1', name: 'task',
+                config: Object.assign(new ComRequestConfigDTO(), {
+                    function: ['readHoldingRegisters'], address: 100,
+                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
+                })
+            });
+
+            const model = ComRequestDTO.mapToComRequestModel(dto);
+
+            expect(model.config.type).toBeUndefined();
+            expect(model.config.params.formula).toBeUndefined();
         });
     });
 

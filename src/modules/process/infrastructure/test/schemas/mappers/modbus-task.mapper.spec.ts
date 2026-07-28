@@ -1,5 +1,5 @@
 import { ModbusTaskMapper } from '@process/infrastructure/schemas/mappers/modbus-task.mapper';
-import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestModel, ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
 import { ComRequestDocument } from '@process/infrastructure/schemas/comrequest.schema';
 
 describe('ModbusTaskMapper', () => {
@@ -45,5 +45,23 @@ describe('ModbusTaskMapper', () => {
 
         const schema = ModbusTaskMapper.mapToSchema(model);
         expect(schema.config.params).toEqual(expect.objectContaining({ value: [1, 2, 3] }));
+    });
+
+    it('should carry type and formula through both mapping directions', () => {
+        const document = {
+            _id: 'task-1', deviceId: 'conn-1', name: 'task',
+            config: {
+                function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 9, type: ModbusValueType.CUMULATIVE,
+                params: { length: 4, formula: '(N + Nf) * 10^(n - 3)' }
+            }
+        } as unknown as ComRequestDocument;
+
+        const model = ModbusTaskMapper.mapToModel(document);
+        expect(model.config.type).toEqual(ModbusValueType.CUMULATIVE);
+        expect(model.config.params).toEqual(expect.objectContaining({ formula: '(N + Nf) * 10^(n - 3)' }));
+
+        const schema = ModbusTaskMapper.mapToSchema(model);
+        expect(schema.config.type).toEqual(ModbusValueType.CUMULATIVE);
+        expect(schema.config.params).toEqual(expect.objectContaining({ formula: '(N + Nf) * 10^(n - 3)' }));
     });
 });

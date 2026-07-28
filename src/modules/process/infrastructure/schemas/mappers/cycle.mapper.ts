@@ -15,11 +15,11 @@ export class CycleMapper {
         model.name = cycle.name;
         model.type = cycle.type;
         model.description = cycle.description;
+        model.display = cycle.display;
         model.status = cycle.status;
         model.style = cycle.style;
         model.executionMode = cycle.executionMode;
         model.conditions = (cycle.conditions ?? []).map(ConditionMapper.mapToModel);
-        model.conditionsLogic = cycle.conditionsLogic;
         model.modePriority = (cycle.modePriority ?? []).map((mp) => ({ mode: mp.mode, priority: mp.priority }));
         model.sequences = [];
         model.schedules = [];
@@ -37,11 +37,11 @@ export class CycleMapper {
         cycle.name = model.name;
         cycle.type = model.type;
         cycle.description = model.description;
+        cycle.display = model.display ?? true;
         cycle.status = model.status;
         cycle.style = model.style as Cycle['style'];
         cycle.executionMode = model.executionMode;
         cycle.conditions = (model.conditions ?? []).map(ConditionMapper.mapToSchema);
-        cycle.conditionsLogic = model.conditionsLogic;
         cycle.modePriority = model.modePriority ?? [];
         cycle.parentCycleId = model.parentCycleId ?? null;
         cycle.childCycles = (model.childCycles ?? []).map(ChildCycleMapper.mapToSchema);

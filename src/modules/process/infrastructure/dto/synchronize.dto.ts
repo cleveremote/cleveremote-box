@@ -1,8 +1,9 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable max-lines */
 import { ApiProperty } from '@nestjs/swagger';
-import { ConditionsLogic, CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
+import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
@@ -10,7 +11,7 @@ import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from 
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import {
     SynchronizeConditionModel,
@@ -56,12 +57,12 @@ export class ModbusTaskParams {
     @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
     public length: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsNumber()
     @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
     public scale: number;
 
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
     @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
     public unit: string;
@@ -70,6 +71,12 @@ export class ModbusTaskParams {
     @Validate(IsNumberOrNumberArray)
     @ApiProperty({ description: "Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)", required: false })
     public value?: number | number[];
+
+    @IsOptional()
+    @ValidateIf((o, value) => value !== null)
+    @IsString()
+    @ApiProperty({ description: "Formule mathjs de transformation de la valeur lue (ex: \"raw\")", required: false, nullable: true })
+    public formula?: string | null;
 
     @IsOptional()
     @ValidateNested()
@@ -99,6 +106,11 @@ export class ComRequestConfigDTO {
     @IsBoolean()
     @ApiProperty({ description: "Indique si la requête a été traitée", required: false, default: false })
     public done?: boolean;
+
+    @IsOptional()
+    @IsEnum(ModbusValueType)
+    @ApiProperty({ description: "Type de valeur lue (défaut : int)", enum: ModbusValueType, required: false })
+    public type?: ModbusValueType;
 
     @ValidateNested()
     @Type(() => ModbusTaskParams)
@@ -218,6 +230,9 @@ export class CycleSynchronizeDTO {
     @IsString()
     public description: string;
     @IsOptional()
+    @IsBoolean()
+    public display?: boolean = true;
+    @IsOptional()
     @ValidateNested()
     @Type(() => Style)
     public style?: Style = {
@@ -263,9 +278,6 @@ export class CycleSynchronizeDTO {
     @Type(() => ConditionSync)
     public conditions?: ConditionSync[];
     @IsOptional()
-    @IsEnum(ConditionsLogic)
-    public conditionsLogic?: ConditionsLogic = ConditionsLogic.AND;
-    @IsOptional()
     @IsString()
     public parentCycleId: string = null;
     @IsOptional()
@@ -284,20 +296,12 @@ export class CycleSynchronizeDTO {
         cycle.delete = cycleSynchronizeDTO.delete ?? false;
         cycle.style = cycleSynchronizeDTO.style;
         cycle.description = cycleSynchronizeDTO.description;
+        cycle.display = cycleSynchronizeDTO.display ?? true;
 
         cycle.type = cycleSynchronizeDTO.type ?? CycleType.CYCLE;
         cycle.executionMode = cycleSynchronizeDTO.executionMode ?? ExecutionMode.SEQUENTIAL;
-        cycle.conditionsLogic = cycleSynchronizeDTO.conditionsLogic ?? ConditionsLogic.AND;
         cycle.parentCycleId = cycleSynchronizeDTO.parentCycleId ?? null;
-        cycle.conditions = (cycleSynchronizeDTO.conditions ?? []).map(conditionSync => {
-            const condition = new SynchronizeConditionModel();
-            condition.name = conditionSync.name;
-            condition.elementId = conditionSync.elementId;
-            condition.elementType = conditionSync.elementType;
-            condition.operator = conditionSync.operator;
-            condition.value = conditionSync.value;
-            return condition;
-        });
+        cycle.conditions = (cycleSynchronizeDTO.conditions ?? []).map(ConditionSync.toModel);
         cycle.childCycles = (cycleSynchronizeDTO.childCycles ?? []).map((childCycleSync): ChildCycleRef => ({
             cycleId: childCycleSync.cycleId,
             config: {
@@ -338,6 +342,7 @@ export class CycleSynchronizeDTO {
                                 address: customStackSync.params.address,
                                 disabled: customStackSync.params.disabled,
                                 done: customStackSync.params.done ?? false,
+                                type: customStackSync.params.type,
                                 params: customStackSync.params.params || undefined
                             }
                         }),
@@ -347,21 +352,14 @@ export class CycleSynchronizeDTO {
                                 address: customStackSync.defaultParams.address,
                                 disabled: customStackSync.defaultParams.disabled,
                                 done: customStackSync.defaultParams.done ?? false,
+                                type: customStackSync.defaultParams.type,
                                 params: customStackSync.defaultParams.params || undefined
                             }
                         })
                     }))
                 }),
                 ...(sequenceSync.securityConfig.conditions !== undefined && {
-                    conditions: sequenceSync.securityConfig.conditions.map(conditionSync => {
-                        const condition = new SynchronizeConditionModel();
-                        condition.name = conditionSync.name;
-                        condition.elementId = conditionSync.elementId;
-                        condition.elementType = conditionSync.elementType;
-                        condition.operator = conditionSync.operator;
-                        condition.value = conditionSync.value;
-                        return condition;
-                    })
+                    conditions: sequenceSync.securityConfig.conditions.map(ConditionSync.toModel)
                 })
             };
             // les modules (actuator-rpi/actuator-com) sont geres via leurs endpoints de sync dedies ;
@@ -387,15 +385,7 @@ export class CycleSynchronizeDTO {
             trigger.delay = triggerSync.delay;
             trigger.action = triggerSync.action;
             trigger.duration = triggerSync.duration;
-            trigger.conditions = (triggerSync.conditions ?? []).map(conditionSync => {
-                const condition = new SynchronizeConditionModel();
-                condition.name = conditionSync.name;
-                condition.elementId = conditionSync.elementId;
-                condition.elementType = conditionSync.elementType;
-                condition.operator = conditionSync.operator;
-                condition.value = conditionSync.value;
-                return condition;
-            });
+            trigger.conditions = (triggerSync.conditions ?? []).map(ConditionSync.toModel);
             trigger.delete = triggerSync.delete ?? false;
             return trigger;
         });
@@ -530,6 +520,27 @@ export class ConditionSync {
     public elementId: string;
     @IsEnum(ElementType)
     public elementType: ElementType;
+    @IsNumber()
+    public order: number;
+    @IsOptional()
+    @IsEnum(ConditionSymbolStart)
+    public symbolStart?: ConditionSymbolStart;
+    @IsOptional()
+    @IsEnum(ConditionSymbolEnd)
+    public symbolEnd?: ConditionSymbolEnd;
+
+    public static toModel(conditionSync: ConditionSync): SynchronizeConditionModel {
+        const condition = new SynchronizeConditionModel();
+        condition.name = conditionSync.name;
+        condition.elementId = conditionSync.elementId;
+        condition.elementType = conditionSync.elementType;
+        condition.operator = conditionSync.operator;
+        condition.value = conditionSync.value;
+        condition.order = conditionSync.order;
+        condition.symbolStart = conditionSync.symbolStart;
+        condition.symbolEnd = conditionSync.symbolEnd;
+        return condition;
+    }
 }
 
 export class ModuleTimingConfigSync {
@@ -605,15 +616,7 @@ export class TriggerSynchronizeDTO {
             triggerModel.trigger.sunBehavior.sunState = triggerSynchronizeDTO.trigger.sunBehavior?.sunState;
             triggerModel.trigger.sunBehavior.time = triggerSynchronizeDTO.trigger?.sunBehavior?.time; //time befor or after sunset sunrise
         }
-        triggerModel.conditions = (triggerSynchronizeDTO.conditions ?? []).map(conditionSync => {
-            const condition = new SynchronizeConditionModel();
-            condition.name = conditionSync.name;
-            condition.elementId = conditionSync.elementId;
-            condition.elementType = conditionSync.elementType;
-            condition.operator = conditionSync.operator;
-            condition.value = conditionSync.value;
-            return condition;
-        });
+        triggerModel.conditions = (triggerSynchronizeDTO.conditions ?? []).map(ConditionSync.toModel);
         triggerModel.isPaused = triggerSynchronizeDTO.isPaused;
         return triggerModel;
     }
@@ -622,7 +625,7 @@ export class TriggerSynchronizeDTO {
 
 export class SensorConfigDTO {
     // requis pour FORCAST/COM ; absent quand le sensor est un enfant (parentId renseigne)
-    @ValidateIf(o => !o.code)
+    @ValidateIf(o => o.code === undefined || o.code === null)
     @IsString()
     @IsNotEmpty()
     public cronPattern?: string;
@@ -653,7 +656,7 @@ export class SensorConfigDTO {
 export class SensorSynchronizeDTO {
     @IsOptional()
     @IsNotEmpty()
-    public id: string;
+    public _id: string;
     @IsString()
     public name: string;
     @IsString()
@@ -674,16 +677,24 @@ export class SensorSynchronizeDTO {
     public config: SensorConfigDTO;
     @IsOptional()
     @IsBoolean()
+    public isEnabled?: boolean = true;
+    @IsOptional()
+    @IsBoolean()
+    public display?: boolean = true;
+    @IsOptional()
+    @IsBoolean()
     public delete?: boolean = false;
 
     public static mapToSensorModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SynchronizeSensorModel {
         const sensorModel = new SynchronizeSensorModel();
-        sensorModel.id = sensorSynchronizeDTO.id;
+        sensorModel._id = sensorSynchronizeDTO._id;
         sensorModel.name = sensorSynchronizeDTO.name;
         sensorModel.description = sensorSynchronizeDTO.description;
         sensorModel.style = sensorSynchronizeDTO.style;
         sensorModel.type = sensorSynchronizeDTO.type;
         sensorModel.parentId = sensorSynchronizeDTO.parentId ?? null;
+        sensorModel.isEnabled = sensorSynchronizeDTO.isEnabled ?? true;
+        sensorModel.display = sensorSynchronizeDTO.display ?? true;
         sensorModel.config = sensorSynchronizeDTO.type === SensorType.FORCAST
             ? Object.assign(new ForcastSensorConfigModel(), sensorSynchronizeDTO.config)
             : Object.assign(new ComSensorConfigModel(), sensorSynchronizeDTO.config);
@@ -930,6 +941,21 @@ export class DeviceSynchronizeDTO {
     @IsBoolean()
     public delete?: boolean = false;
 
+    // devices slaves imbriques (recursif) : leur config.masterDeviceId sera ecrase cote serveur
+    // avec l'_id reel de ce device parent au moment de la synchro.
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => DeviceSynchronizeDTO)
+    public slaveDevices?: DeviceSynchronizeDTO[];
+
+    // comrequests imbriques appartenant a ce device (leur deviceId sera ecrase cote serveur).
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ComRequestDTO)
+    public comRequests?: ComRequestDTO[];
+
     // --- Méthode de mapping vers le modèle principal ---
     public static mapToDeviceModel(dto: DeviceSynchronizeDTO): SynchronizeDeviceModel {
         const model = new SynchronizeDeviceModel();
@@ -942,6 +968,9 @@ export class DeviceSynchronizeDTO {
             ? Object.assign(new MasterConfigModel(), dto.config)
             : Object.assign(new SlaveConfigModel(), dto.config);
         model.delete = dto.delete ?? false;
+        // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
+        model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);
+        model.comrequests = dto.comRequests?.map(ComRequestDTO.mapToComRequestModel);
         return model;
     }
 }
@@ -996,6 +1025,7 @@ export class ComRequestDTO {
             address: dto.config.address,
             disabled: dto.config.disabled,
             done: dto.config.done ?? false,
+            type: dto.config.type,
             params: dto.config.params || undefined
         };
         model.delete = dto.delete ?? false;

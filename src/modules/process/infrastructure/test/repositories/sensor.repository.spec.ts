@@ -29,17 +29,17 @@ describe('SensorRepository', () => {
         });
 
         it('should upsert when the model has a valid uuid id', async () => {
-            const model = Object.assign(new SensorModel(), { id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a' });
+            const model = Object.assign(new SensorModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a' });
             mongooseRepository.upsert.mockResolvedValue(model);
 
             const result = await repository.save(model);
 
-            expect(mongooseRepository.upsert).toHaveBeenCalledWith(model.id, model);
+            expect(mongooseRepository.upsert).toHaveBeenCalledWith(model._id, model);
             expect(result).toEqual(model);
         });
 
         it('should throw InvalidIdException when the id is not a valid uuid', async () => {
-            const model = Object.assign(new SensorModel(), { id: 'not-a-uuid' });
+            const model = Object.assign(new SensorModel(), { _id: 'not-a-uuid' });
 
             await expect(repository.save(model)).rejects.toThrow(InvalidIdException);
         });
@@ -113,8 +113,8 @@ describe('SensorRepository', () => {
 
     describe('replaceAll', () => {
         it('should delete models flagged for deletion and save the rest, then return findAll', async () => {
-            const toDelete = Object.assign(new SynchronizeSensorModel(), { id: 'id-1', delete: true });
-            const toSave = Object.assign(new SynchronizeSensorModel(), { id: undefined, delete: false });
+            const toDelete = Object.assign(new SynchronizeSensorModel(), { _id: 'id-1', delete: true });
+            const toSave = Object.assign(new SynchronizeSensorModel(), { _id: undefined, delete: false });
             mongooseRepository.create.mockResolvedValue(toSave);
             mongooseRepository.findAll.mockResolvedValue(['final']);
 

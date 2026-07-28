@@ -35,7 +35,7 @@ export class ValueRepository {
         if (executable) {
             return this._toProcessValue(executable);
         }
-        return this._toSensorValue(structure.sensors.find((x) => x.id === deviceId));
+        return this._toSensorValue(structure.sensors.find((x) => x._id === deviceId));
     }
 
     private _toProcessValue(executable: CycleModel | SequenceModel): ProcessValueModel {
@@ -50,7 +50,7 @@ export class ValueRepository {
             return undefined;
         }
         const value = new SensorValueModel();
-        value.id = sensor.id;
+        value.id = sensor._id;
         value.value = sensor.value;
         value.date = sensor.date;
         return value;

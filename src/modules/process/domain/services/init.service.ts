@@ -58,7 +58,7 @@ export class InitService {
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
             .then(() => wrap('init devices', () => this.deviceService.initAll()))
-            .then(() => wrap('ModbusService.watchForNewSlaveDevices', () => this.modBusService.watchForNewSlaveDevices()))
+           // .then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
             .then(async () => { 
                 // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
                 // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).

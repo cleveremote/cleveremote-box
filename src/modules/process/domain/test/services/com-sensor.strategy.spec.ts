@@ -45,6 +45,30 @@ describe('ComSensorStrategy', () => {
         ]);
     });
 
+    it('should return the decoded/formula-evaluated value when config.type is set on the com request (meter-style)', async () => {
+        const sensor = CreateComSensorModel();
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_HOLDING_REGISTERS,
+            result: { data: [1234, 0, 0, 16128], evaluated: { formula: '(N + Nf) * 10^(n - 3)', scope: { N: 1234, Nf: 0.5, n: 3 }, value: 1234.5 } }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(result).toEqual([{ value: 1234.5, isFormated: false, unit: '°C', name: 'request-1' }]);
+    });
+
+    it('should return the decoded/formula-evaluated value for READ_INPUT_REGISTERS too', async () => {
+        const sensor = CreateComSensorModel();
+        modbusService.execute.mockResolvedValue({
+            function: ModbusFunctionName.READ_INPUT_REGISTERS,
+            result: { data: [21], evaluated: { formula: 'raw * 2', scope: { raw: 21 }, value: 42 } }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(result).toEqual([{ value: 42, isFormated: false, unit: '°C', name: 'request-1' }]);
+    });
+
     it('should throw NotImplementedError when modbus returns no result', async () => {
         const sensor = CreateComSensorModel();
         modbusService.execute.mockResolvedValue(undefined);

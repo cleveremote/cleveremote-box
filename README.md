@@ -254,3 +254,19 @@ problem docker alpine upgrade make some copilation package issues
 
 mongodump --uri='mongodb://admin:Nya0113!@localhost:27017' --out ./backup
     mongorestore --drop --uri='mongodb://admin:Nya0113!@localhost:27017' ./backup
+
+
+    // Équivaut à la trame : 01 03 00 00 00 02 C4 0B
+async function readTempHumidity(slaveId = 1) {
+  client.setID(slaveId);
+  const { data } = await client.readHoldingRegisters(REG.HUMIDITY, 2);
+ 
+  const humidity = data[0] / 10; // ex: 486 -> 48.6 %RH
+ 
+  // Température : valeur signée 16 bits (complément à 2 si négative)
+  let rawTemp = data[1];
+  if (rawTemp > 0x7fff) rawTemp -= 0x10000; // ex: 0xFF9F -> -97
+  const temperature = rawTemp / 10;         // -> -9.7 °C
+ 
+  return { temperature, humidity };
+}

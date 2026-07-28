@@ -33,11 +33,6 @@ export enum ExecutionMode {
     PARALLEL = 'PARALLEL'
 }
 
-export enum ConditionsLogic {
-    AND = 'AND',
-    OR = 'OR'
-}
-
 export enum ProcessType {
     //
     INIT = 'INIT', // declenchement initial 

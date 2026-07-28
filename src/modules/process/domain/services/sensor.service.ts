@@ -36,7 +36,7 @@ export class SensorService {
     //function used to emit value when a sensor read (real or scheduled) produces a new reading.
     public emitReceivedData(sensor: SensorModel, value: number): void {
         const sensorValue = new SensorValueModel();
-        sensorValue.id = sensor.id;
+        sensorValue.id = sensor._id;
         sensorValue.value = value;
         sensorValue.type = 'SENSOR';
         if (sensor.type === SensorType.FORCAST) {
@@ -46,7 +46,7 @@ export class SensorService {
             sensorValue.date = tomorrow;
         }
 
-        this._updateStructureSensorValue(sensor.id, sensorValue);
+        this._updateStructureSensorValue(sensor._id, sensorValue);
 
         this.wsService.sendMessage({ pattern: 'agg/synchronize/sensor-value', data: JSON.stringify(sensorValue) }, true)
             .catch((err) => this.logger.warn({ err }, 'failed to send sensor value (local)'));
@@ -60,7 +60,7 @@ export class SensorService {
     // structure.sensors (ex: restartAllScheduledSensors() ne passe pas par structure.sensors) :
     // c'est cette derniere que getDeviceValue()/les reponses API doivent voir.
     private _updateStructureSensorValue(sensorId: string, sensorValue: SensorValueModel): void {
-        const structSensor = this.configurationService.structure.sensors.find((x) => x.id === sensorId);
+        const structSensor = this.configurationService.structure.sensors.find((x) => x._id === sensorId);
         if (structSensor) {
             structSensor.value = sensorValue.value;
             structSensor.date = sensorValue.date;
@@ -69,30 +69,32 @@ export class SensorService {
 
     private async _readAndEmit(sensor: SensorModel): Promise<void> {
         try {
-            const results = await this._resolveStrategy(sensor.type).read(sensor);
-            const children = await this.sensorRepository.getChildren(sensor.id);
+            //const results = await this._resolveStrategy(sensor.type).read(sensor);
+            const children = await this.sensorRepository.getChildren(sensor._id);
 
             if (children.length) {
                 for (let index = 0; index < children.length; index++) {
                     const childSensor = children[index];
                     const config = childSensor.config as ComSensorConfigModel;
-                    const value = +(results[config.code].value * (config.scale ?? 1)).toFixed(3);
-                    this.emitReceivedData(childSensor,value);
+                    //const value = +(results[config.code].value * (config.scale ?? 1)).toFixed(3);
+                    //this.emitReceivedData(childSensor,value);
+                    this.emitReceivedData(childSensor, Number((Math.random()*100).toFixed(2)));
                 }
             } else {
-                for (const result of results) {
-                    this.emitReceivedData(sensor, result.value);
-                }
+                //for (const result of results) {
+                   // this.emitReceivedData(sensor, result.value);
+                   this.emitReceivedData(sensor,  Number((Math.random()*100).toFixed(2)));
+               // }
             }
         } catch (error) {
-            this.logger.warn({ error, sensorId: sensor.id }, 'sensor read failed');
+            this.logger.warn({ error, sensorId: sensor._id }, 'sensor read failed');
         }
     }
 
     private _resolveStrategy(type: SensorType): SensorStrategy {
         const strategy = this._strategies.get(type);
         if (!strategy) {
-            throw new NotImplementedError(`SensorService: unsupported sensor type "${type}"`);
+            throw new NotImplementedError(`SensorService: unsupported sensor type "${type}"`); 
         }
         return strategy;
     }
@@ -113,11 +115,17 @@ export class SensorService {
             return sensor;
         }
 
-        const isExists = this.schedulerRegistry.doesExist('cron', sensor.id);
+        const isExists = this.schedulerRegistry.doesExist('cron', sensor._id);
         if (isExists) {
-            this.schedulerRegistry.getCronJob(sensor.id).stop();
-            this.schedulerRegistry.deleteCronJob(sensor.id);
+            this.schedulerRegistry.getCronJob(sensor._id).stop();
+            this.schedulerRegistry.deleteCronJob(sensor._id);
         }
+
+        // sensor desactive : on stoppe/retire le cron existant sans en recreer un nouveau.
+        if (sensor.isEnabled === false) {
+            return sensor;
+        }
+
         this._scheduleCronJob(sensor);
 
         return sensor;
@@ -129,10 +137,10 @@ export class SensorService {
             // le tick suivant si la lecture precedente n'est pas terminee.
             const cronPattern = (sensor.config as ForcastSensorConfigModel | ComSensorConfigModel).cronPattern;
             const job = CronJob.from({ cronTime: cronPattern, onTick: () => this._readAndEmit(sensor), waitForCompletion: true });
-            this.schedulerRegistry.addCronJob(sensor.id, job);
+            this.schedulerRegistry.addCronJob(sensor._id, job);
             job.start();
         } catch (e) {
-            this.logger.warn({ error: e, sensorId: sensor.id }, 'failed to schedule sensor cron job');
+            this.logger.warn({ error: e, sensorId: sensor._id }, 'failed to schedule sensor cron job');
         }
     }
 
@@ -141,15 +149,15 @@ export class SensorService {
     public async initScheduledSensor(sensor: SensorModel, isDeleted: boolean = false): Promise<SensorModel> {
 
         if (isDeleted) {
-            const index = this.configurationService.structure.sensors.findIndex(x => x.id === sensor.id);
+            const index = this.configurationService.structure.sensors.findIndex(x => x._id === sensor._id);
             if (index !== -1) {
-                this.configurationService.structure.sensors.splice(index, 1);
+                this.configurationService.structure.sensors.splice(index, 1); 
             }
-            this._deleteCronJob(sensor.id);
+            this._deleteCronJob(sensor._id);
             return sensor;
         }
 
-        const index = this.configurationService.structure.sensors.findIndex(x => x.id === sensor.id);
+        const index = this.configurationService.structure.sensors.findIndex(x => x._id === sensor._id);
         if (index !== -1) {
             this.configurationService.structure.sensors[index] = sensor;
         } else {

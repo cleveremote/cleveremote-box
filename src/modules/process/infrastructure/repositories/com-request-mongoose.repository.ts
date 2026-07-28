@@ -72,6 +72,11 @@ export class ComRequestkMongooseRepository {
         return tasks.map(ModbusTaskMapper.mapToModel);
     }
 
+    public async findByDeviceId(deviceId: string): Promise<ComRequestModel[]> {
+        const tasks = await this.taskModel.find({ deviceId, ...NOT_DELETED_FILTER });
+        return tasks.map(ModbusTaskMapper.mapToModel);
+    }
+
     public async findByDeviceIdAndTypes(deviceId: string, types: ComRequestType[]): Promise<ComRequestModel[]> {
         if (!types?.length) {
             return [];

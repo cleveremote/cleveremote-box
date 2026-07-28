@@ -109,7 +109,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
 
         it('should populate a sensor\'s value/date from its last known event, and reflect it in structure.values', async () => {
             const lastEventDate = new Date('2024-01-01T00:00:00.000Z');
-            sensorRepository.get.mockResolvedValue([{ id: 'sensor-1' }]);
+            sensorRepository.get.mockResolvedValue([{ _id: 'sensor-1' }]);
             eventRepository.getLast.mockResolvedValue({ elementId: 'sensor-1', additionalData: { value: '42' }, date: lastEventDate });
 
             const structure = await service.getStructure();
@@ -120,7 +120,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
         });
 
         it('should leave structure.values empty when no sensor has a known reading yet', async () => {
-            sensorRepository.get.mockResolvedValue([{ id: 'sensor-1' }]);
+            sensorRepository.get.mockResolvedValue([{ _id: 'sensor-1' }]);
             eventRepository.getLast.mockResolvedValue(null);
 
             const structure = await service.getStructure();
@@ -182,7 +182,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
                 _id: 'seq-1', cycleId: 'cycle-1', status: ExecutableStatus.STOPPED
             });
             cycle.sequences = [sequence];
-            const sensor = Object.assign(new SensorModel(), { id: 'sensor-1', value: 42, date: new Date('2024-01-01') });
+            const sensor = Object.assign(new SensorModel(), { _id: 'sensor-1', value: 42, date: new Date('2024-01-01') });
             service.structure = Object.assign(new StructureModel(), { cycles: [cycle], sensors: [sensor] });
         });
 

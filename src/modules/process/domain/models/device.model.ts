@@ -17,14 +17,14 @@ export enum DeviceKind {
 
 export class MasterConfigModel {
     public protocol: MasterProtocol;
-    ipAddress?: string;
-    port?: number;
-    baudRate?: number;
-    path?:string;
-    timeout?: number;
+    public ipAddress?: string;
+    public port?: number;
+    public baudRate?: number;
+    public path?:string;
+    public timeout?: number;
     // Registres à sonder (unit id DEFAULT_UNCONFIGURED_UNIT_ID) pour détecter un nouveau slave
     // non configuré : vide/absent = découverte désactivée pour ce Master.
-    discoveryRegisters?: number[];
+    public discoveryRegisters?: number[];
 }
 
 export class SlaveConfigModel {

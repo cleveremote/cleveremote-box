@@ -57,4 +57,13 @@ export class DeviceMongooseRepository {
         return devices.map(DeviceMapper.mapToModel);
     }
 
+    public async findSlavesByMasterId(masterDeviceId: string): Promise<DeviceModel[]> {
+        const devices = await this.deviceModel.find({
+            type: DeviceType.SLAVE,
+            'config.masterDeviceId': masterDeviceId,
+            ...NOT_DELETED_FILTER,
+        });
+        return devices.map(DeviceMapper.mapToModel);
+    }
+
 }

@@ -52,4 +52,25 @@ export class ComRequestRepository {
         return this.saveMany(models);
     }
 
+    // remplacement complet scope a un device : tout comrequest existant absent de `models` est
+    // soft-supprime (cascade stricte, cf. box/synchronize/device avec comrequests imbriques).
+    public async replaceForDevice(deviceId: string, models: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
+        const existing = await this.comRequestMongooseRepository.findByDeviceId(deviceId);
+        const incomingIds = new Set(models.filter(model => model._id).map(model => model._id));
+        for (const item of existing) {
+            if (!incomingIds.has(item._id)) {
+                await this.delete(item._id);
+            }
+        }
+        for (const model of models) {
+            if (model.delete) {
+                await this.delete(model._id);
+                continue;
+            }
+            model.deviceId = deviceId;
+            await this.save(model);
+        }
+        return this.comRequestMongooseRepository.findByDeviceId(deviceId);
+    }
+
 }

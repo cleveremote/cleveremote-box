@@ -6,7 +6,10 @@
       "Bash(grep -n \"// await this.eventRepository.save\\\\|^            }\\)$\\\\|^                }\\)$\" /home/clv/dev-workspace/cleveremote-box/src/modules/process/domain/services/execution.service.ts)",
       "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')",
       "Bash(git log *)",
-      "Bash(xargs -I{} sh -c 'echo ===={}====; cat {}')"
+      "Bash(xargs -I{} sh -c 'echo ===={}====; cat {}')",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(npm test *)"
     ],
     "additionalDirectories": [
       "/home/clv/.claude/plans"

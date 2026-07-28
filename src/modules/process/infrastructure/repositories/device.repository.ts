@@ -47,4 +47,8 @@ export class DeviceRepository {
         return this.deviceMongooseRepository.findByType(type);
     }
 
+    public async getSlavesByMasterId(masterDeviceId: string): Promise<DeviceModel[]> {
+        return this.deviceMongooseRepository.findSlavesByMasterId(masterDeviceId);
+    }
+
 }

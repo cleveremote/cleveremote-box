@@ -4,9 +4,8 @@ import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
 import { StructureService } from './configuration.service';
-import { ExecutableStatus, ProcessMode, ProcessType } from '../interfaces/executable.interface';
+import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
-import * as math from 'mathjs';
 import { ScheduleModel } from '../models/schedule.model';
 import { getSunrise, getSunset } from 'sunrise-sunset-js';
 import { SunState } from '../interfaces/schedule.interface';
@@ -18,10 +17,10 @@ import { SensorRepository } from '@process/infrastructure/repositories/sensor.re
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import { ProcessService } from './execution.service';
-import { ConditionModel } from '../models/condition.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType, ProcessEventData } from '../models/event.model';
+import { evaluateConditions } from '../utils/evaluate-conditions.util';
 import { ExecutableType } from '../models/value.model';
 @Injectable()
 export class TriggerService {
@@ -105,7 +104,6 @@ export class TriggerService {
 
     private async _checkTriggerConditions(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): Promise<void> {
         const currentDate = new Date();
-        const parser = math.parser();
 
         const isAllowCheckTrigger = !trigger.lastTriggeredAt || currentDate.getTime() >= (trigger.lastTriggeredAt.getTime() + trigger.delay || 0);
 
@@ -113,24 +111,7 @@ export class TriggerService {
 
         trigger.isCheckInProgress = true;
 
-        // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-explicit-any
-        const asyncEvery = async (arr: ConditionModel[], predicate: { (condition: any): Promise<any>; (arg0: any): any; }) => {
-            for (const e of arr) {
-                if (!await predicate(e)) return false;
-            }
-            return true;
-        };
-
-        const isVerified = await asyncEvery(trigger.conditions, async (condition) => {
-            const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
-            if (!extractedVal) { return false; }
-            const value = condition.elementType === ElementType.SENSOR
-                ? (extractedVal as SensorValueModel).value
-                : (extractedVal as ProcessValueModel).status;
-            if (value === undefined || value === null) { return false; }
-            const comparedValue = condition.elementType === ElementType.SENSOR ? Number(value) : (value === ExecutableStatus.STOPPED ? 0 : 1);
-            return parser.evaluate(`(${comparedValue} ${condition.operator} ${Number(condition.value)})`);
-        });
+        const isVerified = await evaluateConditions(trigger.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
 
         if (isVerified) {
             this.logger.log({ triggerId: trigger.id }, 'trigger conditions verified, planifying execution');

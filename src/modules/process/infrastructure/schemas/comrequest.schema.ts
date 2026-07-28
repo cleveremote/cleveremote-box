@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
-import { ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
 
 @Schema({ _id: false })
 export class ComRequestPersistenceConfig {
@@ -28,6 +28,9 @@ export class ComRequestParams {
     @Prop({ type: Object })
     public value?: number | number[];
 
+    @Prop({ type: String, default: undefined })
+    public formula?: string | null;
+
     @Prop({ type: ComRequestPersistenceConfigSchema })
     public persistence?: ComRequestPersistenceConfig;
 }
@@ -46,6 +49,9 @@ export class ComRequestConfig {
 
     @Prop({ type: Boolean, default: false })
     public done?: boolean;
+
+    @Prop({ type: String, enum: ModbusValueType, default: undefined })
+    public type?: ModbusValueType;
 
     @Prop({ type: ComRequestParamsSchema, default: undefined })
     public params?: ComRequestParams;

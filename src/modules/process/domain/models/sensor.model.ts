@@ -23,12 +23,15 @@ export class ForcastSensorConfigModel {
 }
 
 export class SensorModel {
-    public id: string;
+    public _id: string;
     public name: string;
     public description: string;
     public style: { bgColor: string; fontColor: string; iconColor: { base: string; icon: string } };
     public type: SensorType;
     public config: ForcastSensorConfigModel | ComSensorConfigModel;
+
+    public isEnabled?: boolean = true;
+    public display?: boolean = true;
 
     // relation auto-referencee : un sensor enfant (parentId renseigne) remplit
     // code/scale/unit sur ComSensorConfigModel plutot que cronPattern/comRequestId.

@@ -18,13 +18,10 @@ export class ComSensorStrategy implements SensorStrategy {
 
     public async read(sensor: SensorModel): Promise<ReadResult> { 
         const { comRequestId } = sensor.config as ComSensorConfigModel;
-
-
-
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(comRequestId) as ComRequestModel;
 
         const config = sensor.config as ComSensorConfigModel
-        if (config.code && !sensor.parentId) { // it is a parent sensor
+        if (config.code !== undefined && config.code !== null && !sensor.parentId) { // it is a parent sensor
             const overrideParams: ComRequestConfigModel = { address: comRequestData.config.address + config.code, params: { length: 1 } }
             const res = await this.modbusService.execute(comRequestData, overrideParams) as ModbusExecuteResult | undefined;
             const unit = comRequestData.config.params?.unit ?? '';
@@ -52,7 +49,9 @@ export class ComSensorStrategy implements SensorStrategy {
         switch (res.function) {
             case ModbusFunctionName.READ_HOLDING_REGISTERS:
             case ModbusFunctionName.READ_INPUT_REGISTERS:
-                return res.result.data;
+                // config.type défini côté ModbusService : la valeur décodée + formule (cf.
+                // ModbusService._evaluateReading) prime sur les registres bruts.
+                return res.result.evaluated ? [res.result.evaluated.value] : res.result.data;
             case ModbusFunctionName.READ_COILS:
             case ModbusFunctionName.READ_DISCRETE_INPUTS:
                 return res.result.data.map(Number);

@@ -306,6 +306,28 @@ describe('ComRequestkMongooseRepository CRUD (integration mongodb-memory-server)
         });
     });
 
+    describe('findByDeviceId', () => {
+        it('should return all non-deleted comrequests for the given device regardless of type', async () => {
+            await repository.create(CreateComRequestModel({ deviceId: 'device-1', type: [ComRequestType.ANALOG_INPUT] }));
+            await repository.create(CreateComRequestModel({ deviceId: 'device-1', type: [ComRequestType.DIGITAL_OUTPUT] }));
+            await repository.create(CreateComRequestModel({ deviceId: 'device-2', type: [ComRequestType.ANALOG_INPUT] }));
+
+            const result = await repository.findByDeviceId('device-1');
+
+            expect(result).toHaveLength(2);
+            expect(result.every(task => task.deviceId === 'device-1')).toBe(true);
+        });
+
+        it('should exclude soft-deleted comrequests', async () => {
+            const created = await repository.create(CreateComRequestModel({ deviceId: 'device-1' }));
+            await repository.delete(created._id);
+
+            const result = await repository.findByDeviceId('device-1');
+
+            expect(result).toEqual([]);
+        });
+    });
+
     describe('migrateMissingType (function stored as an array)', () => {
         it('should backfill type when the legacy document stores function as an array', async () => {
             await connection.collection('comrequests').insertOne({

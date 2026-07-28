@@ -20,9 +20,17 @@ export interface ModbusReadCoilResult {
     buffer: Buffer;
 }
 
+export interface ModbusEvaluatedReading {
+    formula: string;
+    scope: Record<string, number>;
+    value: number;
+}
+
 export interface ModbusReadRegisterResult {
     data: number[];
     buffer: Buffer;
+    /** Décodage type-aware (ModbusValueType) + formule mathjs, uniquement quand config.type est défini */
+    evaluated?: ModbusEvaluatedReading;
 }
 
 export interface ModbusWriteCoilResult {
@@ -55,16 +63,26 @@ export type ModbusExecuteResult<F extends ModbusFunctionName = ModbusFunctionNam
     [K in F]: { function: K; result: ModbusFunctionResultMap[K] }
 }[F];
 
+export enum ModbusValueType {
+    CUMULATIVE = 'cumulative',
+    FLOAT = 'float',
+    INT = 'int',
+    UINT32 = 'uint32',
+    FLOAT_6_BYTES = 'float-6Bytes'
+}
+
 export class ComRequestConfigModel {
     public address: number;
     public function?: ModbusFunctionName[];
     public disabled?: boolean;
     public done?: boolean;
+    public type?: ModbusValueType;
     public params?: {
         length?: number,
         scale?: number,
         unit?: string,
         value?: number | number[],
+        formula?: string | null,
         persistence?: {
             persist: boolean,
             address: number

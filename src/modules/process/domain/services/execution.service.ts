@@ -12,7 +12,6 @@ import {
     ProcessMode,
     ProcessType,
     CycleType,
-    ConditionsLogic,
     SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
@@ -30,9 +29,6 @@ import { ChildCycleRef, CycleModel } from '../models/cycle.model';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
-import { SensorValueModel } from '../models/sensor-value.model';
-import { ProcessValueModel } from '../models/proccess-value.model';
-import * as math from 'mathjs';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType, EventModel } from '../models/event.model';
 import { type InverterConfigParam, ModbusService } from './modbus.service';
@@ -40,7 +36,7 @@ import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
 import { buildOverrideParams } from '../utils/build-override-params.util';
-import { ConditionModel } from '../models/condition.model';
+import { evaluateConditions } from '../utils/evaluate-conditions.util';
 
 type ProcessReport = { id: string; type: ProcessType; cause: string }[];
 
@@ -407,7 +403,7 @@ export class ProcessService {
     }
 
     private async _applyCycleConditionsGate(process: ProcessModel, report: ProcessReport): Promise<void> {
-        const isConditionsVerified = await this.checkConditions(process.cycle.conditions, process.cycle.conditionsLogic);
+        const isConditionsVerified = await evaluateConditions(process.cycle.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
         if (isConditionsVerified) {
             return;
         }
@@ -839,7 +835,7 @@ export class ProcessService {
 
     private _checkSequenceCondition(sequenceId: string): Promise<boolean> {
         const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
-        return this.checkConditions(sequence?.securityConfig?.conditions);
+        return evaluateConditions(sequence?.securityConfig?.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
     }
 
     private async _switchProcess(previousData: { id: string; names: string[]; duration: number },
@@ -967,42 +963,6 @@ export class ProcessService {
 
     private static _ofNull<T>(): Observable<T> {
         return of(null as T);
-    }
-
-    private async checkConditions(conditions: ConditionModel[], logic: ConditionsLogic = ConditionsLogic.AND): Promise<boolean> {
-        if (!conditions?.length) {
-            return true;
-        }
-
-        const parser = math.parser();
-
-        const evaluate = async (condition: ConditionModel): Promise<boolean> => {
-            const extractedVal = await this.valueRepository.getDeviceValue(condition.elementId);
-            if (!extractedVal) { return false; }
-            const value = condition.elementType === ElementType.SENSOR
-                ? (extractedVal as SensorValueModel).value
-                : (extractedVal as ProcessValueModel).status;
-            if (value === undefined || value === null) { return false; }
-            return parser.evaluate(`(${value === ExecutableStatus.STOPPED ? 0 : 1} ${condition.operator} ${Number(condition.value)})`);
-        };
-
-        const asyncEvery = async (arr: ConditionModel[], predicate: (condition: ConditionModel) => Promise<boolean>): Promise<boolean> => {
-            for (const e of arr) {
-                if (!await predicate(e)) return false;
-            }
-            return true;
-        };
-
-        const asyncSome = async (arr: ConditionModel[], predicate: (condition: ConditionModel) => Promise<boolean>): Promise<boolean> => {
-            for (const e of arr) {
-                if (await predicate(e)) return true;
-            }
-            return false;
-        };
-
-        return logic === ConditionsLogic.OR
-            ? asyncSome(conditions, evaluate)
-            : asyncEvery(conditions, evaluate);
     }
 
 }

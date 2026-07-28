@@ -1,6 +1,7 @@
 import ModbusRTU from 'modbus-serial';
+import { BadRequestException } from '@nestjs/common';
 import { ModbusService } from '@process/domain/services/modbus.service';
-import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
+import { ComRequestConfigModel, ComRequestModel, ModbusValueType } from '@process/domain/models/com-request.model';
 import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
@@ -137,6 +138,105 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 'modbus read result'
             );
             expect(mockModbusClients[0].close).toHaveBeenCalled();
+        });
+
+        it('should leave result.evaluated undefined for a com request without config.type (backward compatibility)', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [16256, 0] })
+            }));
+
+            const result = await service.execute(CreateModbusTaskModel({ function: ['readHoldingRegisters'], address: 100 }));
+
+            expect((result as { result: { evaluated?: unknown } }).result.evaluated).toBeUndefined();
+        });
+
+        it('should decode an int-type field and evaluate its formula', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [21] })
+            }));
+
+            const result = await service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 95, type: ModbusValueType.INT,
+                params: { length: 1, formula: 'raw * 2' }
+            }));
+
+            expect((result as { result: { evaluated: { value: number } } }).result.evaluated.value).toEqual(42);
+        });
+
+        it('should decode a float-type field and evaluate its formula', async () => {
+            mockModbusClients.length = 0;
+            // 1.0f en IEEE754 = 0x3F800000, mot haut/bas inversés (cf. ModbusService._toFloat)
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [0, 16256] })
+            }));
+
+            const result = await service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 1, type: ModbusValueType.FLOAT,
+                params: { length: 2, formula: 'raw' }
+            }));
+
+            expect((result as { result: { evaluated: { value: number } } }).result.evaluated.value).toEqual(1);
+        });
+
+        it('should decode a uint32-type field and evaluate its formula', async () => {
+            mockModbusClients.length = 0;
+            // 70000 = 0x00011170, mot haut/bas inversés (cf. ModbusService._toUint32)
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [4464, 1] })
+            }));
+
+            const result = await service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 105, type: ModbusValueType.UINT32,
+                params: { length: 2, formula: 'raw' }
+            }));
+
+            expect((result as { result: { evaluated: { value: number } } }).result.evaluated.value).toEqual(70000);
+        });
+
+        it('should decode a cumulative-type field (LONG + IEEE754 fraction) reading REG1439 for the decimal position', async () => {
+            mockModbusClients.length = 0;
+            const readHoldingRegisters = jest.fn()
+                // N=1234 (LONG), Nf=0.5 (IEEE754) - mots haut/bas inversés (cf. ModbusService._toLong/_toFloat)
+                .mockResolvedValueOnce({ data: [1234, 0, 0, 16128] })
+                // REG1439 (position décimale) = 3
+                .mockResolvedValueOnce({ data: [3] });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters }));
+
+            const result = await service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 9, type: ModbusValueType.CUMULATIVE,
+                params: { length: 4, formula: '(N + Nf) * 10^(n - 3)' }
+            })) as { result: { evaluated: { scope: Record<string, number>; value: number } } };
+
+            expect(result.result.evaluated.scope).toEqual({ N: 1234, Nf: 0.5, n: 3 });
+            expect(result.result.evaluated.value).toEqual(1234.5);
+            expect(readHoldingRegisters).toHaveBeenCalledWith(1438, 1);
+        });
+
+        it('should cache the decimal position per device across successive cumulative reads', async () => {
+            mockModbusClients.length = 0;
+            const readHoldingRegisters = jest.fn()
+                .mockResolvedValueOnce({ data: [1234, 0, 0, 16128] })
+                .mockResolvedValueOnce({ data: [3] })
+                .mockResolvedValueOnce({ data: [1234, 0, 0, 16128] });
+            // Un nouveau client est ouvert par service.execute() (cf. _runComRequest) : deux appels
+            // -> deux mockImplementationOnce, partageant le même mock readHoldingRegisters pour
+            // observer le nombre total de lectures REG1439 sur les deux connexions.
+            (ModbusRTU as unknown as jest.Mock)
+                .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters }))
+                .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters }));
+
+            const cumulativeTask = CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 9, type: ModbusValueType.CUMULATIVE,
+                params: { length: 4, formula: '(N + Nf) * 10^(n - 3)' }
+            });
+
+            await service.execute(cumulativeTask);
+            await service.execute(cumulativeTask);
+
+            const decimalPositionCalls = readHoldingRegisters.mock.calls.filter(([addr]) => addr === 1438);
+            expect(decimalPositionCalls).toHaveLength(1);
         });
 
         it('should throw when a read task returns no data', async () => {
@@ -322,6 +422,150 @@ describe('ModbusService (modbus-serial mocked)', () => {
             (service as unknown as { _isProcessing: boolean })._isProcessing = true;
 
             await expect((service as unknown as { _processQueue: () => Promise<void> })._processQueue()).resolves.toBeUndefined();
+        });
+
+        it('should default the read length and formula from config.type when params.length/formula are omitted', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [21] })
+            }));
+
+            const result = await service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 95, type: ModbusValueType.INT, params: {}
+            })) as { result: { evaluated: { formula: string; scope: Record<string, number>; value: number } } };
+
+            expect(mockModbusClients[0].readHoldingRegisters).toHaveBeenCalledWith(95, 1);
+            expect(result.result.evaluated).toEqual({ formula: 'raw', scope: { raw: 21 }, value: 21 });
+        });
+
+        it('should reject with a BadRequestException when config.params.formula is not valid mathjs syntax', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [21] })
+            }));
+
+            await expect(service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 95, type: ModbusValueType.INT,
+                params: { length: 1, formula: 'raw +' }
+            }))).rejects.toThrow(/Formule invalide/);
+        });
+
+        it('should reject with a BadRequestException when a formula references a variable missing from the decoded scope', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [21] })
+            }));
+
+            await expect(service.execute(CreateModbusTaskModel({
+                function: ['readHoldingRegisters'], address: 95, type: ModbusValueType.INT,
+                params: { length: 1, formula: 'raw + foo' }
+            }))).rejects.toThrow(/variables manquantes/);
+        });
+    });
+
+    describe('evaluateScale (formula compilation and sandboxing)', () => {
+        it('should evaluate a formula against the given scope', () => {
+            expect(service.evaluateScale('raw * 2 + offset', { raw: 10, offset: 1 })).toEqual(21);
+        });
+
+        it('should reuse the compiled formula cache on repeated calls with the same expression', () => {
+            expect(service.evaluateScale('raw + 1', { raw: 1 })).toEqual(2);
+            expect(service.evaluateScale('raw + 1', { raw: 5 })).toEqual(6);
+        });
+
+        it('should throw a BadRequestException for a syntactically invalid formula', () => {
+            expect(() => service.evaluateScale('raw +', {})).toThrow(BadRequestException);
+            expect(() => service.evaluateScale('raw +', {})).toThrow(/Formule invalide/);
+        });
+
+        it.each([
+            ['import("x")'],
+            ['createUnit("foo")'],
+            ['evaluate("1+1")'],
+            ['parse("1+1")']
+        ])('should throw when a formula tries to reach the disabled mathjs function %s', (expr) => {
+            expect(() => service.evaluateScale(expr, {})).toThrow('désactivé');
+        });
+    });
+
+    describe('refreshDecimalPosition', () => {
+        it('should clear the cached decimal position for the device and re-read REG1439', async () => {
+            mockModbusClients.length = 0;
+            const readHoldingRegisters = jest.fn().mockResolvedValue({ data: [3] });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters }));
+
+            const result = await service.refreshDecimalPosition('slave-1');
+
+            expect(readHoldingRegisters).toHaveBeenCalledWith(1438, 1);
+            expect(result).toEqual(3);
+            expect(mockModbusClients[0].close).toHaveBeenCalled();
+        });
+
+        it('should throw when no device is found for the given deviceId', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+
+            await expect(service.refreshDecimalPosition('unknown')).rejects.toThrow('no device found');
+        });
+    });
+
+    describe('testCommunication', () => {
+        it('should return ok:true when REG0361 reads back ~361.0', async () => {
+            mockModbusClients.length = 0;
+            // 361.0f en IEEE754BE = mots [32768, 17332] (mots haut/bas inversés, cf. _toFloat)
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [32768, 17332] })
+            }));
+
+            const result = await service.testCommunication('slave-1');
+
+            expect(result).toEqual({ value: 361, ok: true });
+        });
+
+        it('should return ok:false when REG0361 does not read back 361.0', async () => {
+            mockModbusClients.length = 0;
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [0, 0] })
+            }));
+
+            const result = await service.testCommunication('slave-1');
+
+            expect(result).toEqual({ value: 0, ok: false });
+        });
+
+        it('should throw when no device is found for the given deviceId', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+
+            await expect(service.testCommunication('unknown')).rejects.toThrow('no device found');
+        });
+    });
+
+    describe('changeSlaveAddress', () => {
+        it('should reject an out-of-range address without touching the device repository', async () => {
+            await expect(service.changeSlaveAddress('slave-1', 0)).rejects.toThrow(BadRequestException);
+            await expect(service.changeSlaveAddress('slave-1', 256)).rejects.toThrow(BadRequestException);
+            expect(deviceRepository.get).not.toHaveBeenCalled();
+        });
+
+        it('should write the new address, reassign the client unit id, then confirm communication', async () => {
+            mockModbusClients.length = 0;
+            const writeRegister = jest.fn().mockResolvedValue({ address: 61, value: 5 });
+            const setID = jest.fn();
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                writeRegister, setID, readHoldingRegisters: jest.fn().mockResolvedValue({ data: [32768, 17332] })
+            }));
+
+            const result = await service.changeSlaveAddress('slave-1', 5);
+
+            expect(writeRegister).toHaveBeenCalledWith(61, 5);
+            expect(setID).toHaveBeenCalledWith(5);
+            expect(result).toBe(true);
+            expect(logger.log).toHaveBeenCalledWith({ deviceId: 'slave-1', newAddress: 5, ok: true }, 'slave address changed');
+        });
+
+        it('should throw when no device is found for the given deviceId', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+
+            await expect(service.changeSlaveAddress('unknown', 5)).rejects.toThrow('no device found');
         });
     });
 
@@ -719,16 +963,12 @@ describe('ModbusService (modbus-serial mocked)', () => {
         });
     });
 
-    // watchForNewSlaveDevices: contrairement aux describe precedents, la plupart des tests
-    // s'appuient sur un mock ModbusRTU par defaut qui NE detecte jamais rien (readHoldingRegisters
-    // rejette), pour ne pas declencher de provisioning parasite a chaque cycle de poll ; chaque
-    // test qui veut simuler une detection injecte un client dedie via mockImplementationOnce en
-    // tete de file, consomme une seule fois avant de retomber sur ce defaut "rien detecte".
-    describe('watchForNewSlaveDevices', () => {
-        function Wait(ms: number): Promise<void> {
-            return new Promise((resolve) => setTimeout(resolve, ms));
-        }
-
+    // probeMasterForNewSlave: methode "un seul coup" (plus de recurrence/multi-master ici, cf.
+    // DeviceService.watchMasterDevicesForNewSlaves) - la plupart des tests s'appuient sur un mock
+    // ModbusRTU par defaut qui NE detecte jamais rien (readHoldingRegisters rejette), pour ne pas
+    // declencher de provisioning parasite ; chaque test qui veut simuler une detection injecte un
+    // client dedie via mockImplementationOnce.
+    describe('probeMasterForNewSlave', () => {
         function CreateUndetectedClient(overrides: Partial<MockModbusClient> = {}): MockModbusClient {
             return CreateMockClient({
                 readHoldingRegisters: jest.fn().mockRejectedValue(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })),
@@ -770,34 +1010,24 @@ describe('ModbusService (modbus-serial mocked)', () => {
             (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateUndetectedClient());
         });
 
-        it('should log and return a no-op handle when no MASTER devices exist', async () => {
-            const handle = await service.watchForNewSlaveDevices(20);
+        it('should never probe a master with no discoveryRegisters configured (opt-in, no fallback)', async () => {
+            const masterWithout = CreateDiscoveryMasterModel('master-no-discovery', { discoveryRegisters: undefined });
 
-            expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
-            await expect(handle.stop()).resolves.toBeUndefined();
+            await service.probeMasterForNewSlave(masterWithout);
+
             expect(mockModbusClients).toHaveLength(0);
         });
 
-        it('should never poll a master with no discoveryRegisters configured (opt-in, no fallback)', async () => {
-            const masterWithout = CreateDiscoveryMasterModel('master-no-discovery', { discoveryRegisters: undefined });
+        it('should never probe a master with an empty discoveryRegisters array', async () => {
             const masterWithEmpty = CreateDiscoveryMasterModel('master-empty-discovery', { discoveryRegisters: [] });
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [masterWithout, masterWithEmpty] : [])
-            );
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(40);
-            await handle.stop();
+            await service.probeMasterForNewSlave(masterWithEmpty);
 
-            expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
             expect(mockModbusClients).toHaveLength(0);
         });
 
         it('should probe multiple registers sequentially on the same connection and write to the one that responded', async () => {
             const master = CreateDiscoveryMasterModel('master-multi', { discoveryRegisters: [0x1000, 0x4000] });
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
             deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-multi'));
 
             const connectTCP = jest.fn().mockResolvedValue(undefined);
@@ -811,9 +1041,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 writeRegister
             }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(50);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
 
             expect(connectTCP).toHaveBeenCalledTimes(1);
             expect(readHoldingRegisters).toHaveBeenNthCalledWith(1, 0x1000, 1);
@@ -823,9 +1051,6 @@ describe('ModbusService (modbus-serial mocked)', () => {
 
         it('should assign slaveId 2 (floor) and persist a new device when a master with no existing slaves detects an unconfigured module', async () => {
             const master = CreateDiscoveryMasterModel('master-x');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
             deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-x'));
             const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
@@ -833,9 +1058,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 writeRegister
             }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(50);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
 
             expect(writeRegister).toHaveBeenCalledWith(AO8CH_DEVICE_ADDRESS_REGISTER, 2);
             expect(deviceRepository.save).toHaveBeenCalledWith(expect.objectContaining({
@@ -848,9 +1071,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
         it('should assign sequential unique slaveIds across successive detections on the same master', async () => {
             const master = CreateDiscoveryMasterModel('master-seq');
             let currentSlaves: DeviceModel[] = [];
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : currentSlaves)
-            );
+            deviceRepository.getByType = jest.fn().mockImplementation(() => Promise.resolve(currentSlaves));
             deviceRepository.save = jest.fn((model: DeviceModel) => {
                 const saved = Object.assign(new DeviceModel(), model, { _id: `slave-${(model.config as SlaveConfigModel).slaveId}` });
                 currentSlaves = [...currentSlaves, saved];
@@ -861,9 +1082,8 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }), writeRegister }))
                 .mockImplementationOnce(() => CreateMockClient({ readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }), writeRegister }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(120);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
+            await service.probeMasterForNewSlave(master);
 
             expect(writeRegister).toHaveBeenNthCalledWith(1, AO8CH_DEVICE_ADDRESS_REGISTER, 2);
             expect(writeRegister).toHaveBeenNthCalledWith(2, AO8CH_DEVICE_ADDRESS_REGISTER, 3);
@@ -871,104 +1091,43 @@ describe('ModbusService (modbus-serial mocked)', () => {
 
         it('should only count existing slaves belonging to the same master when computing newSlaveId (no cross-master leakage)', async () => {
             const masterA = CreateDiscoveryMasterModel('master-a', { ipAddress: '10.0.0.1' });
-            const masterB = CreateDiscoveryMasterModel('master-b', { ipAddress: '10.0.0.2' });
             const siblingsOfB = [
                 CreateDiscoverySlaveModel('slave-b1', 5, 'master-b'),
                 CreateDiscoverySlaveModel('slave-b2', 6, 'master-b')
             ];
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : siblingsOfB)
-            );
+            deviceRepository.getByType = jest.fn().mockResolvedValue(siblingsOfB);
             deviceRepository.save = jest.fn().mockResolvedValue(CreateDiscoverySlaveModel('new-id', 2, 'master-a'));
 
             const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
-            // Seul le master A (10.0.0.1) "detecte" un module ; le master B ne detecte jamais rien.
-            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => {
-                const client = CreateUndetectedClient();
-                const originalConnectTCP = client.connectTCP;
-                client.connectTCP = jest.fn((ip: string, opts: unknown) => {
-                    if (ip === '10.0.0.1') {
-                        client.readHoldingRegisters = jest.fn()
-                            .mockResolvedValueOnce({ data: [1] })
-                            .mockRejectedValue(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
-                        client.writeRegister = writeRegister;
-                    }
-                    return originalConnectTCP(ip, opts);
-                });
-                return client;
-            });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
+                writeRegister
+            }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(60);
-            await handle.stop();
+            await service.probeMasterForNewSlave(masterA);
 
             expect(writeRegister).toHaveBeenCalledWith(AO8CH_DEVICE_ADDRESS_REGISTER, 2);
         });
 
-        it('should isolate masters: a stuck provisioning on one master must not pause polling on another', async () => {
-            const masterA = CreateDiscoveryMasterModel('master-iso-a', { ipAddress: '10.0.0.1' });
-            const masterB = CreateDiscoveryMasterModel('master-iso-b', { ipAddress: '10.0.0.2' });
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : [])
-            );
-            // save() ne se resout jamais : le provisioning du master A reste bloque en pause pendant tout le test.
-            deviceRepository.save = jest.fn(() => new Promise(() => { /* never resolves */ }));
-
-            let bPollCount = 0;
-            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => {
-                const client = CreateUndetectedClient();
-                const originalConnectTCP = client.connectTCP;
-                client.connectTCP = jest.fn((ip: string, opts: unknown) => {
-                    if (ip === '10.0.0.1') {
-                        client.readHoldingRegisters = jest.fn().mockResolvedValue({ data: [1] });
-                        client.writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
-                    } else {
-                        client.readHoldingRegisters = jest.fn(() => {
-                            bPollCount += 1;
-                            return Promise.reject(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
-                        });
-                    }
-                    return originalConnectTCP(ip, opts);
-                });
-                return client;
-            });
-
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(80);
-            await handle.stop();
-
-            expect(bPollCount).toBeGreaterThanOrEqual(2);
-        });
-
-        it('should leave the device unconfigured for retry (no save) and resume polling when the address write fails', async () => {
+        it('should leave the device unconfigured for retry (no save) when the address write fails', async () => {
             const master = CreateDiscoveryMasterModel('master-w');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
 
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
                 readHoldingRegisters: jest.fn().mockResolvedValue({ data: [1] }),
                 writeRegister: jest.fn().mockRejectedValue(new Error('write boom'))
             }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(60);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
 
             expect(deviceRepository.save).not.toHaveBeenCalled();
             expect(logger.error).toHaveBeenCalledWith(
                 expect.objectContaining({ masterId: 'master-w', err: 'write boom' }),
                 'new slave address write failed, device left unconfigured for retry'
             );
-            // la surveillance doit reprendre : d'autres clients sont construits apres l'echec.
-            expect(mockModbusClients.length).toBeGreaterThan(1);
         });
 
         it('should attempt a best-effort rollback to the unconfigured unit id when the db save fails after a successful write', async () => {
             const master = CreateDiscoveryMasterModel('master-r');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
             deviceRepository.save = jest.fn().mockRejectedValue(new Error('db boom'));
 
             const writeRegister = jest.fn().mockResolvedValue({ address: 0, value: 0 });
@@ -977,9 +1136,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 writeRegister
             }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(50);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
 
             expect(writeRegister).toHaveBeenNthCalledWith(1, AO8CH_DEVICE_ADDRESS_REGISTER, 2);
             expect(writeRegister).toHaveBeenNthCalledWith(2, AO8CH_DEVICE_ADDRESS_REGISTER, DEFAULT_UNCONFIGURED_UNIT_ID);
@@ -989,11 +1146,8 @@ describe('ModbusService (modbus-serial mocked)', () => {
             );
         });
 
-        it('should log a critical error and keep the watcher alive when both the db save and the rollback write fail', async () => {
+        it('should log a critical error when both the db save and the rollback write fail', async () => {
             const master = CreateDiscoveryMasterModel('master-c');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
             deviceRepository.save = jest.fn().mockRejectedValue(new Error('db boom'));
 
             const writeRegister = jest.fn()
@@ -1004,31 +1158,12 @@ describe('ModbusService (modbus-serial mocked)', () => {
                 writeRegister
             }));
 
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(50);
-            await handle.stop();
+            await service.probeMasterForNewSlave(master);
 
             expect(logger.error).toHaveBeenCalledWith(
                 expect.objectContaining({ masterId: 'master-c', err: 'rollback boom' }),
                 expect.stringContaining('CRITICAL')
             );
-            expect(mockModbusClients.length).toBeGreaterThan(1);
-        });
-
-        it('should stop polling on all masters once stop() is called', async () => {
-            const masterA = CreateDiscoveryMasterModel('master-stop-a');
-            const masterB = CreateDiscoveryMasterModel('master-stop-b');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [masterA, masterB] : [])
-            );
-
-            const handle = await service.watchForNewSlaveDevices(15);
-            await Wait(40);
-            await handle.stop();
-            const countAfterStop = mockModbusClients.length;
-            await Wait(60);
-
-            expect(mockModbusClients.length).toEqual(countAfterStop);
         });
 
         it('should serialize the discovery probe behind an in-flight execute() call on the same bus', async () => {
@@ -1037,9 +1172,6 @@ describe('ModbusService (modbus-serial mocked)', () => {
             const executeReadPromise = new Promise<{ data: number[] }>((resolve) => { resolveExecuteRead = resolve; });
 
             const master = CreateDiscoveryMasterModel('master-order');
-            deviceRepository.getByType = jest.fn((type: DeviceType) =>
-                Promise.resolve(type === DeviceType.MASTER ? [master] : [])
-            );
 
             (ModbusRTU as unknown as jest.Mock)
                 .mockImplementationOnce(() => CreateMockClient({
@@ -1059,15 +1191,14 @@ describe('ModbusService (modbus-serial mocked)', () => {
             await new Promise((resolve) => setImmediate(resolve));
             expect(order).toEqual(['execute-start']);
 
-            const handle = await service.watchForNewSlaveDevices(5);
-            await Wait(30);
+            const probeCall = service.probeMasterForNewSlave(master);
+            await new Promise((resolve) => setImmediate(resolve));
             // la sonde de decouverte doit toujours attendre derriere la lecture execute() en cours.
             expect(order).toEqual(['execute-start']);
 
             resolveExecuteRead({ data: [0, 0] });
             await executeCall;
-            await Wait(20);
-            await handle.stop();
+            await probeCall;
 
             expect(order).toEqual(['execute-start', 'execute-end', 'probe-start']);
         });

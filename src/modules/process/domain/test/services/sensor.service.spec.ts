@@ -9,7 +9,7 @@ import { SensorStrategy } from '@process/domain/services/sensor-strategies/senso
 
 function CreateSensorModel(overrides: Partial<SensorModel> = {}): SensorModel {
     const sensor = new SensorModel();
-    sensor.id = 'sensor-1';
+    sensor._id = 'sensor-1';
     sensor.name = 'sensor';
     sensor.type = SensorType.FORCAST;
     const config = new ForcastSensorConfigModel();
@@ -21,7 +21,7 @@ function CreateSensorModel(overrides: Partial<SensorModel> = {}): SensorModel {
 
 function CreateComSensorModel(overrides: Partial<SensorModel> = {}): SensorModel {
     const sensor = new SensorModel();
-    sensor.id = 'com-sensor-1';
+    sensor._id = 'com-sensor-1';
     sensor.name = 'com sensor';
     sensor.type = SensorType.COM;
     sensor.config = new ComSensorConfigModel();
@@ -92,7 +92,7 @@ describe('SensorService', () => {
                 false
             );
             expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
-                expect.objectContaining({ id: sensor.id, value: 23.5 })
+                expect.objectContaining({ id: sensor._id, value: 23.5 })
             );
         });
 
@@ -146,7 +146,7 @@ describe('SensorService', () => {
 
     describe('initScheduledSensor', () => {
         it('should register a sensor and schedule its cron job', async () => {
-            const sensor = CreateSensorModel({ id: 'cron-sensor' });
+            const sensor = CreateSensorModel({ _id: 'cron-sensor' });
 
             const result = await service.initScheduledSensor(sensor);
 
@@ -157,10 +157,10 @@ describe('SensorService', () => {
         });
 
         it('should replace an already-registered sensor at the same index instead of duplicating it', async () => {
-            const sensor = CreateSensorModel({ id: 'cron-sensor-idx' });
+            const sensor = CreateSensorModel({ _id: 'cron-sensor-idx' });
             await service.initScheduledSensor(sensor);
 
-            const updated = CreateSensorModel({ id: 'cron-sensor-idx', name: 'renamed' });
+            const updated = CreateSensorModel({ _id: 'cron-sensor-idx', name: 'renamed' });
             await service.initScheduledSensor(updated);
 
             expect(configurationService.structure.sensors).toHaveLength(1);
@@ -169,7 +169,7 @@ describe('SensorService', () => {
         });
 
         it('should replace an already-scheduled cron job for the same sensor id', async () => {
-            const sensor = CreateSensorModel({ id: 'cron-sensor-2' });
+            const sensor = CreateSensorModel({ _id: 'cron-sensor-2' });
             await service.initScheduledSensor(sensor);
             const firstJob = schedulerRegistry.getCronJob('cron-sensor-2');
 
@@ -180,14 +180,14 @@ describe('SensorService', () => {
         });
 
         it('should silently ignore an invalid cron pattern instead of throwing', async () => {
-            const sensor = CreateSensorModel({ id: 'bad-cron-sensor' });
+            const sensor = CreateSensorModel({ _id: 'bad-cron-sensor' });
             (sensor.config as ForcastSensorConfigModel).cronPattern = 'not-a-cron-pattern';
 
             await expect(service.initScheduledSensor(sensor)).resolves.toBe(sensor);
         });
 
         it('should unregister the sensor and stop its cron job when isDeleted is true', async () => {
-            const sensor = CreateSensorModel({ id: 'cron-sensor-3' });
+            const sensor = CreateSensorModel({ _id: 'cron-sensor-3' });
             await service.initScheduledSensor(sensor);
 
             const result = await service.initScheduledSensor(sensor, true);
@@ -198,13 +198,48 @@ describe('SensorService', () => {
         });
 
         it('should be a no-op deletion when the cron job never existed', async () => {
-            const sensor = CreateSensorModel({ id: 'never-scheduled' });
+            const sensor = CreateSensorModel({ _id: 'never-scheduled' });
 
             await expect(service.initScheduledSensor(sensor, true)).resolves.toBe(sensor);
         });
 
+        it('should not schedule a cron job when the sensor is created with isEnabled false', async () => {
+            const sensor = CreateSensorModel({ _id: 'disabled-sensor', isEnabled: false });
+
+            const result = await service.initScheduledSensor(sensor);
+
+            expect(result).toBe(sensor);
+            expect(configurationService.structure.sensors).toContain(sensor);
+            expect(schedulerRegistry.doesExist('cron', 'disabled-sensor')).toBe(false);
+        });
+
+        it('should stop and remove the cron job when an active sensor is updated to isEnabled false', async () => {
+            const sensor = CreateSensorModel({ _id: 'toggle-off-sensor' });
+            await service.initScheduledSensor(sensor);
+            expect(schedulerRegistry.doesExist('cron', 'toggle-off-sensor')).toBe(true);
+
+            const disabled = CreateSensorModel({ _id: 'toggle-off-sensor', isEnabled: false });
+            const result = await service.initScheduledSensor(disabled);
+
+            expect(result).toBe(disabled);
+            expect(schedulerRegistry.doesExist('cron', 'toggle-off-sensor')).toBe(false);
+        });
+
+        it('should reschedule the cron job when a disabled sensor is updated back to isEnabled true', async () => {
+            const disabled = CreateSensorModel({ _id: 'toggle-on-sensor', isEnabled: false });
+            await service.initScheduledSensor(disabled);
+            expect(schedulerRegistry.doesExist('cron', 'toggle-on-sensor')).toBe(false);
+
+            const enabled = CreateSensorModel({ _id: 'toggle-on-sensor', isEnabled: true });
+            const result = await service.initScheduledSensor(enabled);
+
+            expect(result).toBe(enabled);
+            expect(schedulerRegistry.doesExist('cron', 'toggle-on-sensor')).toBe(true);
+            schedulerRegistry.getCronJob('toggle-on-sensor').stop();
+        });
+
         it('should not schedule a cron job for a child sensor (parentId set)', async () => {
-            const sensor = CreateComSensorModel({ id: 'child-sensor', parentId: 'parent-1' });
+            const sensor = CreateComSensorModel({ _id: 'child-sensor', parentId: 'parent-1' });
 
             const result = await service.initScheduledSensor(sensor);
 
@@ -214,7 +249,7 @@ describe('SensorService', () => {
         });
 
         it('should call the FORCAST strategy and emit its value each time the scheduled tick fires', async () => {
-            const sensor = CreateSensorModel({ id: 'cron-sensor-4' });
+            const sensor = CreateSensorModel({ _id: 'cron-sensor-4' });
             await service.initScheduledSensor(sensor);
 
             await schedulerRegistry.getCronJob('cron-sensor-4').fireOnTick();
@@ -227,7 +262,7 @@ describe('SensorService', () => {
         });
 
         it('should log and swallow a strategy read failure instead of throwing', async () => {
-            const sensor = CreateComSensorModel({ id: 'cron-sensor-5' });
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-5' });
             await service.initScheduledSensor(sensor);
 
             await schedulerRegistry.getCronJob('cron-sensor-5').fireOnTick();
@@ -248,7 +283,7 @@ describe('SensorService', () => {
                 [forcastStrategy],
                 logger as never
             );
-            const sensor = CreateComSensorModel({ id: 'unsupported-type-sensor' });
+            const sensor = CreateComSensorModel({ _id: 'unsupported-type-sensor' });
             await serviceWithoutComStrategy.initScheduledSensor(sensor);
 
             await schedulerRegistry.getCronJob('unsupported-type-sensor').fireOnTick();
@@ -258,8 +293,8 @@ describe('SensorService', () => {
         });
 
         it('should compute a scaled value from the parent read results for each child sensor', async () => {
-            const sensor = CreateComSensorModel({ id: 'cron-sensor-6' });
-            const child = CreateComSensorModel({ id: 'child-a', parentId: 'cron-sensor-6' });
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-6' });
+            const child = CreateComSensorModel({ _id: 'child-a', parentId: 'cron-sensor-6' });
             (child.config as ComSensorConfigModel).code = 0;
             (child.config as ComSensorConfigModel).scale = 2;
             sensorRepository.getChildren.mockResolvedValue([child]);
@@ -275,8 +310,8 @@ describe('SensorService', () => {
         });
 
         it('should default the child scale to 1 when not configured', async () => {
-            const sensor = CreateComSensorModel({ id: 'cron-sensor-7' });
-            const child = CreateComSensorModel({ id: 'child-b', parentId: 'cron-sensor-7' });
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-7' });
+            const child = CreateComSensorModel({ _id: 'child-b', parentId: 'cron-sensor-7' });
             (child.config as ComSensorConfigModel).code = 0;
             (child.config as ComSensorConfigModel).scale = undefined;
             sensorRepository.getChildren.mockResolvedValue([child]);
@@ -294,8 +329,8 @@ describe('SensorService', () => {
 
     describe('restartAllScheduledSensors', () => {
         it('should recreate a cron job for every persisted sensor regardless of type', async () => {
-            const forcast = CreateSensorModel({ id: 'restart-1' });
-            const com = CreateComSensorModel({ id: 'restart-2' });
+            const forcast = CreateSensorModel({ _id: 'restart-1' });
+            const com = CreateComSensorModel({ _id: 'restart-2' });
             sensorRepository.get.mockResolvedValue([forcast, com]);
 
             await service.restartAllScheduledSensors();
@@ -307,7 +342,7 @@ describe('SensorService', () => {
         });
 
         it('should call the right strategy when a restarted job ticks', async () => {
-            const sensor = CreateSensorModel({ id: 'restart-3' });
+            const sensor = CreateSensorModel({ _id: 'restart-3' });
             sensorRepository.get.mockResolvedValue([sensor]);
             await service.restartAllScheduledSensors();
 

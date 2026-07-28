@@ -163,7 +163,7 @@ export class ScheduleService {
                         if (!liveSchedule.isPaused) {
                             await this.processService.execute({ ...process, schedule: liveSchedule });
                         }
-                    }, schedule.cron.after);
+                    }, schedule.cron.after); 
 
                 };
                 this.createSchedule(schedule, methode);

@@ -144,7 +144,7 @@ describe('ConfigurationController', () => {
         const result = await controller.synchroniseSensor(dto);
 
         expect(result).toEqual('result');
-        expect(synchronizeService.sychronizeSensor).toHaveBeenCalledWith(expect.objectContaining({ id: 'sensor-1' }));
+        expect(synchronizeService.sychronizeSensor).toHaveBeenCalledWith(expect.objectContaining({ _id: 'sensor-1' }));
     });
 
     it('should map and delegate a valve synchronization', async () => {

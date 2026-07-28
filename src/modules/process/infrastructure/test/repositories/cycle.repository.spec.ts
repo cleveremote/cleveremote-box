@@ -5,17 +5,17 @@ import { ScheduleRepository } from '@process/infrastructure/repositories/schedul
 import { TriggerRepository } from '@process/infrastructure/repositories/trigger.repository';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { SynchronizeCycleModel } from '@process/domain/models/synchronize.model';
-import { InvalidIdException } from '@process/domain/errors/db-errors';
+import { ElementNotFoundExeception, InvalidIdException } from '@process/domain/errors/db-errors';
 
 describe('CycleRepository', () => {
-    let cycleMongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock };
+    let cycleMongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; addChild: jest.Mock; removeChild: jest.Mock };
     let sequenceRepository: { deleteForCycle: jest.Mock; replaceForCycle: jest.Mock };
     let scheduleRepository: { deleteForCycle: jest.Mock; replaceForCycle: jest.Mock };
     let triggerRepository: { deleteForCycle: jest.Mock; replaceForCycle: jest.Mock };
     let repository: CycleRepository;
 
     beforeEach(() => {
-        cycleMongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn() };
+        cycleMongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), addChild: jest.fn(), removeChild: jest.fn() };
         sequenceRepository = { deleteForCycle: jest.fn(), replaceForCycle: jest.fn() };
         scheduleRepository = { deleteForCycle: jest.fn(), replaceForCycle: jest.fn() };
         triggerRepository = { deleteForCycle: jest.fn(), replaceForCycle: jest.fn() };
@@ -53,6 +53,87 @@ describe('CycleRepository', () => {
 
             await expect(repository.save(model)).rejects.toThrow(InvalidIdException);
         });
+
+        it('should add the child ref to the new parent when parentCycleId goes from null to a value', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: 'parent-1' });
+            cycleMongooseRepository.findById
+                .mockResolvedValueOnce(null) // previous state of the saved cycle: didn't exist yet
+                .mockResolvedValueOnce(Object.assign(new CycleModel(), { _id: 'parent-1', childCycles: [] })); // parent lookup
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+
+            await repository.save(model);
+
+            expect(cycleMongooseRepository.addChild).toHaveBeenCalledWith('parent-1', expect.objectContaining({
+                cycleId: model._id,
+                config: expect.objectContaining({ order: 0 })
+            }));
+        });
+
+        it('should not duplicate the child ref when the parent already has it (idempotent resync)', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: 'parent-1' });
+            const previous = Object.assign(new CycleModel(), { _id: model._id, parentCycleId: 'parent-1' });
+            cycleMongooseRepository.findById
+                .mockResolvedValueOnce(previous)
+                .mockResolvedValueOnce(Object.assign(new CycleModel(), {
+                    _id: 'parent-1',
+                    childCycles: [{ cycleId: model._id, config: { order: 0, waitForCompletion: true, delayBefore: 0, delayAfter: 0, isSkipped: false } }]
+                }));
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+
+            await repository.save(model);
+
+            expect(cycleMongooseRepository.addChild).not.toHaveBeenCalled();
+        });
+
+        it('should move the child ref when parentCycleId changes to a different parent', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: 'parent-2' });
+            const previous = Object.assign(new CycleModel(), { _id: model._id, parentCycleId: 'parent-1' });
+            cycleMongooseRepository.findById
+                .mockResolvedValueOnce(previous)
+                .mockResolvedValueOnce(Object.assign(new CycleModel(), { _id: 'parent-2', childCycles: [] }));
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+            cycleMongooseRepository.removeChild.mockResolvedValue(previous);
+
+            await repository.save(model);
+
+            expect(cycleMongooseRepository.removeChild).toHaveBeenCalledWith('parent-1', model._id);
+            expect(cycleMongooseRepository.addChild).toHaveBeenCalledWith('parent-2', expect.objectContaining({ cycleId: model._id }));
+        });
+
+        it('should remove the child ref from the old parent when parentCycleId is cleared', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: null });
+            const previous = Object.assign(new CycleModel(), { _id: model._id, parentCycleId: 'parent-1' });
+            cycleMongooseRepository.findById.mockResolvedValueOnce(previous);
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+            cycleMongooseRepository.removeChild.mockResolvedValue(previous);
+
+            await repository.save(model);
+
+            expect(cycleMongooseRepository.removeChild).toHaveBeenCalledWith('parent-1', model._id);
+            expect(cycleMongooseRepository.addChild).not.toHaveBeenCalled();
+        });
+
+        it('should not call addChild when the target parent does not exist', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: 'missing-parent' });
+            cycleMongooseRepository.findById
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce(null); // parent lookup: not found
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+
+            await repository.save(model);
+
+            expect(cycleMongooseRepository.addChild).not.toHaveBeenCalled();
+        });
+
+        it('should not fail the save when the old parent no longer exists', async () => {
+            const model = Object.assign(new CycleModel(), { _id: 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a', parentCycleId: null });
+            const previous = Object.assign(new CycleModel(), { _id: model._id, parentCycleId: 'gone-parent' });
+            cycleMongooseRepository.findById.mockResolvedValueOnce(previous);
+            cycleMongooseRepository.upsert.mockResolvedValue(model);
+            cycleMongooseRepository.removeChild.mockRejectedValue(new ElementNotFoundExeception('gone-parent', 'update', 'cycle'));
+
+            await expect(repository.save(model)).resolves.toEqual(model);
+        });
     });
 
     describe('delete', () => {
@@ -66,6 +147,24 @@ describe('CycleRepository', () => {
             expect(triggerRepository.deleteForCycle).toHaveBeenCalledWith('cycle-1');
             expect(cycleMongooseRepository.delete).toHaveBeenCalledWith('cycle-1');
             expect(result).toEqual(true);
+        });
+
+        it('should remove the child ref from its parent when the deleted cycle had one', async () => {
+            cycleMongooseRepository.findById.mockResolvedValue(Object.assign(new CycleModel(), { _id: 'cycle-1', parentCycleId: 'parent-1' }));
+            cycleMongooseRepository.delete.mockResolvedValue(true);
+
+            await repository.delete('cycle-1');
+
+            expect(cycleMongooseRepository.removeChild).toHaveBeenCalledWith('parent-1', 'cycle-1');
+        });
+
+        it('should not call removeChild when the deleted cycle had no parent', async () => {
+            cycleMongooseRepository.findById.mockResolvedValue(Object.assign(new CycleModel(), { _id: 'cycle-1', parentCycleId: null }));
+            cycleMongooseRepository.delete.mockResolvedValue(true);
+
+            await repository.delete('cycle-1');
+
+            expect(cycleMongooseRepository.removeChild).not.toHaveBeenCalled();
         });
     });
 

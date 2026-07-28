@@ -12,6 +12,9 @@ export class ConditionMapper {
         model.elementType = condition.elementType;
         model.operator = condition.operator;
         model.value = condition.value as ExecutableAction | number;
+        model.order = condition.order;
+        model.symbolStart = condition.symbolStart;
+        model.symbolEnd = condition.symbolEnd;
         return model;
     }
 
@@ -22,7 +25,10 @@ export class ConditionMapper {
         condition.elementType = model.elementType;
         condition.operator = model.operator;
         condition.value = model.value;
-        return condition; 
+        condition.order = model.order;
+        condition.symbolStart = model.symbolStart;
+        condition.symbolEnd = model.symbolEnd;
+        return condition;
     }
 
 }

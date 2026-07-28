@@ -1,4 +1,4 @@
-import { ComRequestConfigModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestConfigModel, ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
 
 export interface BuildOverrideParamsCase {
     name: string;
@@ -112,6 +112,25 @@ export const buildOverrideParamsCases: BuildOverrideParamsCase[] = [
                 scale: undefined,
                 unit: undefined,
                 value: 7,
+                persistence: { persist: false, address: 0 }
+            }
+        }
+    },
+    {
+        name: 'the override wins on type/formula, falling back to the existing config when absent',
+        existing: { address: 5, function: [], type: ModbusValueType.FLOAT, params: { value: 42, formula: 'raw' } },
+        override: { address: 1, type: ModbusValueType.CUMULATIVE, params: { value: 7 } },
+        expected: {
+            address: 1,
+            function: [],
+            disabled: undefined,
+            type: ModbusValueType.CUMULATIVE,
+            params: {
+                length: undefined,
+                scale: undefined,
+                unit: undefined,
+                value: 7,
+                formula: 'raw',
                 persistence: { persist: false, address: 0 }
             }
         }

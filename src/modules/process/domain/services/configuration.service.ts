@@ -52,9 +52,9 @@ export class StructureService {
         // physiquement les actionneurs), mais un capteur (ex: prevision meteo, cron quotidien) doit
         // afficher sa derniere valeur connue avant son prochain tick.
         for (const sensor of this.structure.sensors) {
-            const lastEvent = await this.eventRepository.getLast(sensor.id);
+            const lastEvent = await this.eventRepository.getLast(sensor._id);
             if (lastEvent) {
-                sensor.value = Number((lastEvent.additionalData as SensorEventData).value);
+                sensor.value = Number((lastEvent.additionalData as SensorEventData).value); 
                 sensor.date = lastEvent.date;
             }
         }
@@ -78,7 +78,7 @@ export class StructureService {
         this.triggers = triggers;
         this.structure.values = this.structure.sensors
             .filter((sensor) => sensor.value !== undefined)
-            .map((sensor) => ({ id: sensor.id, value: sensor.value, type: 'SENSOR', date: sensor.date }));
+            .map((sensor) => ({ id: sensor._id, value: sensor.value, type: 'SENSOR', date: sensor.date }));
         return this.structure;
     }
 
@@ -137,7 +137,7 @@ export class StructureService {
             .filter((sensor) => sensor.value !== undefined)
             .map((sensor) => {
                 const value = new SensorValueModel();
-                value.id = sensor.id;
+                value.id = sensor._id;
                 value.value = sensor.value;
                 value.type = 'SENSOR';
                 value.date = sensor.date;

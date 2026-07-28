@@ -1,13 +1,33 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import ModbusRTU from "modbus-serial";
+import { create, all, MathNode, EvalFunction } from 'mathjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ComRequestConfigModel, ComRequestModel, ModbusExecuteResult, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import {
+    ComRequestConfigModel, ComRequestModel, ModbusEvaluatedReading, ModbusExecuteResult, ModbusFunctionName, ModbusValueType
+} from '@process/domain/models/com-request.model';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
+
+/** Longueur par défaut (en registres) appliquée quand params.length est absent et config.type est défini */
+const DEFAULT_LENGTH_BY_TYPE: Record<ModbusValueType, number> = {
+    [ModbusValueType.CUMULATIVE]: 4,
+    [ModbusValueType.FLOAT]: 2,
+    [ModbusValueType.UINT32]: 2,
+    [ModbusValueType.INT]: 1,
+    [ModbusValueType.FLOAT_6_BYTES]: 3,
+};
+
+/** REG1439, position du point décimal utilisée par les formules cumulative du compteur d'eau ultrasonique */
+const DECIMAL_POSITION_REGISTER = 1439;
+
+interface CompiledFormula {
+    code: EvalFunction;
+    variables: string[];
+}
 
 export interface InverterConfigParam {
     param: string;
@@ -30,10 +50,6 @@ export interface DigitalMonitorHandle {
     stop: () => Promise<void>;
 }
 
-export interface SlaveDiscoveryHandle {
-    stop: () => Promise<void>;
-}
-
 interface QueueEntry {
     comRequest?: ComRequestModel;
     param?: ComRequestConfigModel;
@@ -48,11 +64,32 @@ export class ModbusService {
     private _queue: QueueEntry[] = [];
     private _isProcessing = false;
 
+    // Moteur de formules mathjs (cf. _compileFormula/evaluateScale) et cache de la position
+    // décimale (REG1439) par device, utilisés uniquement pour les ComRequest avec config.type défini.
+    private readonly _math = create(all);
+    private readonly _formulaCache = new Map<string, CompiledFormula>();
+    // Référence conservée avant désactivation de math.parse (cf. constructeur) : sans elle,
+    // _compileFormula ne pourrait plus parser aucune formule, y compris les siennes.
+    private readonly _parseFormula = this._math.parse.bind(this._math);
+    private readonly _decimalPositionByDevice = new Map<string, number>();
+
     public constructor(
         private deviceRepository: DeviceRepository,
         private modbusTaskRepository: ComRequestRepository,
         private readonly logger: Logger
-    ) { }
+    ) {
+        // Instance mathjs restreinte : formules stockables (ComRequest.config.params.formula)
+        // sans risque d'injection.
+        this._math.import(
+            {
+                import: () => { throw new Error('désactivé'); },
+                createUnit: () => { throw new Error('désactivé'); },
+                evaluate: () => { throw new Error('désactivé'); },
+                parse: () => { throw new Error('désactivé'); }
+            },
+            { override: true }
+        );
+    }
 
     private async _resolveMasterConfig(slaveDeviceId: string): Promise<{ masterConfig: MasterConfigModel; slaveConfig: SlaveConfigModel }> {
         const slaveDevice = await this.deviceRepository.get(slaveDeviceId) as DeviceModel;
@@ -184,8 +221,224 @@ export class ModbusService {
         return result;
     }
 
+    // -------------------------------------------------------------------------
+    // Décodage type-aware (ModbusValueType) + formules mathjs (config.type défini)
+    // -------------------------------------------------------------------------
+    private _toFloat6Bytes(registers): number {
+        const buf = Buffer.alloc(6);
+        buf.writeUInt16BE(registers[0], 0);
+        buf.writeUInt16BE(registers[1], 2);
+        buf.writeUInt16BE(registers[2], 4);
+        const integerPart = buf.readUInt32BE(0);
+        const decimalPart = buf.readUInt16BE(4);
+        return integerPart + decimalPart / 100;
+    }
+
+    private _toFloat(w: number[]): number {
+        const b = Buffer.alloc(4);
+        b.writeUInt16BE(w[1], 0);
+        b.writeUInt16BE(w[0], 2);
+        return b.readFloatBE(0);
+    }
+
+    private _toLong(w: number[]): number {
+        const b = Buffer.alloc(4);
+        b.writeUInt16BE(w[1], 0);
+        b.writeUInt16BE(w[0], 2);
+        return b.readInt32BE(0);
+    }
+
+    private _toUint32(w: number[]): number {
+        const b = Buffer.alloc(4);
+        b.writeUInt16BE(w[1], 0);
+        b.writeUInt16BE(w[0], 2);
+        return b.readUInt32BE(0);
+    }
+
+    private _toInt16(word: number): number {
+        return word > 0x7fff ? word - 0x10000 : word;
+    }
+
     /**
-     * Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
+     * Position du point décimal (REG1439), nécessaire aux formules cumulative. C'est un
+     * paramètre de configuration du compteur qui ne change quasiment jamais → lu une fois par
+     * device puis mis en cache. Appelez refreshDecimalPosition(deviceId) si ce réglage change.
+     */
+    private async _getDecimalPosition(client: ModbusRTU, deviceId: string): Promise<number> {
+        if (!this._decimalPositionByDevice.has(deviceId)) {
+            const res = await client.readHoldingRegisters(DECIMAL_POSITION_REGISTER - 1, 1);
+            this._decimalPositionByDevice.set(deviceId, this._toInt16(res.data[0]));
+        }
+        return this._decimalPositionByDevice.get(deviceId);
+    }
+
+    public async refreshDecimalPosition(deviceId: string): Promise<number> {
+        this._decimalPositionByDevice.delete(deviceId);
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`refreshDecimalPosition: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+        const client = new ModbusRTU();
+        return this._enqueue(async () => {
+            await this._connectClient(client, masterConfig, slaveConfig.slaveId);
+            try {
+                return await this._getDecimalPosition(client, deviceId);
+            } finally {
+                client.close(() => this.logger.log({ deviceId }, 'decimal position refresh connection closed'));
+            }
+        });
+    }
+
+    /** Test : REG0361 doit renvoyer 361.0 (sinon décalage d'adresse probable) */
+    public async testCommunication(deviceId: string): Promise<{ value: number; ok: boolean }> {
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`testCommunication: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+        const client = new ModbusRTU();
+        return this._enqueue(async () => {
+            await this._connectClient(client, masterConfig, slaveConfig.slaveId);
+            try {
+                const res = await client.readHoldingRegisters(360, 2);
+                const value = this._toFloat(res.data);
+                return { value, ok: Math.abs(value - 361.0) < 0.01 };
+            } finally {
+                client.close(() => this.logger.log({ deviceId }, 'test communication connection closed'));
+            }
+        });
+    }
+
+    /** Changement d'adresse esclave : REG0062 inscriptible, max 255 (FC06) */
+    public async changeSlaveAddress(deviceId: string, newAddress: number): Promise<boolean> {
+        if (newAddress < 1 || newAddress > 255) {
+            throw new BadRequestException('Adresse : 1 à 255');
+        }
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`changeSlaveAddress: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+        const client = new ModbusRTU();
+        const isOk = await this._enqueue(async () => {
+            await this._connectClient(client, masterConfig, slaveConfig.slaveId);
+            try {
+                await client.writeRegister(61, newAddress); // REG0062 → adresse 61
+                client.setID(newAddress);
+                const res = await client.readHoldingRegisters(360, 2);
+                const value = this._toFloat(res.data);
+                return Math.abs(value - 361.0) < 0.01;
+            } finally {
+                client.close(() => this.logger.log({ deviceId }, 'change slave address connection closed'));
+            }
+        });
+        this.logger.log({ deviceId, newAddress, ok: isOk }, 'slave address changed');
+        return isOk;
+    }
+
+    /** Changement d'adresse esclave : REG0062 inscriptible, max 255 (FC06) */
+    public async setSlaveAdress(masterDevice: DeviceModel, slaveAddressRegister: number, currentAdress: number, newAddress: number): Promise<boolean> {
+        if (newAddress < 1 || newAddress > 255) {
+            throw new BadRequestException('Adresse : 1 à 255');
+        }
+
+        const client = new ModbusRTU();
+        const isOk = await this._enqueue(async () => {
+            await this._connectClient(client, masterDevice.config as MasterConfigModel, currentAdress);
+            try {
+                await client.writeRegister(slaveAddressRegister, newAddress); // REG0062 → adresse 61
+                client.setID(newAddress);
+            } finally {
+                client.close(() => this.logger.log({ deviceId: masterDevice._id }, 'change slave address connection closed'));
+                return true;
+            }
+        });
+        this.logger.log({ deviceId: masterDevice._id, newAddress, ok: isOk }, 'slave address changed');
+        return isOk;
+    }
+
+    private _compileFormula(expr: string): CompiledFormula {
+        let compiled = this._formulaCache.get(expr);
+        if (!compiled) {
+            let node: MathNode;
+            try {
+                node = this._parseFormula(expr);
+            } catch (e) {
+                throw new BadRequestException(
+                    `Formule invalide "${expr}" : ${(e as Error).message}`
+                );
+            }
+            // MathNode.filter() ne typifie pas ses sous-classes (SymbolNode.name/isSymbolNode) :
+            // any est requis ici pour accéder à ces propriétés spécifiques.
+            /* eslint-disable @typescript-eslint/no-explicit-any */
+            compiled = {
+                code: node.compile(),
+                variables: node
+                    .filter((x: any) => x.isSymbolNode && !(this._math as any)[x.name])
+                    .map((x: any) => x.name as string)
+            };
+            /* eslint-enable @typescript-eslint/no-explicit-any */
+            this._formulaCache.set(expr, compiled);
+        }
+        return compiled;
+    }
+
+    /** Exécute une formule avec un scope fourni à la main (test sans device) */
+    public evaluateScale(expr: string, scope: Record<string, number>): number {
+        return this._compileFormula(expr).code.evaluate(scope);
+    }
+
+    /**
+     * Décode `words` selon config.type puis évalue config.params.formula (défaut : 'raw').
+     * `client` doit être déjà connecté (réutilisé pour l'éventuelle lecture REG1439 des
+     * cumulative, afin de ne jamais ouvrir une seconde connexion pendant une transaction déjà
+     * mise en file par _runComRequest).
+     */
+    // eslint-disable-next-line complexity
+    private async _evaluateReading(
+        client: ModbusRTU,
+        deviceId: string,
+        config: ComRequestConfigModel,
+        words: number[]
+    ): Promise<ModbusEvaluatedReading> {
+        const type = config.type ?? ModbusValueType.INT;
+        const formula = config.params?.formula ?? 'raw';
+        const scope: Record<string, number> = {};
+
+        switch (type) {
+            case ModbusValueType.CUMULATIVE:
+                // words[0..1] = LONG, words[2..3] = fraction IEEE754 (contigus)
+                scope.N = this._toLong(words.slice(0, 2));
+                scope.Nf = words.length >= 4 ? this._toFloat(words.slice(2, 4)) : 0;
+                scope.n = await this._getDecimalPosition(client, deviceId); // REG1439, mis en cache par device
+                break;
+            case ModbusValueType.FLOAT:
+                scope.raw = this._toFloat(words);
+                break;
+            case ModbusValueType.FLOAT_6_BYTES:
+                scope.raw = this._toFloat6Bytes(words);
+                break;
+            case ModbusValueType.UINT32:
+                scope.raw = this._toUint32(words);
+                break;
+            case ModbusValueType.INT:
+            default:
+                scope.raw = this._toInt16(words[0]);
+        }
+
+        const { variables } = this._compileFormula(formula);
+        const missing = variables.filter((v) => !(v in scope));
+        if (missing.length) {
+            throw new BadRequestException(
+                `Formule "${formula}" : variables manquantes [${missing.join(', ')}]`
+            );
+        }
+
+        return { formula, scope, value: this.evaluateScale(formula, scope) };
+    }
+
+    /** Ouvre une connexion Modbus persistante vers `deviceId` et lit périodiquement l'état des
      * `length` premières sorties (Read Coils, adresses 0x0000-0x0007). Ne logue qu'au moment où
      * un ou plusieurs canaux changent d'état, pas à chaque poll.
      */
@@ -363,178 +616,56 @@ export class ModbusService {
     }
 
     /**
-     * Surveille tous les devices MASTER enregistrés en base pour détecter un nouveau module
-     * Waveshare AO8CH non configuré (répond à l'unit id DEFAULT_UNCONFIGURED_UNIT_ID) et lui
-     * attribue automatiquement une adresse esclave unique. Un watcher indépendant est lancé par
-     * Master : aucun état n'est partagé entre eux hormis la file `_enqueue` commune (qui sérialise
-     * déjà tout le trafic Modbus de l'application, cf. monitorDigitalOutputs) - la détection ou le
-     * provisioning sur un Master ne met donc jamais en pause la surveillance des autres.
+     * Effectue un seul cycle de sonde de découverte pour ce Master : tente chaque registre de
+     * discoveryRegisters (unit id DEFAULT_UNCONFIGURED_UNIT_ID) jusqu'au premier qui répond, et
+     * provisionne immédiatement le module détecté. Ne gère aucune récurrence ni aucun état entre
+     * deux appels - c'est à l'appelant (le watch loop de DeviceService) de rappeler cette méthode
+     * périodiquement pour chaque Master.
      */
-    public async watchForNewSlaveDevices(pollIntervalMs = 3000): Promise<SlaveDiscoveryHandle> {
-        const masters = await this.deviceRepository.getByType(DeviceType.MASTER);
-        // opt-in par Master : sans discoveryRegisters renseigné, pas de watcher (pas de fallback
-        // silencieux sur un registre par défaut) - cf. modbus-registers.util.ts.
-        const eligibleMasters = masters.filter((master) => ((master.config as MasterConfigModel).discoveryRegisters?.length ?? 0) > 0);
-        masters
-            .filter((master) => !eligibleMasters.includes(master))
-            .forEach((master) => this.logger.debug({ masterId: master._id }, 'slave discovery disabled: no discoveryRegisters configured'));
-
-        if (eligibleMasters.length === 0) {
-            this.logger.log('no master devices with discoveryRegisters configured, slave discovery not started');
-            return { stop: () => Promise.resolve() };
-        }
-
-        const handles = await Promise.all(
-            eligibleMasters.map((master) => this._watchMasterForNewSlave(master, pollIntervalMs))
-        );
-
-        return {
-            stop: async () => {
-                await Promise.all(handles.map((handle) => handle.stop()));
-                this.logger.log('slave device discovery stopped for all masters');
-            }
-        };
-    }
-
-    private async _watchMasterForNewSlave(master: DeviceModel, pollIntervalMs: number): Promise<SlaveDiscoveryHandle> {
+    public async probeMasterForNewSlave(master: DeviceModel): Promise<number> {
         const masterConfig = master.config as MasterConfigModel;
-        // eligibleMasters (cf. watchForNewSlaveDevices) garantit une liste non vide ici.
+        // opt-in par Master : sans discoveryRegisters renseigné, pas de sonde (pas de fallback
+        // silencieux sur un registre par défaut) - cf. modbus-registers.util.ts.
         const registersToProbe = masterConfig.discoveryRegisters ?? [];
+        if (registersToProbe.length === 0) return;
+
         const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
-        let stopped = false;
-        let paused = false;
-        let timer: NodeJS.Timeout | null = null;
-
-        const poll = async (): Promise<void> => {
-            if (paused || stopped) return;
-
-            const client = new ModbusRTU();
-            const detectedRegister = await this._enqueue(async () => {
-                try {
-                    await this._connectClient(client, masterConfig, DEFAULT_UNCONFIGURED_UNIT_ID);
-                    // Timeout court dédié à la sonde : on ne veut pas bloquer les autres
-                    // transactions en file quand rien ne répond (cas nominal, à chaque poll).
-                    client.setTimeout(200);
-                    // Un seul connect pour tous les registres de la liste : on les essaie l'un
-                    // après l'autre sur la même connexion déjà ouverte, jusqu'au premier qui répond.
-                    for (const register of registersToProbe) {
-                        try {
-                            await client.readHoldingRegisters(register, 1);
-                            client.setTimeout(masterConfig.timeout || 2000);
-                            return register;
-                        } catch (err) {
-                            // cas nominal : ce registre ne répond pas - on essaie le suivant sans
-                            // remonter d'erreur (cf. watchForNewDevice d'origine:
-                            // `catch { /* aucun nouveau module */ }`).
-                            if (err.modbusCode === undefined && !networkCodes.includes(err.code)) {
-                                this.logger.warn({ masterId: master._id, register, err: err.message }, 'slave discovery probe failed unexpectedly');
-                            }
+        const client = new ModbusRTU();
+        const detectedRegister = await this._enqueue(async () => {
+            try {
+                await this._connectClient(client, masterConfig, DEFAULT_UNCONFIGURED_UNIT_ID);
+                // Timeout court dédié à la sonde : on ne veut pas bloquer les autres
+                // transactions en file quand rien ne répond (cas nominal, à chaque poll).
+                client.setTimeout(200);
+                // Un seul connect pour tous les registres de la liste : on les essaie l'un
+                // après l'autre sur la même connexion déjà ouverte, jusqu'au premier qui répond.
+                for (const register of registersToProbe) {
+                    try {
+                        await client.readHoldingRegisters(register, 1);
+                        client.setTimeout(masterConfig.timeout || 2000);
+                        this.logger.log({ masterId: master._id, register: detectedRegister }, 'new unconfigured modbus slave detected');
+                        return register;
+                    } catch (err) {
+                        // cas nominal : ce registre ne répond pas - on essaie le suivant sans
+                        // remonter d'erreur (cf. watchForNewDevice d'origine:
+                        // `catch { /* aucun nouveau module */ }`).
+                        if (err.modbusCode === undefined && !networkCodes.includes(err.code)) {
+                            this.logger.warn({ masterId: master._id, register, err: err.message }, 'slave discovery probe failed unexpectedly');
                         }
                     }
-                    client.setTimeout(masterConfig.timeout || 2000);
-                    return null;
-                } catch (err) {
-                    this.logger.warn({ masterId: master._id, err: err.message }, 'slave discovery connection failed');
-                    return null;
                 }
-            });
-
-            if (detectedRegister !== null) {
-                paused = true;
-                this.logger.log({ masterId: master._id, register: detectedRegister }, 'new unconfigured modbus slave detected');
-                try {
-                    await this._provisionNewSlaveDevice(master, client, detectedRegister);
-                } finally {
-                    paused = false;
-                    client.close();
-                }
-            } else {
-                client.close();
-            }
-        };
-
-        // setTimeout auto-replanifié (cf. monitorDigitalOutputs) : jamais de setInterval, pour ne
-        // jamais empiler deux sondes si un module répond lentement ou si un provisioning est en cours.
-        const runPoll = async (): Promise<void> => {
-            try {
-                await poll();
+                client.setTimeout(masterConfig.timeout || 2000);
+                return null;
             } catch (err) {
-                // filet de sécurité : une erreur inattendue ne doit jamais arrêter la surveillance
-                // de ce Master (les autres Masters ne sont de toute façon jamais affectés).
-                this.logger.error({ masterId: master._id, err: err.message }, 'slave discovery poll failed unexpectedly');
+                this.logger.warn({ masterId: master._id, err: err.message }, 'slave discovery connection failed');
+                return null;
             }
-            if (!stopped) {
-                timer = setTimeout(runPoll, pollIntervalMs);
-            }
-        };
+        });
+        client.close();
+        return detectedRegister;
 
-        timer = setTimeout(runPoll, pollIntervalMs);
-
-        return {
-            stop: () => new Promise<void>((resolve) => {
-                stopped = true;
-                if (timer) clearTimeout(timer);
-                resolve();
-            })
-        };
     }
-
-    /**
-     * Adresse un nouveau module détecté à DEFAULT_UNCONFIGURED_UNIT_ID : calcule le prochain
-     * slaveId libre pour ce Master (plancher à DEFAULT_UNCONFIGURED_UNIT_ID pour ne jamais
-     * réattribuer l'adresse réservée à la détection), écrit la nouvelle adresse puis enregistre
-     * le device SLAVE correspondant. En cas d'échec de sauvegarde après une écriture réussie,
-     * tente un rollback best-effort vers DEFAULT_UNCONFIGURED_UNIT_ID pour garder le module
-     * détectable au prochain cycle.
-     */
-    private async _provisionNewSlaveDevice(master: DeviceModel, client: ModbusRTU, detectedRegister: number): Promise<void> {
-        const existingSlaves = await this.deviceRepository.getByType(DeviceType.SLAVE);
-        const siblingIds = existingSlaves
-            .filter((device) => (device.config as SlaveConfigModel).masterDeviceId === master._id)
-            .map((device) => (device.config as SlaveConfigModel).slaveId)
-            .filter((id) => !Number.isNaN(id));
-        const newSlaveId = Math.max(DEFAULT_UNCONFIGURED_UNIT_ID, ...siblingIds) + 1;
-
-        try {
-            await this._enqueue(() => client.writeRegister(detectedRegister, newSlaveId));
-        } catch (err) {
-            this.logger.error(
-                { masterId: master._id, newSlaveId, register: detectedRegister, err: err.message },
-                'new slave address write failed, device left unconfigured for retry'
-            );
-            return;
-        }
-
-        const slaveConfig = new SlaveConfigModel();
-        slaveConfig.slaveId = newSlaveId;
-        slaveConfig.masterDeviceId = master._id;
-
-        const slaveModel = new DeviceModel();
-        slaveModel.name = `Slave ${newSlaveId} (auto-detected)`;
-        slaveModel.type = DeviceType.SLAVE;
-        slaveModel.kind = DeviceKind.MODBUS_SLAVE;
-        slaveModel.description = `Auto-detected on master "${master.name}" via register 0x${detectedRegister.toString(16)}`;
-        slaveModel.config = slaveConfig;
-
-        try {
-            const saved = await this.deviceRepository.save(slaveModel);
-            this.logger.log({ masterId: master._id, deviceId: saved._id, newSlaveId }, 'new slave device provisioned');
-        } catch (err) {
-            this.logger.error(
-                { masterId: master._id, newSlaveId, err: err.message },
-                'db save failed after address write, attempting rollback to unconfigured unit id'
-            );
-            try {
-                await this._enqueue(() => client.writeRegister(detectedRegister, DEFAULT_UNCONFIGURED_UNIT_ID));
-                this.logger.error({ masterId: master._id, newSlaveId }, 'rollback succeeded, device remains discoverable');
-            } catch (rollbackErr) {
-                this.logger.error(
-                    { masterId: master._id, newSlaveId, err: rollbackErr.message },
-                    'CRITICAL: rollback failed after db save failure - device now at an orphaned address, manual recovery required'
-                );
-            }
-        }
-    }
+  
 
     private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         if (!comRequest) {
@@ -543,6 +674,7 @@ export class ModbusService {
         return this._runComRequest(comRequest, param);
     }
 
+    // eslint-disable-next-line complexity
     private async _runComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         const taskId = comRequest?._id;
         const resolved = await this._resolveMasterConfig(comRequest.deviceId);
@@ -579,26 +711,32 @@ export class ModbusService {
                 fn = comRequest.config.function.find(f =>
                     f === ModbusFunctionName.WRITE_MULTIPLE_COILS || f === ModbusFunctionName.WRITE_MULTIPLE_REGISTERS
                 ) as string || comRequest.config.function.find(f => f.startsWith('write')) as string;
-            } else { 
+            } else {
                 fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
-            } 
+            }
             if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? "d'écriture" : "de lecture"} configurée pour cette tâche`);
             if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
             const addr = comRequest.config.address;
             const params = comRequest.config.params || null;
+            const type = comRequest.config.type;
 
             // --- Lecture ---
             if (fn.startsWith("read")) {
-                const length = params.length || 1;
+                const length = params.length || (type ? DEFAULT_LENGTH_BY_TYPE[type] : 1);
                 const data = await client[fn](addr, length);
-                client.readHoldingRegisters
                 if (!data?.data) throw new Error("Aucune donnée reçue");
 
                 // readCoils/readDiscreteInputs renvoient des booléens (états ON/OFF), pas des
-                // registres 16 bits : le décodage IEEE754 ne s'applique qu'aux registres.
+                // registres 16 bits : le décodage ne s'applique qu'aux registres.
                 if (fn === ModbusFunctionName.READ_COILS || fn === ModbusFunctionName.READ_DISCRETE_INPUTS) {
                     this.logger.log({ label: comRequest.name, value: data.data }, 'modbus read result');
+                } else if (type !== undefined) {
+                    // config.type défini : décodage type-aware + formule mathjs (cf. _evaluateReading),
+                    // remplace le décodage IEEE754 générique ci-dessous pour ce ComRequest.
+                    data.evaluated = await this._evaluateReading(client, comRequest.deviceId, comRequest.config, data.data);
+                    const evaluatedValue = Number(data.evaluated.value.toFixed(2));
+                    this.logger.log({ label: comRequest.name, value: evaluatedValue, unit: params?.unit || '' }, 'modbus read result');
                 } else {
                     const values = this.decodeFloats(data.data, addr, length, params.scale, true);
                     this.logger.log({ label: comRequest.name, value: Number(values[addr].toFixed(2)), unit: params?.unit || '' }, 'modbus read result');
@@ -607,10 +745,10 @@ export class ModbusService {
             }
             // --- Écriture ---
             else if (fn.startsWith("write")) {
-                const address = param.params?.persistence?.persist ? param.address+param.params?.persistence?.address: param.address;
+                const address = param.params?.persistence?.persist ? param.address + param.params?.persistence?.address : param.address;
                 const data = await client[fn](address, param.params.value);
                 this.logger.log({ label: comRequest.name, value: param.params.value }, 'modbus write done');
-                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult; 
+                return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
             }
 
             // --- Fonction non supportée ---

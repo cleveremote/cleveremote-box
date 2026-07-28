@@ -1,9 +1,12 @@
 import { ModuleStatus } from './structure.interface';
 
 export enum ComRequestType {
-    DIGITAL_IO_RESET="DIGITAL_IO_RESET",
-    DIGITAL_IO_INIT="DIGITAL_IO_INIT",
-
+    DIGITAL_IO_RESET = "DIGITAL_IO_RESET",
+    DIGITAL_IO_INIT = "DIGITAL_IO_INIT",
+    COM_INIT = "COM_INIT",
+    COM_RESET = "COM_RESET",
+    COM_READ = "COM_READ",
+    COM_WRITE = "COM_WRITE",
     DIGITAL_INPUT = 'DIGITAL_INPUT',
     DIGITAL_OUTPUT = 'DIGITAL_OUTPUT',
     ANALOG_OUTPUT = 'ANALOG_OUTPUT',

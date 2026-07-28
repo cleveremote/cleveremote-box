@@ -7,12 +7,14 @@ export function mapComRequestConfigToModel(config: ComRequestConfig): ComRequest
         function: config.function,
         disabled: config.disabled,
         done: config.done ?? false,
+        type: config.type,
         ...(config.params !== undefined && {
             params: {
                 length: config.params.length,
                 scale: config.params.scale,
                 unit: config.params.unit,
                 value: config.params.value,
+                formula: config.params.formula,
                 ...(config.params.persistence !== undefined && {
                     persistence: {
                         persist: config.params.persistence.persist,
@@ -30,12 +32,14 @@ export function mapComRequestConfigToSchema(config: ComRequestConfigModel): ComR
         function: config.function,
         disabled: config.disabled,
         done: config.done ?? false,
+        type: config.type,
         ...(config.params !== undefined && {
             params: {
                 length: config.params.length,
                 scale: config.params.scale,
                 unit: config.params.unit,
                 value: config.params.value,
+                formula: config.params.formula,
                 ...(config.params.persistence !== undefined && {
                     persistence: {
                         persist: config.params.persistence.persist,

@@ -64,7 +64,7 @@ describe('ValueRepository', () => {
         });
 
         it('should return a SensorValueModel when the id matches a sensor with a value', async () => {
-            const sensor = Object.assign(new SensorModel(), { id: 'sensor-1', value: 42, date: new Date('2026-01-01') });
+            const sensor = Object.assign(new SensorModel(), { _id: 'sensor-1', value: 42, date: new Date('2026-01-01') });
             structureService.structure.sensors = [sensor];
 
             const result = await repository.getDeviceValue('sensor-1');
@@ -73,7 +73,7 @@ describe('ValueRepository', () => {
         });
 
         it('should return undefined when the matched sensor has no value', async () => {
-            const sensor = Object.assign(new SensorModel(), { id: 'sensor-1', value: undefined });
+            const sensor = Object.assign(new SensorModel(), { _id: 'sensor-1', value: undefined });
             structureService.structure.sensors = [sensor];
 
             const result = await repository.getDeviceValue('sensor-1');

@@ -1,4 +1,4 @@
-import { Controller, ParseArrayPipe, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
+import { Controller, Injectable, ParseArrayPipe, PipeTransform, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
@@ -26,6 +26,9 @@ import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchroni
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
 import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.uc';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
+import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
+import { DeviceService } from '@process/domain/services/device.service';
+import { DiscoverDeviceDTO } from '../dto/discover.dto';
 
 function flattenValidationErrors(errors: ValidationError[]): string[] {
     return errors.flatMap(error => [
@@ -39,13 +42,22 @@ function validationExceptionFactory(errors: ValidationError[] | string): RpcExce
     return new RpcException(message);
 }
 
+@Injectable()
+class ToArrayPipe implements PipeTransform {
+    public transform(value: unknown): unknown[] {
+        return Array.isArray(value) ? value : [value];
+    }
+}
+
 @Controller()
 @UsePipes(new ValidationPipe({ transform: true, exceptionFactory: validationExceptionFactory }))
 export class ConfigurationController {
 
     public constructor(
         private _configurationService: StructureService,
-        private _synchronizeService: SynchronizeService) {
+        private _synchronizeService: SynchronizeService,
+        private _deviceService: DeviceService
+    ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
     public async synchronise(@Payload() configurationSynchronizeDTO: StructureSynchronizeDTO): Promise<StructureModel> {
@@ -56,12 +68,21 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/device'])
     public async synchroniseDevice(
-        @Payload(new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
         deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
     ): Promise<DeviceModel[]> {
         const uc = new DeviceSynchronizeUC(this._synchronizeService);
         const input = deviceSynchronizeDTOs.map(DeviceSynchronizeDTO.mapToDeviceModel);
         return uc.execute(input);
+    }
+
+    @MessagePattern(['box/discover/device'])
+    public async discoverDevice(
+        @Payload() discoverDeviceDTO: DiscoverDeviceDTO
+    ): Promise<DeviceModel[]> {
+        const uc = new DeviceDiscoverUC(this._deviceService);
+        return uc.execute(discoverDeviceDTO.masterId);
+        return [];
     }
 
     @MessagePattern(['box/synchronize/comrequest'])
@@ -131,8 +152,8 @@ export class ConfigurationController {
 
     @MessagePattern(['box/fetch/plan'])
     public async getPlan(): Promise<string> {
-       const result = `svg`
-       return result;
+        const result = `svg`
+        return result;
     }
 
     @MessagePattern(['box/fetch/status'])
