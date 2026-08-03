@@ -16,6 +16,7 @@ import { ComRequestRepository } from '@process/infrastructure/repositories/com-r
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from './actuator.service';
 import { DeviceService } from './device.service';
+import { GlobalSettingsService } from './global-settings.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -37,6 +38,7 @@ export class InitService {
         private ctrlActuatorStrategy: CtrlActuatorStrategy,
         private actuatorService: ActuatorService,
         private deviceService: DeviceService,
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger,
         private readonly _processService: ProcessService
     ) { }
@@ -48,6 +50,7 @@ export class InitService {
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
         return wrap('StructureService.getStructure', () => this._loadConfiguration())
+            .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
             //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))

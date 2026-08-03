@@ -96,15 +96,98 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             expect(service.structure).toBe(structure);
         });
 
-        // le statut vit directement sur CycleModel/SequenceModel (defaut STOPPED du schema Mongo) :
-        // resetAllModules() le force de toute facon a STOPPED au boot, plus besoin de le
-        // reconstruire depuis un store separe.
-        it('should leave a freshly loaded cycle at its default STOPPED status', async () => {
+        // passe car eventRepository.getLast renvoie null par defaut (beforeEach) : aucun evenement
+        // connu pour ce cycle, donc le defaut STOPPED du schema Mongo est conserve tel quel.
+        it('should leave a freshly loaded cycle at its default STOPPED status when it has no known event', async () => {
             await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
 
             const structure = await service.getStructure();
 
             expect(structure.cycles[0].status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should rehydrate a cycle\'s status/progression from its last known event (IN_PROCCESS)', async () => {
+            const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
+            const startedAt = new Date('2026-07-30T10:00:00.000Z');
+            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+                id === cycle._id
+                    ? {
+                        elementId: id,
+                        additionalData: { status: ExecutableStatus.IN_PROCCESS, value: ExecutableStatus.IN_PROCCESS, startedAt, duration: 300 }
+                    }
+                    : null
+            ));
+
+            const structure = await service.getStructure();
+
+            expect(structure.cycles[0].status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(structure.cycles[0].progression).toEqual({ startedAt, duration: 300 });
+            expect(eventRepository.getLast).toHaveBeenCalledWith(cycle._id);
+        });
+
+        it('should not set progression when the last known cycle event is STOPPED', async () => {
+            const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
+            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+                id === cycle._id
+                    ? {
+                        elementId: id,
+                        additionalData: { status: ExecutableStatus.STOPPED, value: ExecutableStatus.STOPPED, startedAt: new Date(), duration: 300 }
+                    }
+                    : null
+            ));
+
+            const structure = await service.getStructure();
+
+            expect(structure.cycles[0].status).toEqual(ExecutableStatus.STOPPED);
+            expect(structure.cycles[0].progression).toBeFalsy();
+        });
+
+        it('should rehydrate a WAITTING_CONFIRMATION cycle status without setting progression', async () => {
+            const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
+            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+                id === cycle._id
+                    ? {
+                        elementId: id,
+                        additionalData: {
+                            status: ExecutableStatus.WAITTING_CONFIRMATION,
+                            value: ExecutableStatus.WAITTING_CONFIRMATION,
+                            causes: []
+                        }
+                    }
+                    : null
+            ));
+
+            const structure = await service.getStructure();
+
+            expect(structure.cycles[0].status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+            expect(structure.cycles[0].progression).toBeFalsy();
+        });
+
+        it('should rehydrate a sequence\'s status/progression from its last known event', async () => {
+            const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
+            const sequence = new SequenceModel();
+            sequence.cycleId = cycle._id;
+            sequence.name = 'Seq 1';
+            sequence.status = ExecutableStatus.STOPPED;
+            sequence.securityConfig = { maxDuration: 30 };
+            sequence.moduleConfigs = [];
+            const savedSequence = await sequenceMongooseRepository.create(sequence);
+            const sequenceId = savedSequence._id;
+            const startedAt = new Date('2026-07-30T10:00:00.000Z');
+            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+                id === sequenceId
+                    ? {
+                        elementId: id,
+                        additionalData: { status: ExecutableStatus.IN_PROCCESS, value: ExecutableStatus.IN_PROCCESS, startedAt, duration: 30 }
+                    }
+                    : null
+            ));
+
+            await service.getStructure();
+
+            expect(service.sequences[0].status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(service.sequences[0].progression).toEqual({ startedAt, duration: 30 });
+            expect(eventRepository.getLast).toHaveBeenCalledWith(sequenceId);
         });
 
         it('should populate a sensor\'s value/date from its last known event, and reflect it in structure.values', async () => {

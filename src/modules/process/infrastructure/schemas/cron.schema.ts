@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { SunBehavior, SunBehaviorSchema } from './sun-behavior.schema';
 
-@Schema()
+@Schema({ _id: false })
 export class Cron {
     @Prop()
     public date?: Date;
@@ -11,8 +11,5 @@ export class Cron {
 
     @Prop({ type: SunBehaviorSchema })
     public sunBehavior?: SunBehavior;
-
-    @Prop()
-    public after?: number;
 }
 export const CronSchema = SchemaFactory.createForClass(Cron);

@@ -4,6 +4,8 @@ import { Logger } from 'nestjs-pino';
 import * as fs from 'fs';
 import * as HciSocket from 'hci-socket';
 import { AuthenticationService } from './authentication.service';
+import { GlobalSettingsService } from './global-settings.service';
+import { GlobalSettingsModel, LocalCoordinatesModel } from '../models/global-settings.model';
 const NodeBleHost = require('ble-host');
 const network = require("node-network-manager");
 const BleManager = NodeBleHost.BleManager;
@@ -18,6 +20,7 @@ export class BleService {
 
     public constructor(
         private authenticationService: AuthenticationService,
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) {
     }
@@ -124,11 +127,16 @@ export class BleService {
     }
 
 
-    private async buildContenteConfigFile(data: { ssid: string, psk: string, password: string }) {
+    private async buildContenteConfigFile(data: { ssid: string, psk: string, password: string, localCoordinates?: LocalCoordinatesModel }) {
         const isValid = await this.authenticationService.checkPassword({ id: data.ssid, login: data.ssid, password: data.password });
-        if (!isValid) { 
+        if (!isValid) {
             return AttErrors.WRITE_NOT_PERMITTED;
-        } 
+        }
+        if (data.localCoordinates) {
+            const globalSettings = new GlobalSettingsModel();
+            globalSettings.localCoordinates = data.localCoordinates;
+            await this.globalSettingsService.update(globalSettings);
+        }
         await network.wifiConnect(data.ssid, data.psk);
         return AttErrors.SUCCESS;
     }

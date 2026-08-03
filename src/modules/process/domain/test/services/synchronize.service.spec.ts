@@ -3,6 +3,7 @@ import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ScheduleService } from '@process/domain/services/schedule.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
@@ -180,12 +181,14 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         logger = CreateLoggerMock();
 
         const processService = { execute: jest.fn().mockResolvedValue(undefined) };
+        const globalSettingsService = { localCoordinates: undefined };
         scheduleService = new ScheduleService(
             schedulerRegistry,
             configurationService as unknown as StructureService,
             processService as unknown as ProcessService,
             cycleRepository,
             scheduleRepository,
+            globalSettingsService as unknown as GlobalSettingsService,
             logger as never
         );
 

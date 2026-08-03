@@ -244,7 +244,6 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             const model = ScheduleSynchronizeDTO.mapToScheduleModel(CreateDto({ cron }));
 
             expect(model.cron.pattern).toEqual('0 0 * * *');
-            expect(model.cron.after).toEqual(5000);
             expect(model.cron.date).toEqual(new Date('2026-01-01'));
         });
 

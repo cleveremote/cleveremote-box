@@ -3,6 +3,7 @@ import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { ScheduleService } from '@process/domain/services/schedule.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
@@ -20,7 +21,7 @@ import { TriggerModel } from '@process/domain/models/trigger.model';
 import { ConditionModel } from '@process/domain/models/condition.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ElementType } from '@process/domain/models/event.model';
-import { SunState } from '@process/domain/interfaces/schedule.interface';
+import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateTriggerModel } from './trigger.spec-mock';
@@ -67,6 +68,7 @@ describe('TriggerService', () => {
     let eventRepository: { save: jest.Mock };
     let sensorRepository: Record<string, never>;
     let processService: { execute: jest.Mock };
+    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: TriggerService;
 
@@ -115,12 +117,14 @@ describe('TriggerService', () => {
         logger = CreateLoggerMock();
 
         processService = { execute: jest.fn().mockResolvedValue(undefined) };
+        globalSettingsService = { localCoordinates: undefined };
         scheduleService = new ScheduleService(
             schedulerRegistry,
             configurationService as unknown as StructureService,
             processService as unknown as ProcessService,
             cycleRepository,
             scheduleRepository,
+            globalSettingsService as unknown as GlobalSettingsService,
             logger as never
         );
 
@@ -133,6 +137,7 @@ describe('TriggerService', () => {
             eventRepository as never,
             valueRepository as never,
             processService as unknown as ProcessService,
+            globalSettingsService as unknown as GlobalSettingsService,
             logger as never
         );
     });
@@ -509,9 +514,9 @@ describe('TriggerService', () => {
             expect(schedulerRegistry.getCronJobs().size).toEqual(0);
         });
 
-        it('should compute the execution time from sunset when sunBehavior.sunState is SUNRISE', async () => {
+        it('should compute the execution time from sunrise when sunBehavior.sunState is SUNRISE', async () => {
             const trigger = CreateTriggerModel({
-                trigger: { sunBehavior: { sunState: SunState.SUNRISE, time: 0 } },
+                trigger: { sunBehavior: { sunState: SunState.SUNRISE, timeDirection: TimeDirection.AFTER, time: 0 } },
                 conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
             });
             configurationService.triggers = [trigger];
@@ -524,9 +529,9 @@ describe('TriggerService', () => {
             expect(schedulerRegistry.getCronJobs().size).toEqual(1);
         });
 
-        it('should compute the execution time from sunrise when sunBehavior.sunState is not SUNRISE', async () => {
+        it('should compute the execution time from sunset when sunBehavior.sunState is not SUNRISE', async () => {
             const trigger = CreateTriggerModel({
-                trigger: { sunBehavior: { sunState: SunState.SUNSET, time: 0 } },
+                trigger: { sunBehavior: { sunState: SunState.SUNSET, timeDirection: TimeDirection.AFTER, time: 0 } },
                 conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
             });
             configurationService.triggers = [trigger];

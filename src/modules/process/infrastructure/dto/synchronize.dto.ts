@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
 import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
-import { SunState } from '@process/domain/interfaces/schedule.interface';
+import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
@@ -364,11 +364,15 @@ export class CycleSynchronizeDTO {
             };
             // les modules (actuator-rpi/actuator-com) sont geres via leurs endpoints de sync dedies ;
             // ici on ne fait que reference leur id, avec un timing par defaut a 0.
-            sequence.moduleConfigs = (sequenceSync.moduleConfigs ?? []).map((moduleDto) => ({
-                moduleId: moduleDto.moduleId,
-                configTiming: moduleDto.configTiming || { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 },
-                ...(moduleDto.customValue !== undefined && { customValue: moduleDto.customValue })
-            }));
+            // une entree marquee delete:true est retiree du tableau : moduleConfigs n'est pas
+            // soft-supprime individuellement, il est remplace en bloc sur la sequence (cf. SequenceMapper).
+            sequence.moduleConfigs = (sequenceSync.moduleConfigs ?? [])
+                .filter((moduleDto) => !moduleDto.delete)
+                .map((moduleDto) => ({
+                    moduleId: moduleDto.moduleId,
+                    configTiming: moduleDto.configTiming || { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 },
+                    ...(moduleDto.customValue !== undefined && { customValue: moduleDto.customValue })
+                }));
             sequence.delete = sequenceSync.delete ?? false;
             return sequence;
         });
@@ -399,10 +403,10 @@ export class CycleSynchronizeDTO {
             scheduleModel.cron = new CronSync();
             scheduleModel.cron.date = scheduleSync.cron?.date;
             scheduleModel.cron.pattern = scheduleSync.cron?.pattern;
-            scheduleModel.cron.after = scheduleSync.cron?.after;
             if (scheduleSync.cron?.sunBehavior) {
                 scheduleModel.cron.sunBehavior = new SunBehavior();
                 scheduleModel.cron.sunBehavior.sunState = scheduleSync.cron?.sunBehavior?.sunState;
+                scheduleModel.cron.sunBehavior.timeDirection = scheduleSync.cron?.sunBehavior?.timeDirection;
                 scheduleModel.cron.sunBehavior.time = scheduleSync.cron?.sunBehavior?.time;
             }
             scheduleModel.isPaused = scheduleSync.isPaused;
@@ -421,6 +425,10 @@ export class SunBehavior {
     @IsNotEmpty()
     @ApiProperty()
     public sunState: SunState;
+    @IsEnum(TimeDirection)
+    @IsNotEmpty()
+    @ApiProperty()
+    public timeDirection: TimeDirection;
     @IsNumber()
     public time: number;
 }
@@ -484,11 +492,11 @@ export class ScheduleSynchronizeDTO {
         scheduleModel.description = scheduleSynchronizeDTO.description;
         scheduleModel.cron = new CronSync();
         scheduleModel.cron.date = scheduleSynchronizeDTO.cron.date;
-        scheduleModel.cron.after = scheduleSynchronizeDTO.cron.after;
         scheduleModel.cron.pattern = scheduleSynchronizeDTO.cron.pattern;
         if (scheduleSynchronizeDTO.cron.sunBehavior) {
             scheduleModel.cron.sunBehavior = new SunBehavior();
             scheduleModel.cron.sunBehavior.sunState = scheduleSynchronizeDTO.cron.sunBehavior.sunState;
+            scheduleModel.cron.sunBehavior.timeDirection = scheduleSynchronizeDTO.cron.sunBehavior.timeDirection;
             scheduleModel.cron.sunBehavior.time = scheduleSynchronizeDTO.cron.sunBehavior.time;
         }
 
@@ -561,6 +569,10 @@ export class moduleConfigsSync {
     @IsOptional()
     @IsNumber()
     public customValue?: number;
+
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
 }
 
 export class TriggerSynchronizeDTO {
@@ -614,6 +626,7 @@ export class TriggerSynchronizeDTO {
         if (triggerSynchronizeDTO.trigger?.sunBehavior) {
             triggerModel.trigger.sunBehavior = new SunBehavior();
             triggerModel.trigger.sunBehavior.sunState = triggerSynchronizeDTO.trigger.sunBehavior?.sunState;
+            triggerModel.trigger.sunBehavior.timeDirection = triggerSynchronizeDTO.trigger.sunBehavior?.timeDirection;
             triggerModel.trigger.sunBehavior.time = triggerSynchronizeDTO.trigger?.sunBehavior?.time; //time befor or after sunset sunrise
         }
         triggerModel.conditions = (triggerSynchronizeDTO.conditions ?? []).map(ConditionSync.toModel);

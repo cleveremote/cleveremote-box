@@ -102,20 +102,32 @@ export class ProcessService {
         // cette fenetre ne trouverait rien dans processList et ne ferait rien.
         if (index > -1 || process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             this.processList[index]?.instance?.unsubscribe();
-            const actuators = await this._resolveActuators();
-            const modules = process.cycle.getModules(actuators);
+            // flip immediatement (avant tout await) : ce champ est partage (meme CycleModel que
+            // configurationService.structure.cycles, cf. _initializeProcess) et sert de signal
+            // d'annulation pour toute continuation asynchrone deja en vol (tap de reservation dans
+            // _executeWithActuators, ref.resume()/_checkSequenceCondition().then() dans
+            // _createExecObs) qui ne passe pas par processList[index].instance.unsubscribe() -
+            // le fixer plus tard (apres les await ci-dessous, comme avant) laissait une fenetre ou
+            // ces continuations voyaient encore IN_PROCCESS alors que l'arret etait deja decide.
+            process.cycle.status = ExecutableStatus.STOPPED;
 
             // libere d'abord tout cycle MODULE qui n'est IN_PROCCESS que parce que CE cycle l'a
             // auto-demarre (regle 2, mode AUTO + sourceCycleId le pointant) et qui n'a jamais ete
             // repris depuis par un declenchement independant (mode different) - sinon il reste
-            // orphelin indefiniment et _isActuatorStillInUse bloque a tort son actuator pour toute
+            // orphelin indefiniment (status/processList perimes, actuator pourtant deja coupe
+            // physiquement plus bas) et _isActuatorStillInUse bloque a tort son actuator pour toute
             // tentative future de l'arreter. Un cycle MODULE repris manuellement/schedule/trigger a
             // un mode different et reste protege (cf. test "actuator still used by another active
-            // MODULE cycle").
+            // MODULE cycle"). Fait AVANT de calculer modulesToStop ci-dessous : une fois ces MODULE
+            // liberes, _isActuatorStillInUse ne les voit plus comme "en cours" et laisse leurs
+            // actuators partages etre coupes normalement.
+            await this._releaseAutoStartedModules(process.cycle._id);
+
+            const actuators = await this._resolveActuators();
+            const modules = process.cycle.getModules(actuators);
             const modulesToStop = modules
                 .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
-            process.cycle.status = ExecutableStatus.STOPPED;
             if (index > -1) {
                 this.processList.splice(index, 1);
             }
@@ -152,6 +164,24 @@ export class ProcessService {
             proc.cycle.status === ExecutableStatus.IN_PROCCESS &&
             proc.cycle.exists(actuator, actuators)
         );
+    }
+
+    // libere tout cycle MODULE qui n'est IN_PROCCESS que parce que sourceCycleId l'a auto-demarre
+    // (regle 2, mode AUTO) et qui n'a jamais ete repris depuis independamment (auquel cas son
+    // entree processList porterait un mode different, cf. test "independently triggered"). Un
+    // reset() complet (status/processList/progress) est applique a chacun, pas seulement une
+    // coupure d'actuator, pour que son statut reflete correctement qu'il ne tourne plus.
+    private async _releaseAutoStartedModules(sourceCycleId: string): Promise<void> {
+        const orphaned = this.processList.filter((proc) =>
+            proc.cycle.type === CycleType.MODULE &&
+            proc.mode === ProcessMode.AUTO &&
+            proc.sourceCycleId === sourceCycleId &&
+            proc.cycle.status === ExecutableStatus.IN_PROCCESS
+        );
+        for (const proc of orphaned) {
+            const report: ProcessReport = [{ id: proc.id, type: ProcessType.FORCE, cause: 'owning cycle stopped : ' + sourceCycleId }];
+            await this.reset(proc, report);
+        }
     }
 
     public async resetAllModules(): Promise<void> {
@@ -224,6 +254,11 @@ export class ProcessService {
         process.cycle.sequences.forEach(sequence => {
             const index = this.queuedSequences.findIndex(x => x.sequenceId === sequence._id);
             if (index >= 0) {
+                // le timer d'avancement vers la sequence suivante (_createExecObs) n'est pas relie
+                // au cycle de vie de la subscription RxJS : sans ce clearTimeout explicite il reste
+                // arme en arriere-plan apres un arret (cf. commentaire plus haut dans le fichier de
+                // test associe documentant la meme fuite).
+                clearTimeout(this.queuedSequences[index].timeoutHandle);
                 this.queuedSequences.splice(index, 1);
             }
         });
@@ -318,6 +353,27 @@ export class ProcessService {
                 }
             } else {
                 if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
+                    // regle 2 (reclaim) : un cycle MODULE deja IN_PROCCESS peut changer de cycle CYCLE
+                    // proprietaire (ex: cycle-B remplace cycle-A suite a une resolution de conflit) sans
+                    // que son status change (l'actuator est deja/redevient ON via le CYCLE lui-meme) -
+                    // sans cette mise a jour, son entree processList reste associee a l'ancien
+                    // sourceCycleId (potentiellement deja retire de processList), ce qui fausse toute
+                    // lecture ulterieure de "quel cycle pilote ce module actuellement". Exclusion
+                    // sourceCycleId !== process.cycle._id : la propre sequence du cycle MODULE
+                    // s'auto-declenche aussi via ce meme mecanisme (rule 2 reutilisee pour son propre
+                    // actuator) avec sourceCycleId = son propre _id - un no-op inoffensif qu'il ne faut
+                    // pas laisser ecraser une reelle attribution a un cycle CYCLE proprietaire.
+                    // existing.mode === AUTO : ne transfere que d'un proprietaire AUTO a un autre -
+                    // un MODULE deja repris independamment (MANUAL/SCHEDULED/TRIGGER, cf. test
+                    // "independently triggered") ne doit jamais se faire reattribuer silencieusement
+                    // par la cascade rule 2 d'un CYCLE qui partage juste le meme actuator.
+                    if (process.cycle.type === CycleType.MODULE && process.mode === ProcessMode.AUTO &&
+                        process.sourceCycleId && process.sourceCycleId !== process.cycle._id) {
+                        const existing = this.processList.find(x => x.cycle._id === process.cycle._id);
+                        if (existing && existing.mode === ProcessMode.AUTO && existing.sourceCycleId !== process.sourceCycleId) {
+                            existing.sourceCycleId = process.sourceCycleId;
+                        }
+                    }
                     return; // regle 3 : ON sur un cycle deja en cours -> no-op silencieux
                 }
                 // regle child manuel (ON) : miroir exact de _startGroupChildren pour un ON MANUEL
@@ -367,7 +423,12 @@ export class ProcessService {
         const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
         const report: ProcessReport = [];
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
-        if (!conflictedProcesses.length) {
+        if (process.schedule?.shouldConfirmation) {
+            process.type = ProcessType.CONFIRMATION;
+            this.processList.push(process);
+            report.push({ id: process.id, type: process.type, cause: 'schedule triggered : ' + process.cycle.name });
+        } else
+             if (!conflictedProcesses.length) {
             process.type = ProcessType.FORCE;
         }
         for (const proc of conflictedProcesses) {
@@ -649,7 +710,8 @@ export class ProcessService {
         const modules = process.cycle.getModules(actuators);
         modules.forEach((module) => {
             this.processList.forEach((proc) => { // and not in confirmation state
-                const isConflicting = process.type !== ProcessType.CONFIRMATION && proc.type !== ProcessType.CONFIRMATION
+                const isConflicting = proc.cycle._id !== process.cycle._id &&
+                    process.type !== ProcessType.CONFIRMATION && proc.type !== ProcessType.CONFIRMATION
                     && proc.cycle.type !== CycleType.MODULE && proc.cycle.exists(module, actuators)
                     && !conflictedExecutable.find((x) => x.cycle._id === proc.cycle._id) && process.action !== 'OFF';
                 if (isConflicting) {
@@ -756,7 +818,15 @@ export class ProcessService {
         let obs: Observable<SequenceExecutionEntry> =
             ProcessService._ofNull<SequenceExecutionEntry>()
                 .pipe(tap(async () => {
-                    process.cycle.status = ExecutableStatus.IN_PROCCESS;
+                    // process.cycle.status a ete reserve de facon synchrone (IN_PROCCESS) avant que
+                    // cette chaine ne soit meme construite (voir la reservation synchrone dans
+                    // _manageProcessType) ; s'il n'est plus IN_PROCCESS ici, un reset() concurrent
+                    // s'est deja execute pendant l'attente de _resolveActuators() (TOCTOU) - ne pas
+                    // ecraser le STOPPED qu'il vient de poser ni pousser ce process dans processList,
+                    // sinon ce cycle continuerait de tourner comme un zombie jusqu'a sa sequence 2.
+                    if (process.cycle.status !== ExecutableStatus.IN_PROCCESS) {
+                        return;
+                    }
                     this.processList.push(process);
                     const report = this._buildManualPushButtonReport(process);
 
@@ -764,7 +834,7 @@ export class ProcessService {
                 }));
 
         executionLst.forEach((sequence, index) => {
-            const chainObs = this._createExecObs(executionLst[index - 1], sequence, modules, timings, process.mode, sourceCycleId);
+            const chainObs = this._createExecObs(executionLst[index - 1], sequence, modules, timings, process.mode, process.cycle, sourceCycleId);
             obs = obs.pipe(mergeMap(() => chainObs));
         });
 
@@ -796,9 +866,11 @@ export class ProcessService {
         modules: IActuatorModule[],
         timings: Map<string, ModuleTimingConfig>,
         mode: ProcessMode,
+        cycle: CycleModel,
         sourceCycleId?: string
     ): Observable<SequenceExecutionEntry> {
-        const ref: { sequenceId: string; flag: Subject<unknown>; resume?: () => void } = { sequenceId: currentSeq.sequenceId, flag: new Subject() };
+        const ref: { sequenceId: string; flag: Subject<unknown>; resume?: () => void; timeoutHandle?: NodeJS.Timeout } =
+            { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         return of(previousSeq?.names || []).pipe(
             mergeMap((previousNames) => {
                 return of(currentSeq.names).pipe(
@@ -809,16 +881,27 @@ export class ProcessService {
                         }
                         this.queuedSequences.push(ref);
                         ref.resume = (): void => {
+                            // le cycle a pu etre stoppe (reset()) pendant que _checkSequenceCondition
+                            // ci-dessous etait en vol, ou depuis que ce timer a ete arme : ni l'un ni
+                            // l'autre ne passe par processList[index].instance.unsubscribe(), donc rien
+                            // ne les annule automatiquement - reverifier le statut partage du cycle
+                            // avant de piloter reellement les actionneurs de la sequence suivante.
+                            if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+                                return;
+                            }
                             const previousData =
                                 { id: previousSeq?.sequenceId, names: previousNames, duration: previousSeq?.securityConfig.maxDuration };
                             const currentData =
                                 { id: currentSeq.sequenceId, names: currentNames, duration: currentSeq.securityConfig.maxDuration };
                             this._switchProcess(previousData, currentData, modules, timings, mode, sourceCycleId);
-                            setTimeout(() => {
+                            ref.timeoutHandle = setTimeout(() => {
                                 ref.flag.next(null);
                             }, currentSeq.securityConfig.maxDuration);
                         };
                         this._checkSequenceCondition(ref.sequenceId).then((skipExecSequence) => {
+                            if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+                                return;
+                            }
                             if (!skipExecSequence) {
                                 this._needSequenceConfirmation(ref.sequenceId, mode);
                             } else {

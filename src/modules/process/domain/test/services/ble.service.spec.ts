@@ -1,5 +1,6 @@
 import { BleService } from '@process/domain/services/ble.service';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 
 // BleService pilote un vrai peripherique Bluetooth (via hci-socket/ble-host) et le
 // gestionnaire reseau systeme (via node-network-manager, qui execute de vraies commandes
@@ -72,6 +73,7 @@ function GetCharacteristic(uuidSuffix: string): MockCharacteristic {
 
 describe('BleService (hci-socket/ble-host/node-network-manager mocked)', () => {
     let authenticationService: { checkPassword: jest.Mock };
+    let globalSettingsService: { update: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: BleService;
 
@@ -82,10 +84,12 @@ describe('BleService (hci-socket/ble-host/node-network-manager mocked)', () => {
         });
         (HciSocketMock as jest.Mock).mockImplementation(() => ({}));
         authenticationService = { checkPassword: jest.fn() };
+        globalSettingsService = { update: jest.fn() };
         logger = CreateLoggerMock();
 
         service = new BleService(
             authenticationService as unknown as AuthenticationService,
+            globalSettingsService as unknown as GlobalSettingsService,
             logger as never
         );
     });
@@ -233,15 +237,54 @@ describe('BleService (hci-socket/ble-host/node-network-manager mocked)', () => {
             expect(callback).toHaveBeenCalledWith(0);
         });
 
-        it('should reject the write and never touch the network when the password is invalid', async () => {
+        it('should not save global settings when the write payload has no localCoordinates', async () => {
+            authenticationService.checkPassword.mockResolvedValue(true);
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666669');
+            const callback = jest.fn();
+            const payload = Buffer.from(JSON.stringify({ ssid: 'home-wifi', psk: 'wifi-pass', password: 'device-password' }));
+
+            await characteristic.onWrite(null, true, payload, callback);
+
+            expect(globalSettingsService.update).not.toHaveBeenCalled();
+        });
+
+        it('should save the local coordinates to global settings and connect to wifi when the write payload has a valid password', async () => {
+            authenticationService.checkPassword.mockResolvedValue(true);
+            await service.initialize();
+            const characteristic = GetCharacteristic('666666666669');
+            const callback = jest.fn();
+            const payload = Buffer.from(JSON.stringify({
+                ssid: 'home-wifi',
+                psk: 'wifi-pass',
+                password: 'device-password',
+                localCoordinates: { latitude: 34.1, longitude: -6.47 }
+            }));
+
+            await characteristic.onWrite(null, true, payload, callback);
+
+            expect(globalSettingsService.update).toHaveBeenCalledWith(
+                expect.objectContaining({ localCoordinates: { latitude: 34.1, longitude: -6.47 } })
+            );
+            expect(mockNetwork.wifiConnect).toHaveBeenCalledWith('home-wifi', 'wifi-pass');
+            expect(callback).toHaveBeenCalledWith(0);
+        });
+
+        it('should reject the write and never touch the network or save settings when the password is invalid', async () => {
             authenticationService.checkPassword.mockResolvedValue(false);
             await service.initialize();
             const characteristic = GetCharacteristic('666666666669');
             const callback = jest.fn();
-            const payload = Buffer.from(JSON.stringify({ ssid: 'home-wifi', psk: 'wifi-pass', password: 'wrong-password' }));
+            const payload = Buffer.from(JSON.stringify({
+                ssid: 'home-wifi',
+                psk: 'wifi-pass',
+                password: 'wrong-password',
+                localCoordinates: { latitude: 34.1, longitude: -6.47 }
+            }));
 
             await characteristic.onWrite(null, true, payload, callback);
 
+            expect(globalSettingsService.update).not.toHaveBeenCalled();
             expect(mockNetwork.wifiConnect).not.toHaveBeenCalled();
             expect(callback).toHaveBeenCalledWith(1);
         });

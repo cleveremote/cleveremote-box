@@ -8,6 +8,7 @@ import { Trigger, TriggerSchema } from './schemas/trigger.schema';
 import { Sensor, SensorSchema } from './schemas/sensor.schema';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
+import { GlobalSettings, GlobalSettingsSchema } from './schemas/global-settings.schema';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
 import { ProcessService } from '@process/domain/services/execution.service';
@@ -29,6 +30,9 @@ import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
 import { AuthenticationController } from './controllers/authentication.controller';
+import { GlobalSettingsRepository } from './repositories/global-settings.repository';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
+import { GlobalSettingsController } from './controllers/global-settings.controller';
 import { EventRepository } from './repositories/event.repository';
 import { EventMongooseRepository } from './repositories/event-mongoose.repository';
 import { HttpModule } from '@nestjs/axios';
@@ -64,7 +68,8 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
             { name: Trigger.name, schema: TriggerSchema },
             { name: Sensor.name, schema: SensorSchema },
             { name: Event.name, schema: EventSchema },
-            { name: Authentication.name, schema: AuthenticationSchema }
+            { name: Authentication.name, schema: AuthenticationSchema },
+            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
         ]),
         ActuatorModule,
         DeviceModule
@@ -73,11 +78,13 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         ConfigurationController,
         ExecutionController,
         AuthenticationController,
+        GlobalSettingsController,
         PingController
     ],
     providers: [
         //----Repositories------//
         AuthenticationRepository,
+        GlobalSettingsRepository,
         CycleRepository,
         SequenceRepository,
         TriggerRepository,
@@ -93,6 +100,7 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         SensorMongooseRepository,
         //---------------------//
         AuthenticationService,
+        GlobalSettingsService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,

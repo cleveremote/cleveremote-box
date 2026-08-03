@@ -15,7 +15,8 @@ import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
-import { EventModel, SensorEventData } from '../models/event.model';
+import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
+import { ExecutableStatus } from '../interfaces/executable.interface';
 
 @Injectable()
 export class StructureService {
@@ -54,9 +55,18 @@ export class StructureService {
         for (const sensor of this.structure.sensors) {
             const lastEvent = await this.eventRepository.getLast(sensor._id);
             if (lastEvent) {
-                sensor.value = Number((lastEvent.additionalData as SensorEventData).value); 
+                sensor.value = Number((lastEvent.additionalData as SensorEventData).value);
                 sensor.date = lastEvent.date;
             }
+        }
+
+        // meme raison que pour les capteurs ci-dessus : CycleModel.status/SequenceModel.status ne sont
+        // jamais persistes sur le document cycle/sequence lui-meme, seul l'objet en memoire est mis a
+        // jour par ProcessService. resetAllModules() republie systematiquement un evenement CYCLE (et
+        // un SEQUENCE par sequence) a STOPPED au boot (cf. ProcessService._initialReset), donc getLast()
+        // reflete toujours l'etat reel meme apres un crash en pleine execution.
+        for (const cycle of this.structure.cycles) {
+            await this._rehydrateProcessStatus(cycle);
         }
 
         let sequences: SequenceModel[] = [];
@@ -73,6 +83,10 @@ export class StructureService {
             triggers = [...new Set([...triggers, ...cycle.triggers])];
         });
 
+        for (const sequence of sequences) {
+            await this._rehydrateProcessStatus(sequence);
+        }
+
         this.sequences = sequences;
         this.schedules = schedules;
         this.triggers = triggers;
@@ -80,6 +94,17 @@ export class StructureService {
             .filter((sensor) => sensor.value !== undefined)
             .map((sensor) => ({ id: sensor._id, value: sensor.value, type: 'SENSOR', date: sensor.date }));
         return this.structure;
+    }
+
+    // progression n'a de sens que pour IN_PROCCESS, meme convention que ProcessService._processProgress.
+    private async _rehydrateProcessStatus(executable: CycleModel | SequenceModel): Promise<void> {
+        const lastEvent = await this.eventRepository.getLast(executable._id);
+        if (!lastEvent) { return; }
+        const data = lastEvent.additionalData as ProcessEventData;
+        executable.status = (data.status ?? data.value) as ExecutableStatus;
+        executable.progression = executable.status === ExecutableStatus.IN_PROCCESS
+            ? { startedAt: data.startedAt, duration: data.duration }
+            : null;
     }
 
     public async getConfigurationWithStatus(): Promise<StructureModel> {

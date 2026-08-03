@@ -4,22 +4,25 @@ import { firstValueFrom } from 'rxjs';
 import { SensorType } from '../../interfaces/sensor.interface';
 import { ForcastSensorConfigModel, SensorModel } from '../../models/sensor.model';
 import { ReadResult, SensorStrategy } from './sensor-strategy.interface';
-
-// coordonnees fixes de la box (pas de configuration multi-site pour l'instant)
-const COORD = { lat: 34.100780850096896, lon: -6.4666017095313935 };
+import { GlobalSettingsService } from '../global-settings.service';
+import { ResolveCoordinates } from '../sun-event.util';
 
 @Injectable()
 export class ForcastSensorStrategy implements SensorStrategy {
     public readonly type = SensorType.FORCAST;
 
-    public constructor(private readonly httpService: HttpService) { }
+    public constructor(
+        private readonly httpService: HttpService,
+        private readonly globalSettingsService: GlobalSettingsService
+    ) { }
 
     public async read(sensor: SensorModel): Promise<ReadResult> {
         const { forcastData } = sensor.config as ForcastSensorConfigModel;
+        const { lat, long } = ResolveCoordinates(this.globalSettingsService.localCoordinates);
         const response = await firstValueFrom(this.httpService.get('https://api.open-meteo.com/v1/forecast', {
             params: {
-                latitude: COORD.lat,
-                longitude: COORD.lon,
+                latitude: lat,
+                longitude: long,
                 daily: 'temperature_2m_max,temperature_2m_min',
                 timezone: 'auto'
             }

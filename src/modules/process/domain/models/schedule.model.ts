@@ -5,7 +5,7 @@ export class ScheduleModel {
     public cycleId: string;
     public name: string;
     public description: string;
-    public cron: { date?: Date; pattern?: string; sunBehavior?: SunBehavior; after?: number };
+    public cron: { date?: Date; pattern?: string; sunBehavior?: SunBehavior;};
     public isPaused: boolean;
     public shouldConfirmation: boolean;
     public duration?: number;

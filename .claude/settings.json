@@ -9,7 +9,13 @@
       "Bash(xargs -I{} sh -c 'echo ===={}====; cat {}')",
       "Bash(python3 -c ' *)",
       "Bash(node -e ' *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(find / -maxdepth 4 -iname \"*ionic*\" -not -path \"*/node_modules/*\")",
+      "Bash(find / -maxdepth 6 -iname \"angular.json\" -not -path \"*/node_modules/*\")",
+      "Bash(git worktree *)",
+      "Bash(ln -s /home/clv/dev-workspace/cleveremote-box/node_modules node_modules)",
+      "Bash(awk -F: '$1<520')",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "/home/clv/.claude/plans"

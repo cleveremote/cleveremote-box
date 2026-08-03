@@ -1,11 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { SunState } from '@process/domain/interfaces/schedule.interface';
+import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 
-@Schema()
+@Schema({ _id: false })
 export class SunBehavior {
     @Prop({ required: true, enum: SunState })
     public sunState: SunState;
-
+    @Prop({ required: true, enum: TimeDirection })
+    public timeDirection: TimeDirection;
     @Prop({ required: true })
     public time: number;
 }

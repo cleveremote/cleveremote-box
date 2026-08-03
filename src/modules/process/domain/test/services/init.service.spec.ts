@@ -11,6 +11,7 @@ import { ModbusService } from '@process/domain/services/modbus.service';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from '@process/domain/services/actuator.service';
 import { DeviceService } from '@process/domain/services/device.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
@@ -57,6 +58,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
     let actuatorService: { execute: jest.Mock };
     let deviceService: { initAll: jest.Mock; watchMasterDevicesForNewSlaves: jest.Mock };
+    let globalSettingsService: { get: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: InitService;
 
@@ -106,6 +108,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             initAll: jest.fn().mockResolvedValue(undefined),
             watchMasterDevicesForNewSlaves: jest.fn().mockResolvedValue({ stop: jest.fn() })
         };
+        globalSettingsService = { get: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
 
         service = new InitService(
@@ -122,6 +125,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             ctrlActuatorStrategy as unknown as CtrlActuatorStrategy,
             actuatorService as unknown as ActuatorService,
             deviceService as unknown as DeviceService,
+            globalSettingsService as unknown as GlobalSettingsService,
             logger as never,
             processService as unknown as ProcessService
         );
@@ -131,6 +135,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         it('should run every boot step exactly once, in order, without throwing', async () => {
             await expect(service.initialize()).resolves.toBeUndefined();
 
+            expect(globalSettingsService.get).toHaveBeenCalledTimes(1);
             expect(authenticationService.initAuthentication).toHaveBeenCalledTimes(1);
             expect(bleService.initialize).toHaveBeenCalledTimes(1);
             expect(triggerService.initilize).toHaveBeenCalledTimes(1);

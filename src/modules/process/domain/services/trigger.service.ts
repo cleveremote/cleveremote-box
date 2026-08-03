@@ -7,9 +7,9 @@ import { StructureService } from './configuration.service';
 import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { ScheduleModel } from '../models/schedule.model';
-import { getSunrise, getSunset } from 'sunrise-sunset-js';
-import { SunState } from '../interfaces/schedule.interface';
+import { ComputeSunEventDate, ResolveCoordinates } from './sun-event.util';
 import { ScheduleService } from './schedule.service';
+import { GlobalSettingsService } from './global-settings.service';
 import { SensorModel } from '../models/sensor.model';
 import { TriggerRepository } from '@process/infrastructure/repositories/trigger.repository';
 import { ScheduleRepository } from '@process/infrastructure/repositories/schedule.repository';
@@ -37,6 +37,7 @@ export class TriggerService {
         private eventRepository: EventRepository,
         private valueRepository: ValueRepository,
         @Inject(forwardRef(() => ProcessService)) private processService: ProcessService,
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) {
     }
@@ -156,10 +157,10 @@ export class TriggerService {
 
     private async _planifyExecution(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): Promise<void> {
 
-        const coord = { lat: 34.100780850096896, long: -6.4666017095313935 }
         const sunBehavior = trigger.trigger.sunBehavior;
-        // eslint-disable-next-line max-len
-        const executionDate = sunBehavior ? (sunBehavior.sunState === SunState.SUNRISE ? getSunset(coord.lat, coord.long, new Date()) : getSunrise(coord.lat, coord.long, new Date())).getTime() + sunBehavior.time : new Date().getTime() + trigger.trigger.timeAfter;
+        const executionDate = sunBehavior
+            ? ComputeSunEventDate(sunBehavior, new Date(), ResolveCoordinates(this.globalSettingsService.localCoordinates)).getTime()
+            : new Date().getTime() + trigger.trigger.timeAfter;
 
         const scheduleModel = new ScheduleModel();
         scheduleModel.cycleId = trigger.cycleId;

@@ -333,14 +333,16 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should turn off the actuators of a priority-conflicted cycle while leaving the MODULE cycle auto-started on a non-conflicting actuator running', async () => {
+        it('should stop the MODULE cycle auto-started on a non-conflicting actuator once its owning cycle is fully reset', async () => {
             // cycle-a a 2 sequences (actuator-1+actuator-4 puis actuator-3+actuator-5). Sa 1ere
             // sequence auto-demarre (regle 2) les cycles MODULE de actuator-1 ET actuator-4.
             // Demarrer cycle-b (qui ne partage QUE actuator-1 avec cycle-a) declenche
             // _resetConflictedProcesses -> reset(cycle-a, mode=SYSTEM) : cycle-a et son actuator-4
-            // physique sont bien coupes (actuatorService.reset), mais le statut du cycle MODULE
-            // module-act4 (qui ne partage aucun actuator avec cycle-b, donc jamais reclame
-            // independamment) reste IN_PROCCESS - comportement volontaire, verifie manuellement.
+            // physique sont bien coupes (actuatorService.reset), et son cycle MODULE module-act4
+            // (auto-demarre exclusivement par cycle-a, jamais reclame independamment) doit
+            // desormais lui aussi repasser STOPPED - sinon son statut reste IN_PROCCESS alors que
+            // l'actuator est physiquement deja eteint (_releaseAutoStartedModules). module-act1,
+            // lui, est reclame par cycle-b (meme actuator) et reste donc IN_PROCCESS.
             const [cycleA, moduleAct1, moduleAct4, cycleB] = await SeedCycles([
                 {
                     name: 'cycle-a', sequences: [
@@ -361,9 +363,11 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(moduleAct4.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
             await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
-            expect(moduleAct4.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleAct1.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleAct4.status).toEqual(ExecutableStatus.STOPPED);
             expect(actuatorService.reset).toHaveBeenCalledWith(
                 expect.arrayContaining([expect.objectContaining({ _id: 'actuator-4' })])
             );
@@ -566,6 +570,42 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(false);
         });
 
+        it('should update the shared MODULE cycle ownership to the new cycle after a conflict is resolved via confirmation + force', async () => {
+            // cycle-a et cycle-b partagent l'actuator 'shared-pump', lui-meme pilote par le cycle
+            // MODULE 'module-shared' (regle 2, auto-demarre avec sourceCycleId=cycle-a). Quand
+            // cycle-b (en conflit) est force apres confirmation, cycle-a est arrete via
+            // _resetConflictedProcesses -> reset() direct, qui ne passe jamais par
+            // _cascadeStopOwningModules et ne touche jamais l'etat propre de module-shared : avant
+            // le fix, son entree processList restait associee a cycle-a (sourceCycleId perime)
+            // meme apres que cycle-b ait repris la main sur l'actuator.
+            const [cycleA, cycleB, moduleShared] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'module-shared', type: CycleType.MODULE, sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(50);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleShared.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(service.processList.find((p) => p.cycle._id === moduleShared._id)?.sourceCycleId).toEqual(cycleA._id);
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(true);
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE));
+            await Flush(150);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(cycleB.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleShared.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(service.processList.find((p) => p.cycle._id === moduleShared._id)?.sourceCycleId).toEqual(cycleB._id);
+
+            // evite de laisser trainer le timer reel de maxDuration (5000ms) de cycle-b.
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
         it('should require confirmation instead of silently skipping a sequence whose condition is already satisfied', async () => {
             const condition = Object.assign(new ConditionModel(), {
                 name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
@@ -750,6 +790,93 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         });
     });
 
+    // reproduit le bug rapporte : un cycle declenche par schedule, arrete prematurement pendant sa
+    // 1ere sequence, ne doit jamais laisser la 2eme sequence demarrer "silencieusement" - meme si le
+    // reset() concurrent arrive pendant une continuation asynchrone (setTimeout / Promise.then) qui
+    // n'est pas reliee au cycle de vie de la subscription RxJS annulee par unsubscribe().
+    describe('premature stop races (concurrent reset while starting/advancing)', () => {
+        it('should not start sequence 2 if the cycle is stopped while sequence 1 hands off to it', async () => {
+            const condition = Object.assign(new ConditionModel(), {
+                name: 'gate', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
+            });
+            const [cycle] = await SeedCycles([
+                {
+                    name: 'cycle-1', sequences: [
+                        { moduleIds: ['module-a'], maxDuration: 20 },
+                        { moduleIds: ['module-b'], maxDuration: 5000, conditions: [condition] }
+                    ]
+                }
+            ]);
+
+            // bloque le check de securite de la sequence 2 : la transition sequence1 -> sequence2
+            // reste "en vol" (ref pousse dans queuedSequences, _checkSequenceCondition en attente)
+            // tant que ce gate n'est pas resolu manuellement plus bas.
+            let releaseCondition: (value: { value: number }) => void;
+            const conditionGate = new Promise<{ value: number }>((resolve) => { releaseCondition = resolve; });
+            valueRepository.getDeviceValue.mockImplementation(() => conditionGate);
+
+            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON));
+            // laisse la sequence 1 (maxDuration=20ms) se terminer et la transition vers la sequence 2
+            // demarrer, jusqu'a se bloquer sur conditionGate.
+            await Flush(60);
+
+            // arret premature, pendant que la sequence 2 est encore "en vol".
+            await service.reset(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+
+            // le check de securite de la sequence 2 ne se resout que MAINTENANT, une fois le cycle
+            // deja arrete : sans le guard sur le statut partage du cycle, ref.resume() tournerait
+            // quand meme et allumerait module-b.
+            releaseCondition({ value: 10 });
+            await Flush(60);
+
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            expect(actuatorService.execute.mock.calls.some(
+                ([mod, action]) => (mod as IActuatorModule)?._id === 'module-b' && action === 1
+            )).toBe(false);
+        });
+
+        it('should not resurrect a cycle to IN_PROCCESS if it is stopped while _resolveActuators() is still resolving on start', async () => {
+            const [cycle] = await SeedCycles([
+                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] }
+            ]);
+
+            // bloque uniquement le _resolveActuators() de _execute()->_executeWithActuators (2eme
+            // appel : le 1er sert a _resetConflictedProcesses->_getConflictedExecutables, cf. le test
+            // "should log and reset when the execution observable errors" ci-dessus pour ce meme
+            // ordre d'appels documente). Le reset() qui suit refait son propre appel plus bas, qui
+            // retombe sur le mock par defaut (rapide).
+            let releaseActuators: () => void;
+            const actuatorsGate = new Promise<void>((resolve) => { releaseActuators = resolve; });
+            actuatorService.resolve
+                .mockImplementationOnce((moduleIds: string[]) =>
+                    Promise.resolve(new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i)]))))
+                .mockImplementationOnce((moduleIds: string[]) =>
+                    actuatorsGate.then(() => new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i)]))));
+
+            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON));
+            // reservation synchrone faite (cycle.status = IN_PROCCESS) mais _executeWithActuators n'a
+            // pas encore pu pousser ce process dans processList : son _resolveActuators() est bloque.
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(service.processList.find((p) => p.cycle._id === cycle._id)).toBeUndefined();
+
+            await service.reset(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+
+            // _resolveActuators() se debloque seulement maintenant, une fois le cycle deja arrete :
+            // sans le guard, le tap de reservation ecraserait STOPPED par IN_PROCCESS et demarrerait
+            // quand meme la sequence 1 (puis la 2 a sa suite).
+            releaseActuators();
+            await Flush(60);
+
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            expect(service.processList.find((p) => p.cycle._id === cycle._id)).toBeUndefined();
+            expect(actuatorService.execute.mock.calls.some(
+                ([mod, action]) => (mod as IActuatorModule)?._id === 'module-a' && action === 1
+            )).toBe(false);
+        });
+    });
+
     describe('status sync failure handling (wsService.sendMessage rejecting)', () => {
         it('should log a warning for both local and remote failures when removing an ignored process', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a']);
@@ -913,13 +1040,13 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             );
         });
 
-        it('should keep a MODULE cycle running when it was only ever auto-started by the stopping cycle itself', async () => {
+        it('should also stop a MODULE cycle that was only ever auto-started by the stopping cycle itself', async () => {
             // meme structure que le test precedent, mais module-y n'est JAMAIS demarre
             // independamment : il n'existe que comme reflet auto-demarre par cycle-a (regle 2,
-            // mode=AUTO, sourceCycleId=cycle-a). Son statut reste neanmoins IN_PROCCESS apres
-            // l'arret de cycle-a via module-x (comportement volontaire, verifie manuellement) :
-            // _isActuatorStillInUse protege actuator-2 (module-y toujours IN_PROCCESS dessus), qui
-            // ne recoit donc jamais de commande OFF physique.
+            // mode=AUTO, sourceCycleId=cycle-a). Contrairement a module-y du test precedent (demarre
+            // independamment, protege), celui-ci n'a plus aucune raison de tourner une fois cycle-a
+            // arrete : _releaseAutoStartedModules le libere donc (status STOPPED, actuator-2 coupe),
+            // pour que son statut reflete la realite physique au lieu de rester IN_PROCCESS perime.
             const [cycleA, moduleX, moduleY] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['actuator-1', 'actuator-2'], maxDuration: 5000 }] },
                 { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
@@ -937,9 +1064,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
             expect(moduleX.status).toEqual(ExecutableStatus.STOPPED);
-            expect(moduleY.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(moduleY.status).toEqual(ExecutableStatus.STOPPED);
 
-            expect(actuatorService.reset).not.toHaveBeenCalledWith(
+            expect(actuatorService.reset).toHaveBeenCalledWith(
                 expect.arrayContaining([expect.objectContaining({ _id: 'actuator-2' })])
             );
         });
@@ -1727,6 +1854,23 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(eventRepository.save).toHaveBeenCalledWith(
                 expect.objectContaining({
                     elementType: 'SEQUENCE',
+                    additionalData: expect.objectContaining({ status: ExecutableStatus.STOPPED })
+                })
+            );
+        });
+
+        // verrouille l'invariant dont depend StructureService.getStructure() pour resynchroniser le
+        // status des cycles/sequences depuis eventRepository.getLast() : sans un evenement CYCLE frais
+        // publie ici, un cycle IN_PROCCESS au moment d'un crash resterait IN_PROCCESS pour toujours aux
+        // yeux de getLast(), meme apres que resetAllModules() l'ait correctement arrete physiquement.
+        it('should also publish a CYCLE-typed STOPPED event for the cycle itself', async () => {
+            await SeedCycles([{ name: 'cycle-a', sequences: [{ moduleIds: ['module-a'] }] }]);
+
+            await service.resetAllModules();
+
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    elementType: 'CYCLE',
                     additionalData: expect.objectContaining({ status: ExecutableStatus.STOPPED })
                 })
             );
