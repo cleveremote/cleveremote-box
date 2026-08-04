@@ -1,56 +1,97 @@
 import {
     ExecutableStatus,
+    ExecutionMode,
+    CycleType,
     IExecutable,
-    ProcessMode
+    ProcessMode,
+    SequenceExecutionEntry
 } from '../interfaces/executable.interface';
-import { ModuleModel } from './module.model';
+import { ConditionModel } from './condition.model';
+import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ScheduleModel } from './schedule.model';
-import { SequenceModel } from './sequence.model';
+import { ModuleTimingConfig, SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
 
-export class CycleModel implements IExecutable {
-    public id: string;
-    public name: string;
-    public style: { bgColor: string; fontColor: string; iconColor: string };
-    public description: string;
-    public mapSectionId: string;
-    public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public modePriority: { mode: ProcessMode; priority: number }[];
-    public progression?: { startedAt: Date; duration: number };
-    public sequences: SequenceModel[] = [];
-    public schedules: ScheduleModel[] = [];
-    public triggers: TriggerModel[] = [];
+export interface ChildCycleConfig {
+    order: number;
+    waitForCompletion: boolean;
+    delayBefore: number;
+    delayAfter: number;
+    isSkipped: boolean;
+}
 
-    public getModules(): ModuleModel[] {
-        let modules: ModuleModel[] = [];
+export interface ChildCycleRef {
+    cycleId: string;
+    config: ChildCycleConfig;
+}
+
+export class CycleModel implements IExecutable {
+    public _id: string;
+    public name: string;
+    public type: CycleType = CycleType.CYCLE;
+    public style: { bgColor: string; fontColor: string; iconColor: { icon: string; base: string } };
+    public description: string;
+    public display?: boolean = true;
+    public status: ExecutableStatus = ExecutableStatus.STOPPED;
+    public modePriority: { mode: ProcessMode; priority: number }[] = [];
+    public progression?: { startedAt: Date; duration: number };
+    public sequences?: SequenceModel[] = [];
+    public schedules?: ScheduleModel[] = [];
+    public triggers?: TriggerModel[] = [];
+
+    public executionMode?: ExecutionMode = ExecutionMode.SEQUENTIAL;
+    public conditions?: ConditionModel[] = [];
+    public parentCycleId?: string = null;
+    public childCycles?: ChildCycleRef[] = [];
+
+    public createdAt?: Date;
+    public updatedAt?: Date;
+    public deletedAt?: Date | null = null;
+
+    public getModuleIds(): string[] {
+        return this.sequences.flatMap((sequence) => sequence.getActuatorIds());
+    }
+
+    public getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[] {
+        let modules: IActuatorModule[] = [];
         this.sequences.forEach((sequence) => {
-            modules = modules.concat(sequence.modules);
-            modules = [...new Set([...modules, ...sequence.modules])];
+            const sequenceModules = sequence.getActuatorIds()
+                .map((moduleId) => actuatorRegistry.get(moduleId))
+                .filter((actuator): actuator is IActuatorModule => !!actuator);
+            modules = [...new Set([...modules, ...sequenceModules])];
         });
         return modules;
     }
 
-    public exists(module: ModuleModel): boolean {
-        return !!this.getModules().find(x => x.portNum === module.portNum);
+    public exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean {
+        return !!this.getModules(actuatorRegistry).find(x => x.name === module.name);
     }
 
-    public async reset(): Promise<void> {
-        for (const sequence of this.sequences) {
-            await sequence.reset();
-        }
-        this.status = ExecutableStatus.STOPPED;
+    public getModuleTimings(actuatorRegistry: Map<string, IActuatorModule>): Map<string, ModuleTimingConfig> {
+        const timings = new Map<string, ModuleTimingConfig>();
+        this.sequences.forEach((sequence) => {
+            sequence.moduleConfigs.forEach((ref) => {
+                const actuator = actuatorRegistry.get(ref.moduleId);
+                if (actuator) {
+                    timings.set(actuator.name, ref.configTiming);
+                }
+            });
+        });
+        return timings;
     }
 
-    public getExecutionStructure(overrideDuration?: number): { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string  }[] {
-        const executionLst: { sequenceId: string; portNums: number[]; duration: number, vfd: number,taskId: string }[] = [];
-        const sequences: SequenceModel[] = this.sequences;
+    public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[] {
+        const executionLst: SequenceExecutionEntry[] = [];
+        const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         sequences.forEach((sequence) => {
-            const sequenceId = sequence.id;
-            const portNums = sequence.modules.map((x) => x.portNum);
-            const duration = overrideDuration || sequence.maxDuration;
-            const vfd = sequence.vfd;
-            const taskId = sequence.taskId;
-            executionLst.push({ sequenceId, portNums, duration, vfd, taskId });
+            const sequenceId = sequence._id;
+            const names = sequence.getActuatorIds()
+                .map((moduleId) => actuatorRegistry.get(moduleId)?.name)
+                .filter((name): name is string => name !== undefined);
+            sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
+            const securityConfig = sequence.securityConfig;
+
+            executionLst.push({ sequenceId, names, securityConfig });
         });
         return executionLst;
     }

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>cleveremote-box · panneau de controle</title>
+<style>
+    :root { font-family: system-ui, Arial, sans-serif; color: #1f2630; }
+    body { margin: 0; background: #f4f6f8; }
+    header { background: #1f2630; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    #boxStatus { font-size: 13px; padding: 4px 10px; border-radius: 12px; }
+    #boxStatus.ok { background: #1f8a4c; }
+    #boxStatus.ko { background: #a83232; }
+    nav { display: flex; background: #fff; border-bottom: 1px solid #ddd; }
+    nav button { flex: none; padding: 12px 20px; border: none; background: none; cursor: pointer; font-size: 14px; }
+    nav button.active { border-bottom: 3px solid #1f6feb; font-weight: 600; }
+    main { padding: 20px 24px; max-width: 960px; margin: 0 auto; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    textarea { width: 100%; min-height: 320px; font-family: monospace; font-size: 13px; box-sizing: border-box; }
+    .row { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
+    button.action { padding: 8px 14px; border: none; border-radius: 6px; background: #1f6feb; color: #fff; cursor: pointer; }
+    button.action:hover { background: #1a5fcc; }
+    button.danger { background: #a83232; }
+    button.success { background: #1f8a4c; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 14px; }
+    .badge { padding: 3px 9px; border-radius: 10px; font-size: 12px; color: #fff; }
+    .badge.IN_PROCCESS { background: #1f8a4c; }
+    .badge.STOPPED { background: #888; }
+    .badge.WAITTING_CONFIRMATION { background: #c98a1f; }
+    input[type=number] { width: 80px; }
+    #log { background: #11151c; color: #c9d1d9; font-family: monospace; font-size: 12px; padding: 10px; height: 160px; overflow-y: auto; border-radius: 6px; margin-top: 16px; }
+    #log div { margin-bottom: 2px; white-space: pre-wrap; }
+    #log .err { color: #ff7b72; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>cleveremote-box · panneau de controle</h1>
+    <span id="boxStatus" class="ko">box deconnectee</span>
+</header>
+
+<nav>
+    <button class="tab-btn active" data-tab="config">Configuration</button>
+    <button class="tab-btn" data-tab="cycles">Cycles</button>
+</nav>
+
+<main>
+    <section id="tab-config" class="tab active">
+        <p>Charger ou modifier la configuration brute (JSON) de la box, puis l'envoyer ou la recuperer.</p>
+        <div class="row">
+            <input type="file" id="configFile" accept="application/json">
+            <button class="action" id="btnFetchConfig">Recuperer la config de la box</button>
+            <button class="action success" id="btnSendConfig">Envoyer la config a la box</button>
+        </div>
+        <textarea id="configJson" placeholder='{"cycles": [...], "sensors": [...]}'></textarea>
+    </section>
+
+    <section id="tab-cycles" class="tab">
+        <div class="row">
+            <button class="action" id="btnRefreshCycles">Rafraichir</button>
+            <label><input type="checkbox" id="autoRefresh" checked> auto-rafraichissement (3s)</label>
+        </div>
+        <table id="cyclesTable">
+            <thead>
+                <tr><th>ID</th><th>Nom</th><th>Statut</th><th>Duree (s)</th><th>Action</th></tr>
+            </thead>
+            <tbody id="cyclesBody"><tr><td colspan="5">Aucune donnee. Clique sur "Rafraichir".</td></tr></tbody>
+        </table>
+    </section>
+
+    <div id="log"></div>
+</main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+    const socket = io();
+    const logEl = document.getElementById('log');
+
+    function log(message, isError) {
+        const line = document.createElement('div');
+        if (isError) line.className = 'err';
+        const time = new Date().toLocaleTimeString();
+        line.textContent = `[${time}] ${message}`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // --- statut box ---
+    const boxStatusEl = document.getElementById('boxStatus');
+    socket.on('relay/box-status', ({ connected, boxId }) => {
+        boxStatusEl.textContent = connected ? `box connectee (${boxId || 'id inconnu'})` : 'box deconnectee';
+        boxStatusEl.className = connected ? 'ok' : 'ko';
+    });
+
+    // --- onglets ---
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // --- emission generique vers la box, avec timeout ---
+    function emitToBox(pattern, data, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('timeout: pas de reponse de la box')), timeoutMs || 8000);
+            socket.emit(pattern, data, (response) => {
+                clearTimeout(timer);
+                if (response && response.error) reject(new Error(response.error));
+                else resolve(response);
+            });
+        });
+    }
+
+    // --- onglet configuration ---
+    const configJsonEl = document.getElementById('configJson');
+    document.getElementById('configFile').addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { configJsonEl.value = reader.result; };
+        reader.readAsText(file);
+    });
+
+    document.getElementById('btnFetchConfig').addEventListener('click', async () => {
+        try {
+            const response = await emitToBox('box/fetch/configuration', {});
+            const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+            configJsonEl.value = JSON.stringify(parsed, null, 2);
+            log('Configuration recuperee depuis la box.');
+        } catch (err) {
+            log('Echec recuperation config: ' + err.message, true);
+        }
+    });
+
+    document.getElementById('btnSendConfig').addEventListener('click', async () => {
+        let payload;
+        try {
+            payload = JSON.parse(configJsonEl.value);
+        } catch (err) {
+            log('JSON invalide: ' + err.message, true);
+            return;
+        }
+        try {
+            await emitToBox('box/synchronize/configuration', payload);
+            log('Configuration envoyee a la box.');
+            refreshCycles();
+        } catch (err) {
+            log('Echec envoi config: ' + err.message, true);
+        }
+    });
+
+    // --- onglet cycles ---
+    const cyclesBody = document.getElementById('cyclesBody');
+
+    function statusBadge(status) {
+        return `<span class="badge ${status}">${status}</span>`;
+    }
+
+    async function refreshCycles() {
+        try {
+            const response = await emitToBox('box/fetch/configuration', {});
+            const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+            const cycles = parsed.cycles || [];
+            if (!cycles.length) {
+                cyclesBody.innerHTML = '<tr><td colspan="5">Aucun cycle dans la configuration.</td></tr>';
+                return;
+            }
+            cyclesBody.innerHTML = cycles.map((cycle) => {
+                const defaultDuration = (cycle.sequences && cycle.sequences[0] && cycle.sequences[0].maxDuration) || 60;
+                return `
+                <tr data-id="${cycle.id}">
+                    <td>${cycle.id}</td>
+                    <td>${cycle.name || ''}</td>
+                    <td>${statusBadge(cycle.status)}</td>
+                    <td><input type="number" class="durationInput" value="${defaultDuration}" min="0"></td>
+                    <td>
+                        <button class="action success btnOn">ON</button>
+                        <button class="action danger btnOff">OFF</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            log('Echec rafraichissement cycles: ' + err.message, true);
+        }
+    }
+
+    cyclesBody.addEventListener('click', async (event) => {
+        const row = event.target.closest('tr');
+        if (!row) return;
+        const id = row.dataset.id;
+        const duration = Number(row.querySelector('.durationInput').value) || 0;
+
+        if (event.target.classList.contains('btnOn') || event.target.classList.contains('btnOff')) {
+            const action = event.target.classList.contains('btnOn') ? 'ON' : 'OFF';
+            try {
+                await emitToBox('box/execution/process', {
+                    id,
+                    action,
+                    type: 'FORCE',
+                    mode: 'MANUAL',
+                    function: '',
+                    duration: action === 'ON' ? duration : 0
+                });
+                log(`Cycle ${id} -> ${action} envoye.`);
+                setTimeout(refreshCycles, 500);
+            } catch (err) {
+                log(`Echec ${action} sur ${id}: ` + err.message, true);
+            }
+        }
+    });
+
+    document.getElementById('btnRefreshCycles').addEventListener('click', refreshCycles);
+
+    let autoRefreshTimer = null;
+    function setupAutoRefresh() {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        if (document.getElementById('autoRefresh').checked) {
+            autoRefreshTimer = setInterval(() => {
+                if (document.getElementById('tab-cycles').classList.contains('active')) refreshCycles();
+            }, 3000);
+        }
+    }
+    document.getElementById('autoRefresh').addEventListener('change', setupAutoRefresh);
+    setupAutoRefresh();
+
+    socket.on('connect', () => log('Connecte au relais local.'));
+    socket.on('disconnect', () => log('Deconnecte du relais local.', true));
+})();
+</script>
+</body>
+</html>

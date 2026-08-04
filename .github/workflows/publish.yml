@@ -152,3 +152,61 @@ jobs:
           done
 
           echo "image=$IMAGE_BASE:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  # ─────────────────────────────────────────────
+  # JOB 4 — Build SEA & upload vers S3 (test)
+  # ─────────────────────────────────────────────
+  deploy-sea-s3:
+    name: Build SEA & Upload to S3 (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    environment: production
+    needs: [resolve, publish-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: raspberry-pi
+            runs-on: ubuntu-24.04-arm
+          - name: macos
+            runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SEA binary
+        run: npm run build:sea
+
+      - name: Locate release folder
+        id: release-dir
+        run: |
+          DIR=$(find release -mindepth 1 -maxdepth 1 -type d | head -n1)
+          echo "name=$(basename "$DIR")" >> $GITHUB_OUTPUT
+
+      - name: Archive release folder
+        env:
+          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
+        run: tar -czf "${RELEASE_NAME}.tar.gz" -C release "$RELEASE_NAME"
+
+      - name: Configure AWS credentials (S3)
+        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        with:
+          aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload archive to S3
+        env:
+          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
+        run: |
+          aws s3 cp "${RELEASE_NAME}.tar.gz" \
+            "s3://cleveremote-bundles-182399677959-eu-west-3-an/${CONTAINER_NAME}/${IMAGE_TAG}/${RELEASE_NAME}.tar.gz"

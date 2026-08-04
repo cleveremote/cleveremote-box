@@ -2,7 +2,7 @@
 # BUILD FOR LOCAL DEVELOPMENT
 ###################
 
-FROM node:22.22.1-alpine@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf AS development
+FROM node:25.9.0-alpine@sha256:818761312e481165909adaaec0a09e23076e2fed626000c8e286f1d9470e4551 AS development
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -28,7 +28,7 @@ USER node
 # BUILD FOR PRODUCTION
 ###################
 
-FROM node:22.22.1-alpine@sha256:86961ea56cf2f0fb3ab06be4f3881714980413c57ef0b8d3860d69234d94bcbf AS build
+FROM node:25.9.0-alpine@sha256:818761312e481165909adaaec0a09e23076e2fed626000c8e286f1d9470e4551 AS build
 
 WORKDIR /usr/src/app
 
@@ -55,7 +55,7 @@ USER node
 ###################
 
 # need to be on node and not node:aline because we can't install needed packages for bluetooth on it
-FROM node:22.22.1-alpine@sha256:51870906e4c02a9c8076848dfaca4fd2329630c945e81e06d1cb1a475c042919 AS production
+FROM node:25.9.0@sha256:607af5266b6726c0c727359a9757053137a803ca419f83fac3144e6a454a6823 AS production
 
 # install needed packages for bluetooth to work + build tools to recompile native modules for glibc
 RUN apt-get update && apt-get install -y \

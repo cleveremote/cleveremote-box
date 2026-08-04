@@ -7,7 +7,7 @@ describe('Process use case test', () => {
     it('Should execute process and return a response dto', async () => {
         // GIVEN
         const configurationService = MockClass(StructureService);
-        jest.spyOn(configurationService, 'getConfiguration')
+        jest.spyOn(configurationService, 'getConfigurationWithStatus')
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             .mockImplementation((): Promise<StructureModel> =>
                 Promise.resolve().then(() => new StructureModel()));
@@ -16,7 +16,7 @@ describe('Process use case test', () => {
         await uc.execute();
 
         // THEN
-        expect(configurationService.getStructure).toBeTruthy();
-        expect(configurationService.getStructure).toHaveBeenCalledTimes(1);
+        expect(configurationService.getConfigurationWithStatus).toBeTruthy();
+        expect(configurationService.getConfigurationWithStatus).toHaveBeenCalledTimes(1);
     });
 });

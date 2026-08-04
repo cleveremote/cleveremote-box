@@ -1,5 +1,6 @@
-import { ModuleModel } from '../models/module.model';
+import { IActuatorModule } from './actuator-module.interface';
 import { SequenceModel } from '../models/sequence.model';
+import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema';
 
 
 export enum ExecutableStatus {
@@ -16,12 +17,25 @@ export enum ExecutableAction {
 export enum ProcessMode {
     SCHEDULED = 'SCHEDULE',
     MANUAL = 'MANUAL',
-    TRIGGER = 'TRIGGER'
+    TRIGGER = 'TRIGGER',
+    AUTO = 'AUTO',
+    SYSTEM = 'SYSTEM'
+}
+
+export enum CycleType {
+    GROUP = 'GROUP',
+    CYCLE = 'CYCLE',
+    MODULE = 'MODULE',
+}
+
+export enum ExecutionMode {
+    SEQUENTIAL = 'SEQUENTIAL',
+    PARALLEL = 'PARALLEL'
 }
 
 export enum ProcessType {
     //
-    INIT = 'INIT', // declenchement initial 
+    INIT = 'INIT', // declenchement initial
     FORCE = 'FORCE', // deduction par rapport au priorite ou par confirmation
     QUEUED = 'QUEUED', // par confirmation
     CONFIRMATION = 'CONFIRMATION',
@@ -35,14 +49,17 @@ export enum TASK {
     RECURSIVE = 'RECURSIVE'
 }
 
+export type SequenceExecutionEntry = { sequenceId: string; names: string[]; securityConfig: SecurityConfig };
+
 export interface IExecutable {
-    id: string;
+    _id: string;
     name: string;
+    type: CycleType;
     status: ExecutableStatus;
-    sequences: SequenceModel[];
+    sequences?: SequenceModel[];
     modePriority: { mode: ProcessMode; priority: number }[];
-    reset(): Promise<void>;
-    getModules(): ModuleModel[];
-    exists(module: ModuleModel): boolean;
-    getExecutionStructure(duration: number): { sequenceId: string; portNums: number[]; duration: number }[];
+    getModuleIds(): string[];
+    getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[];
+    exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean;
+    getExecutionStructure(duration: number, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[];
 }

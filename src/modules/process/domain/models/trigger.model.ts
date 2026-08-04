@@ -11,9 +11,13 @@ export class TriggerModel {
     public trigger: { timeAfter?: number; sunBehavior?: SunBehavior };
     public delay: number;
     public shouldConfirmation: boolean;
+    public duration?: number;
     public lastTriggeredAt: Date;
     public isPaused: boolean;
     public action: ExecutableAction;
     public isCheckInProgress: boolean;
-    public shouldDelete: boolean;
+
+    public createdAt?: Date;
+    public updatedAt?: Date;
+    public deletedAt?: Date | null = null;
 }

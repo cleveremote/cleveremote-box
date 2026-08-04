@@ -1,82 +1,59 @@
-/* eslint-disable max-lines-per-function */
-import {
-    IRepository
-} from '@process/domain/interfaces/structure-repository.interface';
 import { Injectable } from '@nestjs/common';
-import { DbService } from '../db/db.service';
-import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
-import { SensorEntity } from '../entities/sensor.entity';
 import { SensorModel } from '@process/domain/models/sensor.model';
+import { SynchronizeSensorModel } from '@process/domain/models/synchronize.model';
+import { InvalidIdException } from '@process/domain/errors/db-errors';
+import { isValidUuid } from '@process/domain/utils/id.util';
+import { SensorMongooseRepository } from './sensor-mongoose.repository';
 
 @Injectable()
-export class SensorRepository implements IRepository<SensorEntity> {
+export class SensorRepository {
 
-    public constructor(private dbService: DbService) { }
-
-    public shouldDelete(id: string): string {
-        const splittedCycleId = id.split('_');
-        if (splittedCycleId.length > 1 && splittedCycleId[0] === 'deleted') {
-            return splittedCycleId[1];
-        }
-        return null;
-    }
+    public constructor(private sensorMongooseRepository: SensorMongooseRepository) { }
 
     public async save(model: SensorModel): Promise<SensorModel> {
-        let result: SensorModel;
-        const entity = SensorEntity.mapToEntity(model);
-        const idToDelete = this.shouldDelete(entity.id)
-        if (idToDelete) {
-            await this.delete(idToDelete);
-            return entity;
+        if (model._id) {
+            if (!isValidUuid(model._id)) {
+                throw new InvalidIdException(model._id, 'sensor');
+            }
+            return this.sensorMongooseRepository.upsert(model._id, model);
         }
-        const found = await this.get(entity.id);
-        if (found) {
-            result = await this.update(entity);
-        } else {
-            result = await this.create(entity); 
-        }
-        this.dbService.executeBackUp('DB_STRUCTURE');
-        return SensorEntity.mapToModel(result);
-    }
-
-    public async create(entity: SensorEntity): Promise<SensorEntity> {
-        await this.dbService.DB_STRUCTURE.push('/sensors[]', entity);
-        const index = await this.dbService.DB_STRUCTURE.getIndex('/sensors', entity.id);
-        const cycleFound = index !== -1 ? await this.dbService.DB_STRUCTURE.getObject<SensorEntity>(`/sensors[${index}]`) : null;
-        if (cycleFound) {
-            return cycleFound;
-        }
-        throw new ElementNotFoundExeception(entity.id, 'create', 'sensor');
-    }
-
-    public async update(entity: SensorEntity): Promise<SensorEntity> {
-        const index = await this.dbService.DB_STRUCTURE.getIndex('/sensors', entity.id);
-        if (index !== -1) {
-            await this.dbService.DB_STRUCTURE.push(`/sensors[${index}]`, entity);
-            return await this.dbService.DB_STRUCTURE.getObject<SensorEntity>(`/sensors[${index}]`);
-        }
-        throw new ElementNotFoundExeception(entity.id, 'get', 'sensor');
+        return this.sensorMongooseRepository.create(model);
     }
 
     public async delete(id: string): Promise<boolean> {
-        const index = await this.dbService.DB_STRUCTURE.getIndex('/sensors', id);
-        if (index !== -1) {
-            await this.dbService.DB_STRUCTURE.delete(`/sensors[${index}]`);
-            return true;
-        }
-        throw new ElementNotFoundExeception(id, 'delete', 'sensor');
+        return this.sensorMongooseRepository.delete(id);
     }
 
-    public async get(id?: string): Promise<SensorEntity | SensorEntity[]> {
+    public async get(id?: string): Promise<SensorModel | SensorModel[]> {
         if (!id) {
-            return await this.dbService.DB_STRUCTURE.getObject<SensorEntity[]>('/sensors');
+            return this.sensorMongooseRepository.findAll();
         }
-        const index = await this.dbService.DB_STRUCTURE.getIndex('/sensors', id);
-        if (index !== -1) {
-            return await this.dbService.DB_STRUCTURE.getObject<SensorEntity>(`/sensors[${index}]`);
-        }
-        return null;
+        return this.sensorMongooseRepository.findById(id);
     }
 
+    // relation auto-referencee : acces au sensor parent et a la liste de ses enfants
+    public async getParent(sensor: SensorModel): Promise<SensorModel | null> {
+        if (!sensor.parentId) {
+            return null;
+        }
+        return this.sensorMongooseRepository.findById(sensor.parentId);
+    }
+
+    public async getChildren(parentId: string): Promise<SensorModel[]> {
+        return this.sensorMongooseRepository.findByParentId(parentId);
+    }
+
+    // un sensor n'est soft-supprime que s'il est explicitement marque `delete: true` dans
+    // `models` ; un sensor absent de `models` reste inchange.
+    public async replaceAll(models: SynchronizeSensorModel[]): Promise<SensorModel[]> {
+        for (const model of models) {
+            if (model.delete) {
+                await this.sensorMongooseRepository.delete(model._id);
+                continue;
+            }
+            await this.save(model);
+        }
+        return this.sensorMongooseRepository.findAll();
+    }
 
 }

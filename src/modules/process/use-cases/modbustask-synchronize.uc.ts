@@ -1,20 +1,16 @@
-import { CycleModel } from '@process/domain/models/cycle.model';
-import { ModbusConnectionConfigModel } from '@process/domain/models/modbusConnectionConfig.model';
-import { ModbusTaskConfigModel } from '@process/domain/models/modbusTaskConfig.model';
+import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 
 /**
- * # Synchronisation et enregitrement de la nouvelle structure cycle/sequence
+ * # Synchronisation et enregistrement d'une liste de requetes com (modbus tasks)
  *
- * Permet la synchronisation et enregitrement de la nouvelle structure cycle/sequence
- *
- * @include ConfigurationService.synchronize
+ * @include SynchronizeService.synchronizeModbusTaskList
  *
 */
 export class ModbusTaskSynchronizeUC {
     public constructor(private synchronizeService: SynchronizeService) { }
 
-    public execute(modbusTaskConfigModel: ModbusTaskConfigModel): Promise<ModbusTaskConfigModel> {
-        return this.synchronizeService.synchronizeModbusTask(modbusTaskConfigModel);
+    public execute(modbusTaskConfigModels: ComRequestModel[]): Promise<ComRequestModel[]> {
+        return this.synchronizeService.synchronizeModbusTaskList(modbusTaskConfigModels);
     }
 }

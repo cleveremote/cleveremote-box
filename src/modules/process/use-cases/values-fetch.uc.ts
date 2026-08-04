@@ -1,4 +1,3 @@
-import { DataModel } from '@process/domain/models/data.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ValueModel } from '@process/domain/models/value.model';
@@ -15,7 +14,7 @@ import { StructureService } from '@process/domain/services/configuration.service
 export class ValuesFetchUC {
     public constructor(private configurationService: StructureService) { }
 
-    public execute(type: string, query: any): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel | DataModel[]> {
-        return this.configurationService.getStatus(type, query);
+    public execute(type: string): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel> {
+        return this.configurationService.getStatus(type);
     }
 }

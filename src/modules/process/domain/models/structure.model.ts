@@ -1,24 +1,25 @@
 import { CycleModel } from './cycle.model';
-import { ModbusConnectionConfigModel } from './modbusConnectionConfig.model';
-import { ModbusTaskConfigModel } from './modbusTaskConfig.model';
-import { ModuleModel } from './module.model';
+import { ComRequestModel } from './com-request.model';
+import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
-import { InverterModel } from './inverter.model';
+import { DeviceModel } from './device.model';
+import { ActuatorModel } from './actuator.model';
 export class StructureModel {
-    public modbusConnections: ModbusConnectionConfigModel[] = [];
-    public modbusTasks: ModbusTaskConfigModel[] = [];
+    public modbusTasks: ComRequestModel[] = [];
+    public devices: DeviceModel[] = [];
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];
-    public inverters: InverterModel[] = [];
+    public actuators: ActuatorModel[] = [];
     public values: any[] = [];
-    public getModules(): ModuleModel[] {
-        let modules: ModuleModel[] = [];
+    public getModuleIds(): string[] {
+        return this.cycles.flatMap((cycle) => cycle.getModuleIds());
+    }
+
+    public getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[] {
+        let modules: IActuatorModule[] = [];
         this.cycles.forEach((cycle) => {
-            cycle.sequences.forEach((sequence) => {
-                modules = modules.concat(sequence.modules);
-                modules = [...new Set([...modules, ...sequence.modules])];
-            });
+            modules = [...new Set([...modules, ...cycle.getModules(actuatorRegistry)])];
         });
         return modules;
     }

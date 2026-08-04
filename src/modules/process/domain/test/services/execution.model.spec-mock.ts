@@ -6,7 +6,7 @@ export function CreateExecution(id: string, mode: ProcessMode, action: Executabl
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
-    cycle.id = id;
+    cycle._id = id;
     cycle.status = ExecutableStatus.STOPPED;
 
     execution.cycle = cycle;
@@ -21,7 +21,7 @@ export function CreateExecutionQueued(id: string, mode: ProcessMode, action: Exe
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
-    cycle.id = id;
+    cycle._id = id;
     cycle.status = ExecutableStatus.STOPPED;
 
     execution.cycle = cycle;
@@ -36,7 +36,7 @@ export function CreateExecutionCycleWithWrongModuleConfig(mode: ProcessMode, act
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
-    cycle.id = 'falsyxxxxx';
+    cycle._id = 'falsyxxxxx';
     cycle.status = ExecutableStatus.STOPPED;
 
     execution.cycle = cycle;
@@ -51,7 +51,7 @@ export function CreateExecutionCycleWithFalsySequence(mode: ProcessMode, action:
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
-    cycle.id = 'with_falsy_sequence';
+    cycle._id = 'with_falsy_sequence';
     cycle.status = ExecutableStatus.STOPPED;
 
     execution.cycle = cycle;
@@ -66,7 +66,7 @@ export function CreateExecutionCycleNotExistConfig(mode: ProcessMode, action: Ex
     const execution = new ProcessModel();
 
     const cycle = new CycleModel();
-    cycle.id = 'not_exist';
+    cycle._id = 'not_exist';
     cycle.status = ExecutableStatus.STOPPED;
 
     execution.cycle = cycle;

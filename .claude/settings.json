@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /home/clv/.claude/plans 2>/dev/null; echo ok)",
+      "Bash(grep -n \"process: { id\\\\|test if connected\\\\|eventRepository.save\\({$\\\\|{ value: 96}\\\\|onElementValueChanged.next\\(sensorValue\\)\\\\|percentToFrequencyRegister\\\\|_getConflictedSchedules\\\\|module.name !== '23'\" /home/clv/dev-workspace/cleveremote-box/src/modules/process/domain/services/execution.service.ts)",
+      "Bash(grep -n \"// await this.eventRepository.save\\\\|^            }\\)$\\\\|^                }\\)$\" /home/clv/dev-workspace/cleveremote-box/src/modules/process/domain/services/execution.service.ts)",
+      "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')",
+      "Bash(git log *)",
+      "Bash(xargs -I{} sh -c 'echo ===={}====; cat {}')",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(npm test *)",
+      "Bash(find / -maxdepth 4 -iname \"*ionic*\" -not -path \"*/node_modules/*\")",
+      "Bash(find / -maxdepth 6 -iname \"angular.json\" -not -path \"*/node_modules/*\")",
+      "Bash(git worktree *)",
+      "Bash(ln -s /home/clv/dev-workspace/cleveremote-box/node_modules node_modules)",
+      "Bash(awk -F: '$1<520')",
+      "Bash(git checkout *)",
+      "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/publish.yml'\\)\\); print\\('YAML OK'\\)\")",
+      "Bash(node -e \"require\\('yaml'\\) && console.log\\('use js yaml lib'\\)\")"
+    ],
+    "additionalDirectories": [
+      "/home/clv/.claude/plans"
+    ]
+  }
+}

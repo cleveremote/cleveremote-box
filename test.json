@@ -1,0 +1,199 @@
+[
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f6",
+        "name": "COM_RS485 RELAYS",
+        "type": "MASTER",
+        "description": "description COM_RS485 RELAYS",
+        "config": {
+            "protocol": "TCP",
+            "ipAddress": "192.168.1.200",
+            "port": 4196,
+            "timeout": 2000
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f7",
+        "name": "COM_RS485 SENSORS",
+        "type": "MASTER",
+        "description": "description COM_RS485 SENSORS",
+        "config": {
+            "protocol": "TCP",
+            "ipAddress": "192.168.1.201",
+            "port": 4196,
+            "timeout": 2000
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f8",
+        "name": "COM_RS485 INVERTER",
+        "type": "MASTER",
+        "description": "description COM_RS485 INVERTER",
+        "config": {
+            "protocol": "TCP",
+            "ipAddress": "192.168.1.202",
+            "port": 4196,
+            "timeout": 2000
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f9",
+        "name": "Inverter",
+        "type": "SLAVE",
+        "description": "Inverter",
+        "config": {
+            "slaveId": "1",
+            "masterDeviceId": "64b9f8e0f3c2a1b2c3d4e5f8"
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f10",
+        "name": "FLOWMETER",
+        "type": "SLAVE",
+        "description": "FLOWMETER",
+        "config": {
+            "slaveId": "1",
+            "masterDeviceId": "64b9f8e0f3c2a1b2c3d4e5f7"
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f11",
+        "name": "PRESSURE STAGE 1",
+        "type": "SLAVE",
+        "description": "PRESSURE STAGE 1",
+        "config": {
+            "slaveId": "2",
+            "masterDeviceId": "64b9f8e0f3c2a1b2c3d4e5f7"
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f12",
+        "name": "EC/MOISTURE SOIL",
+        "type": "SLAVE",
+        "description": "EC/MOISTURE SOIL",
+        "config": {
+            "slaveId": "3",
+            "masterDeviceId": "64b9f8e0f3c2a1b2c3d4e5f7"
+        }
+    },
+    {
+        "_id": "64b9f8e0f3c2a1b2c3d4e5f13",
+        "name": "TEMPERATURE/MOISTURE SOIL",
+        "type": "SLAVE",
+        "description": "TEMPERATURE/MOISTURE AIR",
+        "config": {
+            "slaveId": "4",
+            "masterDeviceId": "64b9f8e0f3c2a1b2c3d4e5f7"
+        }
+    }
+]
+
+
+[
+    {
+        "_id": "e1e0ec11-6a75-407e-b258-9120050f8359",
+        "type": "COM",
+        "name": "1",
+        "config": {
+            "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b70",
+            "actions": [
+                {
+                    "comRequestId": "8d6f3fe2-af41-405b-9523-a0a6fb589bxx",
+                    "action": "ON",
+                    "digitalPort": 0,
+                    "type": "OUTOUT"
+                }
+ -           ]
+        }
+    },
+    {
+        "_id": "d234dd6c-0271-44aa-a220-a463ea4ae38e",
+        "type": "RPI",
+        "name": "2",
+        "config": {
+            "rpiPin": 3,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "1fb00412-c510-4299-be97-1b19b8b9c533",
+        "type": "RPI",
+        "name": "3",
+        "config": {
+            "rpiPin": 4,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "abf15052-fd29-40fc-85b0-63c9ec3d2911",
+        "type": "RPI",
+        "name": "4",
+        "config": {
+            "rpiPin": 17,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "5a0f33b4-1b09-43a4-91a2-42fd90f4b5cb",
+        "type": "RPI",
+        "name": "5",
+        "config": {
+            "rpiPin": 18,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "71e010fa-c2f8-407e-a6ea-ffe423da4876",
+        "type": "RPI",
+        "name": "6",
+        "config": {
+            "rpiPin": 27,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "21989465-e625-47b5-b134-149810571cf9",
+        "type": "RPI",
+        "name": "7",
+        "config": {
+            "rpiPin": 22,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    },
+    {
+        "_id": "43a7db65-a44d-47d4-8485-36ae4e00fc2f",
+        "type": "RPI",
+        "name": "8",
+        "config": {
+            "rpiPin": 23,
+            "direction": "out",
+            "edge": "none",
+            "activeLow": false,
+            "reconfigureDirection": true,
+            "debounceTimeout": 0
+        }
+    }
+]

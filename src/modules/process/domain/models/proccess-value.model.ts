@@ -1,5 +1,5 @@
-import { ExecutableStatus, ProcessType } from "../interfaces/executable.interface";
-import { ExecutableType } from "./value.model";
+import { ExecutableStatus, ProcessType } from '../interfaces/executable.interface';
+import { ExecutableType } from './value.model';
 
 export class ProcessValueModel {
     public id: string;
@@ -8,5 +8,4 @@ export class ProcessValueModel {
     public startedAt?: Date;
     public duration?: number;
     public causes?: { type: ProcessType; cause: string }[];
-    public mapSectionId: string;
 }

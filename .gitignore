@@ -1,6 +1,7 @@
 # compiled output
 /dist
 /node_modules
+/release
 /aws
 /actions-runner
 /db*
@@ -38,3 +39,7 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 junit.xml
+
+# Credentials (never commit service-account keys)
+*firebase-adminsdk*.json
+*serviceAccountKey*.json

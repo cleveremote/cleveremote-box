@@ -17,4 +17,7 @@ export class ProcessModel {
     public instance: Subscription;
     public duration?: number;
     public schedule: ScheduleModel;
+    // id du cycle CYCLE dont la commutation d'actuator pilote ce process (regle 2) ;
+    // sert de garde anti-reentrance pour la cascade MODULE -> CYCLE (regle 1)
+    public sourceCycleId?: string;
 }

@@ -1,4 +1,5 @@
 import { CustomTransportStrategy, Server } from '@nestjs/microservices';
+import { isObservable, firstValueFrom } from 'rxjs';
 import { Socket } from 'socket.io-client';
 
 export class SocketIoClientStrategy extends Server
@@ -21,21 +22,27 @@ export class SocketIoClientStrategy extends Server
     /* istanbul ignore next */
     public listen(callback: () => void): void {
         this.client.on('connection', () => {
-          
+
         });
         this.client.on('error', (error) => {
-         
+
         });
         this.client.on('connected', (connected) => {
-          
+
         });
 
 
 
-        this.messageHandlers.forEach((handler, pattern) => { 
+        this.messageHandlers.forEach((handler, pattern) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           this.client.on(pattern, async (data: any, callb) => {
-                callb(await handler(data, this.client));
+            this.client.on(pattern, async (data: any, callb: (response: unknown) => void) => {
+                try {
+                    const result = await handler(data, this.client);
+                    const response = isObservable(result) ? await firstValueFrom(result) : result;
+                    callb({ response });
+                } catch (error) {
+                    callb({ err: error?.message ?? error });
+                }
             });
         });
 

@@ -1,0 +1,261 @@
+const now = new Date();
+db.comrequests.insertMany([
+    {
+        "_id": "1d652b69-806d-4ced-ab6a-495d69191727",
+        "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b53",
+        "name": "Temperature_Moisture",
+        "description": "Temperature_Moisture",
+        "type": [
+            "COM_READ"
+        ],
+        "config": {
+            "address": 255,
+            "function": [
+                "readHoldingRegisters"
+            ],
+            "params": {
+                "length": 2
+            }
+        },
+        "deletedAt": null,
+        "createdAt": now,
+        "updatedAt": now
+    },
+
+    {
+        "_id": "52d3677b-7b2b-46b3-b7e6-b715267d73fb",
+        "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b51",
+        "name": "Pressure",
+        "description": "Pressure",
+        "type": [
+            "COM_READ"
+        ],
+        "config": {
+            "address": 22,
+            "type": "float",
+            "function": [
+                "readHoldingRegisters"
+            ],
+            "params": {
+                "length": 2,
+                "formula": "raw",
+                "unit":"bar"
+            }
+        },
+        "deletedAt": null,
+        "createdAt": now,
+        "updatedAt": now
+    },
+
+    {
+        "_id": "c6acc84b-9a6e-47f6-a8da-3989969917fc",
+        "deviceId": "d94ad56f-4a35-4a7d-b680-646eb8028ee1",
+        "name": "Instant FLow venturi 1",
+        "description": "Instant FLow venturi 1",
+        "type": [
+            "COM_READ"
+        ],
+        "config": {
+            "address": 9,
+            "type": "float-6Bytes",
+            "function": [
+                "readHoldingRegisters"
+            ],
+            "params": {
+                "length": 3,
+                "unit": "L/min",
+                "formula": "raw",
+            }
+        },
+        "deletedAt": null,
+        "createdAt": now,
+        "updatedAt": now
+    },
+    {
+        "_id": "118c3200-7667-4972-b011-26343535c0ea",
+        "deviceId": "8d522c71-595c-40ea-8fe8-fce657235662",
+        "name": "Instant FLow venturi 2",
+        "description": "Instant FLow venturi 2",
+        "type": [
+            "COM_READ"
+        ],
+        "config": {
+            "address": 9,
+            "type": "float-6Bytes",
+            "function": [
+                "readHoldingRegisters"
+            ],
+            "params": {
+                "length": 3,
+                "unit": "L/min",
+                "formula": "raw"
+            }
+        },
+        "deletedAt": null,
+        "createdAt": now,
+        "updatedAt": now
+    },
+    ////////////
+    {
+    "_id": "9e907bc2-53d7-4e5f-9d08-1b7f9ef3a0f6",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "instantFlow",
+    "description": "instantFlow",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 1,
+      "type": "float",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 2,
+        "unit": "m³/h",
+        "formula": "raw"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "4b0d6bb9-3b4d-4f18-bd63-2a0f90d8db4d",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "fluidVelocity",
+    "description": "fluidVelocity",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 5,
+      "type": "float",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 2,
+        "unit": "m/s",
+        "formula": "raw"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "e9c5dd73-2d8d-4c95-a7cc-3aef2b50e14d",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "positiveCumulative",
+    "description": "positiveCumulative",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 9,
+      "type": "cumulative",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 4,
+        "unit": "m³",
+        "formula": "(N + Nf) * 10^(n - 3)"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "8cb8af8d-7b7b-4c4d-a0d2-10baf5d8dce2",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "netCumulative",
+    "description": "netCumulative",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 25,
+      "type": "cumulative",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 4,
+        "unit": "m³",
+        "formula": "(N + Nf) * 10^(n - 3)"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "fb0d14d5-80c9-4dbd-8e66-8dd78cf6e1e0",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "todayCumulative",
+    "description": "todayCumulative",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 137,
+      "type": "cumulative",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 4,
+        "unit": "m³",
+        "formula": "(N + Nf) * 10^(n - 3)"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "0ef08b6f-7c53-4d2f-a82f-8e5d70d33d7f",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "monthCumulative",
+    "description": "monthCumulative",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 141,
+      "type": "cumulative",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 4,
+        "unit": "m³",
+        "formula": "(N + Nf) * 10^(n - 3)"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "da98e41b-95d7-4688-aac9-fd3bcb7d97f2",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "batteryVoltage",
+    "description": "batteryVoltage",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 95,
+      "type": "int",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 1,
+        "unit": "v",
+        "formula": "raw * (2.5 / 4096)"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  },
+  {
+    "_id": "55d8c7d4-bbfd-451d-a56d-cb5f7f29a30c",
+    "deviceId": "8d6f3fe2-af41-405b-9523-a0a6fb589b50",
+    "name": "workingTimeHours",
+    "description": "workingTimeHours",
+    "type": ["COM_READ"],
+    "config": {
+      "address": 105,
+      "type": "uint32",
+      "function": ["readHoldingRegisters"],
+      "params": {
+        "length": 2,
+        "unit": "h",
+        "formula": "raw / 3600"
+      }
+    },
+    "deletedAt": null,
+    "createdAt": "now",
+    "updatedAt": "now"
+  }
+
+
+]);

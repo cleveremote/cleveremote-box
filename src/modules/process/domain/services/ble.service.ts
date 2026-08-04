@@ -1,13 +1,13 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { StructureRepository } from '@process/infrastructure/repositories/structure.repository';
-import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import * as fs from 'fs';
 import * as HciSocket from 'hci-socket';
 import { AuthenticationService } from './authentication.service';
+import { GlobalSettingsService } from './global-settings.service';
+import { GlobalSettingsModel, LocalCoordinatesModel } from '../models/global-settings.model';
 const NodeBleHost = require('ble-host');
-const network = require("node-network-manager");
+const network = require('node-network-manager');
 const BleManager = NodeBleHost.BleManager;
 const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
 const HciErrors = NodeBleHost.HciErrors;
@@ -19,9 +19,8 @@ const deviceName = 'clv-ble';
 export class BleService {
 
     public constructor(
-        private structureRepository: StructureRepository,
-        private valueRepository: ValueRepository,
         private authenticationService: AuthenticationService,
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) {
     }
@@ -42,7 +41,7 @@ export class BleService {
                 return;
             }
 
-            var notificationCharacteristic;
+            let notificationCharacteristic;
 
             manager.gattDb.setDeviceName(deviceName);
             manager.gattDb.addServices([
@@ -82,7 +81,7 @@ export class BleService {
                         notificationCharacteristic = {
                             uuid: '22222222-3333-4444-5555-66666666666A',
                             properties: ['notify'],
-                            onSubscriptionChange: function (connection, notification, indication, isWrite) {
+                            onSubscriptionChange(connection, notification, indication, isWrite) {
                                 if (notification) {
                                     // Notifications are now enabled, so let's send something
                                     notificationCharacteristic.notify(connection, 'Sample notification');
@@ -128,11 +127,16 @@ export class BleService {
     }
 
 
-    private async buildContenteConfigFile(data: { ssid: string, psk: string, password: string }) {
+    private async buildContenteConfigFile(data: { ssid: string; psk: string; password: string; localCoordinates?: LocalCoordinatesModel }) {
         const isValid = await this.authenticationService.checkPassword({ id: data.ssid, login: data.ssid, password: data.password });
-        if (!isValid) { 
+        if (!isValid) {
             return AttErrors.WRITE_NOT_PERMITTED;
-        } 
+        }
+        if (data.localCoordinates) {
+            const globalSettings = new GlobalSettingsModel();
+            globalSettings.localCoordinates = data.localCoordinates;
+            await this.globalSettingsService.update(globalSettings);
+        }
         await network.wifiConnect(data.ssid, data.psk);
         return AttErrors.SUCCESS;
     }
@@ -141,14 +145,14 @@ export class BleService {
         const ssidMap = new Map();
 
         networks.forEach(network => {
-            const { SSID, inUseBoolean } = network; 
+            const { SSID, inUseBoolean } = network;
 
             // Check if the SSID is already in the map
             if (!ssidMap.has(SSID)) {
-                ssidMap.set(SSID, { name: SSID, "in-use": inUseBoolean });
+                ssidMap.set(SSID, { name: SSID, 'in-use': inUseBoolean });
             } else if (inUseBoolean) {
                 // Update the "in-use" field if this entry is in use
-                ssidMap.get(SSID)["in-use"] = true;
+                ssidMap.get(SSID)['in-use'] = true;
             }
         });
 
@@ -175,7 +179,7 @@ export class BleService {
             if (mergedMap.has(item.name)) {
                 mergedMap.set(item.name, { ...mergedMap.get(item.name), ...item });
             } else {
-                mergedMap.set(item.name, { ...item, "in-use": false }); // Default `in-use` to false
+                mergedMap.set(item.name, { 'in-use': false, ...item }); // Default `in-use` to false, but keep the scan's own value if present
             }
         });
 

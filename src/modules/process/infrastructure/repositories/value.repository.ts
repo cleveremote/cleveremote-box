@@ -1,113 +1,59 @@
-/* eslint-disable max-lines-per-function */
-import {
-    IRepository
-} from '@process/domain/interfaces/structure-repository.interface';
 import { Injectable } from '@nestjs/common';
-import { DbService } from '../db/db.service';
-import { CycleEntity } from '../entities/cycle.entity';
-import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
-import { CycleModel } from '@process/domain/models/cycle.model';
-import { ValueEntity } from '../entities/value.entity';
-import { ProcessValueEntity } from '../entities/process-value.entity';
-import { SensorValueEntity } from '../entities/sensor-value.entity';
-import { SensorValueRepository } from './sensor-value.repository';
-import { ProcessValueRepository } from './process-value.repository';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
-import { DataModel } from '@process/domain/models/data.model';
-import { DataRepository } from './data.repository';
+import { EventModel } from '@process/domain/models/event.model';
+import { SensorModel } from '@process/domain/models/sensor.model';
+import { CycleModel } from '@process/domain/models/cycle.model';
+import { SequenceModel } from '@process/domain/models/sequence.model';
+import { EventRepository } from './event.repository';
+import { StructureService } from '@process/domain/services/configuration.service';
 
 @Injectable()
 export class ValueRepository {
 
     public constructor(
-        private dbService: DbService,
-        private sensorValueRepository: SensorValueRepository,
-        private processValueRepository: ProcessValueRepository,
-        private dataRepository: DataRepository
+        private eventRepository: EventRepository,
+        private structureService: StructureService
     ) { }
 
-    // eslint-disable-next-line max-len
-    public async getValues(type: string = '/', id?: string): Promise<ProcessValueEntity[] | SensorValueEntity[] | ValueEntity> {
-        let result: ProcessValueEntity[] | SensorValueEntity[] | ValueEntity;
-        let res;
-        switch (type) {
-            case 'SENSOR':
-                res = await this.sensorValueRepository.get(id);
-                if (Array.isArray(res)) {
-                    result = res.filter(x => x.type === 'SEQUENCE');
-                } else {
-                    result = [res]
-                }
-                break;
-            case 'SEQUENCE':
-                res = await this.processValueRepository.get(id);
-                if (Array.isArray(res)) {
-                    result = res.filter(x => x.type === 'SEQUENCE');
-                } else {
-                    result = [res]
-                }
-                break;
-            case 'CYCLE':
-                res = await this.processValueRepository.get(id);
-                if (Array.isArray(res)) {
-                    result = res.filter(x => x.type === 'CYCLE');
-                } else {
-                    result = [res]
-                }
-                break;
-            default:
-                result = await this.dbService.DB_VALUES.getObject<ValueEntity>('/');
-                break;
-        }
-
-        return result;
-    }
-
-    public async getData(query: any): Promise<DataModel[]> {
-
+    public async getEvents(query: { deviceId: string; startDate: string; endDate: string }): Promise<EventModel[]> {
         const startDate = new Date(query.startDate);
         const endDate = new Date(query.endDate);
-
-        const startMonthIndex = startDate.getMonth();
-        const startYearhIndex = startDate.getFullYear();
-        const endMonthIndexDb = endDate.getMonth();
-        const endYearhIndex = endDate.getFullYear();
-        const keys = []
-
-        for (let index = startYearhIndex; index <= endYearhIndex; index++) {
-            if (index === startYearhIndex) {
-                for (let indexM = startMonthIndex; indexM <= endMonthIndexDb; indexM++) {
-                    keys.push(`${indexM}-${startYearhIndex}`);
-                }
-            } else {
-                for (let indexM = 1; indexM <= 12; indexM++) {
-                    keys.push(`${indexM}-${startYearhIndex}`);
-                }
-            }
-        }
-        let resultArray = [];
-
-        for (let index = 0; index < keys.length; index++) {
-            const key = keys[index];
-            resultArray = resultArray.concat(await this.dataRepository.get(key) as DataModel[]);
-        }
-
-        resultArray = resultArray.filter(x => x.deviceId === query.deviceId)
-
-        const indexStartDate = resultArray.findIndex(x => x.date.getTime() >= startDate.getTime());
-        const indexEndtDate = resultArray.findIndex(x => x.date.getTime() >= endDate.getTime());
-
-        return resultArray.slice(indexStartDate === -1 ? 0 : indexStartDate, indexEndtDate === -1 ? resultArray.length : indexEndtDate);
+        return this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate);
     }
 
-    public getLastValue(deviceId: string): Promise<DataModel> {
-        return this.dataRepository.getLast(deviceId);
+    public getLastValue(deviceId: string): Promise<EventModel> {
+        return this.eventRepository.getLast(deviceId);
     }
 
+    // lecture en memoire : les cycles/sequences portent leur status a jour sur eux-memes
+    // (execution.service.ts._processProgress), et les capteurs leur derniere lecture connue
+    // (sensor.service.ts.emitReceivedData) ; plus besoin d'un store JSON separe pour ca.
     public async getDeviceValue(deviceId: string): Promise<SensorValueModel | ProcessValueModel> {
-        const values = (await this.getValues()) as ValueEntity;
-        return values.processes.find(x => x.id === deviceId) || values.sensors.find(x => x.id === deviceId);
+        const structure = this.structureService.structure;
+        const executable = [...structure.cycles, ...structure.getSequences()].find((x) => x._id === deviceId);
+        if (executable) {
+            return this._toProcessValue(executable);
+        }
+        return this._toSensorValue(structure.sensors.find((x) => x._id === deviceId));
+    }
+
+    private _toProcessValue(executable: CycleModel | SequenceModel): ProcessValueModel {
+        const value = new ProcessValueModel();
+        value.id = executable._id;
+        value.status = executable.status;
+        return value;
+    }
+
+    private _toSensorValue(sensor?: SensorModel): SensorValueModel | undefined {
+        if (!sensor || sensor.value === undefined) {
+            return undefined;
+        }
+        const value = new SensorValueModel();
+        value.id = sensor._id;
+        value.value = sensor.value;
+        value.date = sensor.date;
+        return value;
     }
 
 }

@@ -1,47 +1,51 @@
 import { ConditionModel } from './condition.model';
 import { CycleModel } from './cycle.model';
-import { ModbusConnectionConfigModel } from './modbusConnectionConfig.model';
-import { ModbusTaskConfigModel } from './modbusTaskConfig.model';
-import { ModuleModel } from './module.model';
+import { DeviceModel } from './device.model';
+import { ComRequestModel } from './com-request.model';
+import { ActuatorModel } from './actuator.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
 
-export class SynchronizeModuleModel extends ModuleModel {
-    public shouldDelete: boolean;
-}
-
 export class SynchronizeSequenceModel extends SequenceModel {
-    public modules: SynchronizeModuleModel[] = [];
-    public shouldDelete: boolean;
+    public delete?: boolean = false;
 }
 
 export class SynchronizeCycleModel extends CycleModel {
     public sequences: SynchronizeSequenceModel[] = [];
-    public shouldDelete: boolean;
+    public schedules?: SynchronizeScheduleModel[] = [];
+    public triggers?: SynchronizeTriggerModel[] = [];
+    public delete?: boolean = false;
 }
 
 export class SynchronizeScheduleModel extends ScheduleModel {
-    public shouldDelete: boolean;
+    public delete?: boolean = false;
 }
 
 export class SynchronizeTriggerModel extends TriggerModel {
-    public shouldDelete: boolean;
+    public delete?: boolean = false;
 }
 
 export class SynchronizeConditionModel extends ConditionModel {
-    public shouldDelete: boolean;
 }
 
 export class SynchronizeSensorModel extends SensorModel {
-    public shouldDelete: boolean;
+    public delete?: boolean = false;
 }
 
-export class SynchronizeModbusConnectionConfigModel extends ModbusConnectionConfigModel {
-    public shouldDelete: boolean;
+export class SynchronizeDeviceModel extends DeviceModel {
+    public delete?: boolean = false;
+    // devices imbriques (slaves) et comrequests imbriques : uniquement presents lors d'une synchro
+    // recursive via box/synchronize/device ; undefined = non fourni, ne cascade pas (retro-compat).
+    public devices?: SynchronizeDeviceModel[];
+    public comrequests?: SynchronizeComRequestModel[];
 }
 
-export class SynchronizeModbusTaskConfigModel extends ModbusTaskConfigModel {
-    public shouldDelete: boolean;
+export class SynchronizeComRequestModel extends ComRequestModel {
+    public delete?: boolean = false;
+}
+
+export class SynchronizeActuatorModel extends ActuatorModel {
+    public delete?: boolean = false;
 }
