@@ -19,7 +19,7 @@ export class EventMongooseRepository {
         const events = await this.eventModel
             .find({ elementId, date: { $gte: startDate, $lte: endDate } })
             .sort({ date: 1 });
-       const t =     events.map(EventMapper.mapToModel);
+        const t =     events.map(EventMapper.mapToModel);
         return t;
     }
 

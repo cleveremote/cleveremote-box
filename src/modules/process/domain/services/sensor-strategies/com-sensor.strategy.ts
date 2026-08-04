@@ -16,7 +16,7 @@ export class ComSensorStrategy implements SensorStrategy {
         private comRequestRepository: ComRequestRepository
     ) { }
 
-    public async read(sensor: SensorModel): Promise<ReadResult> { 
+    public async read(sensor: SensorModel): Promise<ReadResult> {
         const { comRequestId } = sensor.config as ComSensorConfigModel;
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(comRequestId) as ComRequestModel;
 

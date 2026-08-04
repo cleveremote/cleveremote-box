@@ -69,7 +69,7 @@ export class ConfigurationController {
     @MessagePattern(['box/synchronize/device'])
     public async synchroniseDevice(
         @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
-        deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
+            deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
     ): Promise<DeviceModel[]> {
         const uc = new DeviceSynchronizeUC(this._synchronizeService);
         const input = deviceSynchronizeDTOs.map(DeviceSynchronizeDTO.mapToDeviceModel);
@@ -88,7 +88,7 @@ export class ConfigurationController {
     @MessagePattern(['box/synchronize/comrequest'])
     public async synchroniseComRequest(
         @Payload(new ParseArrayPipe({ items: ComRequestDTO, exceptionFactory: validationExceptionFactory }))
-        comRequestDTOs: ComRequestDTO[]
+            comRequestDTOs: ComRequestDTO[]
     ): Promise<ComRequestModel[]> {
         const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
         const input = comRequestDTOs.map(ComRequestDTO.mapToComRequestModel);
@@ -133,7 +133,7 @@ export class ConfigurationController {
     @MessagePattern(['box/synchronize/actuator'])
     public async synchroniseActuator(
         @Payload(new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
-        actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
+            actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
     ): Promise<ActuatorModel[]> {
         const uc = new ActuatorSynchronizeUC(this._synchronizeService);
         const input = actuatorSynchronizeDTOs.map(ActuatorSynchronizeDTO.mapToActuatorModel);
@@ -152,7 +152,7 @@ export class ConfigurationController {
 
     @MessagePattern(['box/fetch/plan'])
     public async getPlan(): Promise<string> {
-        const result = `svg`
+        const result = 'svg'
         return result;
     }
 

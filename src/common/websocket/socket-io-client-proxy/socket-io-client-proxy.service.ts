@@ -26,11 +26,11 @@ export class SocketIoClientProxyService extends ClientProxy {
         // no-op: required ClientProxy override, not used by this proxy
     }
 
-    public async sendMessage(packet: ReadPacket<string>,isLocal:boolean): Promise<string> {
-        return this._emitMessage<string>(packet,isLocal);
+    public async sendMessage(packet: ReadPacket<string>, isLocal: boolean): Promise<string> {
+        return this._emitMessage<string>(packet, isLocal);
     }
 
-    private async _emitMessage<T>(packet: ReadPacket<T>,isLocal:boolean): Promise<T> {
+    private async _emitMessage<T>(packet: ReadPacket<T>, isLocal: boolean): Promise<T> {
         return new Promise((resolve, reject) => {
             this._client.getSocket(isLocal).emit(packet.pattern, packet.data, (response) => {
                 if (!response) return reject('err')

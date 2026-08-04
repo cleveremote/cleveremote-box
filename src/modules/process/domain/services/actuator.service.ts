@@ -29,7 +29,7 @@ export class ActuatorService {
         return this._resolveStrategy(actuator.type).execute(actuator as ActuatorModel, action);
     }
 
-    public async reset(actuators: IActuatorModule[]): Promise<void> { 
+    public async reset(actuators: IActuatorModule[]): Promise<void> {
         for (const actuator of actuators) {
             try {
                 await this.execute(actuator, 0);

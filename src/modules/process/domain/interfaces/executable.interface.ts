@@ -35,7 +35,7 @@ export enum ExecutionMode {
 
 export enum ProcessType {
     //
-    INIT = 'INIT', // declenchement initial 
+    INIT = 'INIT', // declenchement initial
     FORCE = 'FORCE', // deduction par rapport au priorite ou par confirmation
     QUEUED = 'QUEUED', // par confirmation
     CONFIRMATION = 'CONFIRMATION',

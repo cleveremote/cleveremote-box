@@ -10,7 +10,7 @@ export class Condition {
     @Prop({ required: true })
     public elementId: string;
 
-    @Prop({ required: true ,enum: ElementType})
+    @Prop({ required: true, enum: ElementType })
     public elementType: ElementType;
 
     @Prop({ required: true })

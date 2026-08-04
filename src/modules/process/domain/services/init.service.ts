@@ -61,8 +61,8 @@ export class InitService {
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
             .then(() => wrap('init devices', () => this.deviceService.initAll()))
-           // .then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
-            .then(async () => { 
+        // .then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
+            .then(async () => {
                 // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
                 // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
                 // const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
@@ -74,7 +74,7 @@ export class InitService {
                 // });
 
                 //  const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-                // await this.actuatorService.execute(actuator as ActuatorModel, 50); 
+                // await this.actuatorService.execute(actuator as ActuatorModel, 50);
             })
 
             .catch((error) => {
@@ -82,9 +82,9 @@ export class InitService {
             })
     }
 
-    private _resetAllModules(): Promise<void> { 
+    private _resetAllModules(): Promise<void> {
 
-        this.logger.log('Start initialize processes 1 ...'); 
+        this.logger.log('Start initialize processes 1 ...');
         return this.processService.resetAllModules()
             .then(() => {
                 this.logger.log('processes initialized');
@@ -108,7 +108,7 @@ export class InitService {
         }
     }
 
-   
+
 
     /**
      * TEST - commissionnement du module Waveshare "Modbus RTU Analog Output 8CH" utilisé par
@@ -118,9 +118,9 @@ export class InitService {
      */
     private async _testAo8ch(): Promise<void> {
         const AO1_CHANNEL = 1;
-       //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
-       await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL); 
-    
+        //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
+        await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL);
+
     }
 
     private _createDefaultValveConfig(channel: number): CtrlActuatorConfigModel {

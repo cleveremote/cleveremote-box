@@ -1,5 +1,5 @@
-import { ExecutableAction } from "../interfaces/executable.interface";
-import { ElementType } from "./event.model";
+import { ExecutableAction } from '../interfaces/executable.interface';
+import { ElementType } from './event.model';
 
 export enum ConditionSymbolStart {
     OPEN_PAREN = '(',

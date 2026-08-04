@@ -26,9 +26,9 @@ export class ComActuatorStrategy implements ActuatorStrategy {
     public async execute(actuator: ActuatorModel, action: number): Promise<void> {
         const { actions } = actuator.config as ComActuatorConfigModel;
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(actions[0].comRequestId) as ComRequestModel;
-        const overrideParams: ComRequestConfigModel = {address: actions[0].portNumber,params: {value: action} };
-        this.modbusService.execute(comRequestData,buildOverrideParams(comRequestData.config, overrideParams));
-        
+        const overrideParams: ComRequestConfigModel = { address: actions[0].portNumber, params: { value: action } };
+        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
+
     }
 
     public read(actuator: ActuatorModel): number {

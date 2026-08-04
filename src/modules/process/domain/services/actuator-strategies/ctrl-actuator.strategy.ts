@@ -138,14 +138,14 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     // partagee (_enqueue) qui serialise les acces au bus RS485, et de la gestion
     // connexion/erreurs deja centralisee dans ModbusTaskService._runComRequest.
     private async _writeOpeningViaComRequest(action: ActuatorActionConfig, milliAmps: number): Promise<void> {
-        const microAmps = this._toClampedMicroAmps(milliAmps); 
+        const microAmps = this._toClampedMicroAmps(milliAmps);
         const comRequest: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
 
 
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
         const overrideParams: ComRequestConfigModel = { address: action.portNumber, params: { value: microAmps } }
         this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
-    } 
+    }
 
     /**
      * FAKE - en attendant la documentation officielle du débitmètre RS485.
@@ -206,7 +206,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         } catch (err) {
             this.logger.error({ deviceId, newAddress, err: err.message }, 'valve device address write error');
             throw err;
-        } finally { 
+        } finally {
             client.close(() => this.logger.log({ deviceId }, 'valve modbus connection closed'));
         }
     }
@@ -223,7 +223,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         //     await this._delay(stepDelayMs);
         // }
         // await this._writeChannelOutput(deviceId, channel, 4);
-        // await this._delay(10000); 
+        // await this._delay(10000);
     }
 
     private async _writeChannelOutput(deviceId: string, channel: number, milliAmps: number): Promise<void> {
@@ -238,7 +238,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
             this.logger.error({ deviceId, channel, err: err.message }, 'valve output write error');
             const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
             if (err.modbusCode !== undefined) return;
-            if (!networkCodes.includes(err.code)) throw err; 
+            if (!networkCodes.includes(err.code)) throw err;
         } finally {
             client.close(() => this.logger.log({ deviceId, channel }, 'valve modbus connection closed'));
         }

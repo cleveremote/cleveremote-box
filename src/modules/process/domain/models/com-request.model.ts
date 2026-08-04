@@ -78,15 +78,15 @@ export class ComRequestConfigModel {
     public done?: boolean;
     public type?: ModbusValueType;
     public params?: {
-        length?: number,
-        scale?: number,
-        unit?: string,
-        value?: number | number[],
-        formula?: string | null,
+        length?: number;
+        scale?: number;
+        unit?: string;
+        value?: number | number[];
+        formula?: string | null;
         persistence?: {
-            persist: boolean,
-            address: number
-        }
+            persist: boolean;
+            address: number;
+        };
     };
 }
 

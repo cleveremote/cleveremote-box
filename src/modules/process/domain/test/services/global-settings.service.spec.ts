@@ -1,5 +1,6 @@
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { GlobalSettingsModel } from '@process/domain/models/global-settings.model';
+import { APP_VERSION } from '@framework/utils/app-version.util';
 
 describe('GlobalSettingsService', () => {
     let globalSettingsRepository: { get: jest.Mock; update: jest.Mock };
@@ -19,6 +20,7 @@ describe('GlobalSettingsService', () => {
 
             expect(globalSettingsRepository.get).toHaveBeenCalled();
             expect(result).toBe(model);
+            expect(result.version).toBe(APP_VERSION);
         });
 
         it('should cache the fetched coordinates on the service instance', async () => {
@@ -40,6 +42,7 @@ describe('GlobalSettingsService', () => {
 
             expect(globalSettingsRepository.update).toHaveBeenCalledWith(entity);
             expect(result).toBe(entity);
+            expect(result.version).toBe(APP_VERSION);
         });
 
         it('should refresh the cached coordinates from the saved entity, not the input entity', async () => {

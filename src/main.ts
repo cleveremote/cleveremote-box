@@ -24,21 +24,21 @@ async function bootstrap(): Promise<void> {
     const socketIoClientProvider = app.get<SocketIoClientProvider>(
         SocketIoClientProvider
     );
-    
+
     const socketIoClientProviderLocal = app.get<SocketIoClientProvider>(
         SocketIoClientProvider
     );
     app.connectMicroservice<MicroserviceOptions>({
-        strategy: new SocketIoClientStrategy(socketIoClientProvider.getSocket(false),false)
+        strategy: new SocketIoClientStrategy(socketIoClientProvider.getSocket(false), false)
     });
 
     app.connectMicroservice<MicroserviceOptions>({
-        strategy: new SocketIoClientStrategy(socketIoClientProviderLocal.getSocket(true),true)
+        strategy: new SocketIoClientStrategy(socketIoClientProviderLocal.getSocket(true), true)
     });
 
     await app.startAllMicroservices();
 
-    
+
     app.enableCors();
     app.get(Logger).log('🚀 Server listening on port 3000');
     await app.listen(appConfig.get('APP_PORT'));

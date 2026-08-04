@@ -7,7 +7,7 @@ import { AuthenticationService } from './authentication.service';
 import { GlobalSettingsService } from './global-settings.service';
 import { GlobalSettingsModel, LocalCoordinatesModel } from '../models/global-settings.model';
 const NodeBleHost = require('ble-host');
-const network = require("node-network-manager");
+const network = require('node-network-manager');
 const BleManager = NodeBleHost.BleManager;
 const AdvertisingDataBuilder = NodeBleHost.AdvertisingDataBuilder;
 const HciErrors = NodeBleHost.HciErrors;
@@ -41,7 +41,7 @@ export class BleService {
                 return;
             }
 
-            var notificationCharacteristic;
+            let notificationCharacteristic;
 
             manager.gattDb.setDeviceName(deviceName);
             manager.gattDb.addServices([
@@ -81,7 +81,7 @@ export class BleService {
                         notificationCharacteristic = {
                             uuid: '22222222-3333-4444-5555-66666666666A',
                             properties: ['notify'],
-                            onSubscriptionChange: function (connection, notification, indication, isWrite) {
+                            onSubscriptionChange(connection, notification, indication, isWrite) {
                                 if (notification) {
                                     // Notifications are now enabled, so let's send something
                                     notificationCharacteristic.notify(connection, 'Sample notification');
@@ -127,7 +127,7 @@ export class BleService {
     }
 
 
-    private async buildContenteConfigFile(data: { ssid: string, psk: string, password: string, localCoordinates?: LocalCoordinatesModel }) {
+    private async buildContenteConfigFile(data: { ssid: string; psk: string; password: string; localCoordinates?: LocalCoordinatesModel }) {
         const isValid = await this.authenticationService.checkPassword({ id: data.ssid, login: data.ssid, password: data.password });
         if (!isValid) {
             return AttErrors.WRITE_NOT_PERMITTED;
@@ -145,14 +145,14 @@ export class BleService {
         const ssidMap = new Map();
 
         networks.forEach(network => {
-            const { SSID, inUseBoolean } = network; 
+            const { SSID, inUseBoolean } = network;
 
             // Check if the SSID is already in the map
             if (!ssidMap.has(SSID)) {
-                ssidMap.set(SSID, { name: SSID, "in-use": inUseBoolean });
+                ssidMap.set(SSID, { name: SSID, 'in-use': inUseBoolean });
             } else if (inUseBoolean) {
                 // Update the "in-use" field if this entry is in use
-                ssidMap.get(SSID)["in-use"] = true;
+                ssidMap.get(SSID)['in-use'] = true;
             }
         });
 

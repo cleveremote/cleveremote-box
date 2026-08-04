@@ -1,5 +1,5 @@
-import { ExecutableStatus, ProcessType } from "../interfaces/executable.interface";
-import { ExecutableType } from "./value.model";
+import { ExecutableStatus, ProcessType } from '../interfaces/executable.interface';
+import { ExecutableType } from './value.model';
 
 export class ProcessValueModel {
     public id: string;

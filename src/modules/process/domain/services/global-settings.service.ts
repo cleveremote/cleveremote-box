@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { APP_VERSION } from '@framework/utils/app-version.util';
 import { GlobalSettingsRepository } from '@process/infrastructure/repositories/global-settings.repository';
 import { GlobalSettingsModel, LocalCoordinatesModel } from '../models/global-settings.model';
 
@@ -15,12 +16,14 @@ export class GlobalSettingsService {
     public async get(): Promise<GlobalSettingsModel> {
         const globalSettings = await this.globalSettingsRepository.get();
         this.localCoordinates = globalSettings.localCoordinates;
+        globalSettings.version = APP_VERSION;
         return globalSettings;
     }
 
     public async update(entity: GlobalSettingsModel): Promise<GlobalSettingsModel> {
         const saved = await this.globalSettingsRepository.update(entity);
         this.localCoordinates = saved.localCoordinates;
+        saved.version = APP_VERSION;
         return saved;
     }
 

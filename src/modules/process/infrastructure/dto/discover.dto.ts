@@ -33,6 +33,6 @@ import { ElementType } from '@process/domain/models/event.model';
 export class DiscoverDeviceDTO {
     @IsOptional()
     @IsString()
-    public masterId : string;
+    public masterId: string;
 }
 

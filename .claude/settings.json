@@ -15,7 +15,9 @@
       "Bash(git worktree *)",
       "Bash(ln -s /home/clv/dev-workspace/cleveremote-box/node_modules node_modules)",
       "Bash(awk -F: '$1<520')",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/publish.yml'\\)\\); print\\('YAML OK'\\)\")",
+      "Bash(node -e \"require\\('yaml'\\) && console.log\\('use js yaml lib'\\)\")"
     ],
     "additionalDirectories": [
       "/home/clv/.claude/plans"

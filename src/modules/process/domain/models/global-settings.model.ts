@@ -6,4 +6,5 @@ export class LocalCoordinatesModel {
 export class GlobalSettingsModel {
     public id: string;
     public localCoordinates: LocalCoordinatesModel;
+    public version?: string;
 }

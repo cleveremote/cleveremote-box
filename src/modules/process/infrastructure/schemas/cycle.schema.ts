@@ -9,7 +9,7 @@ import { CycleStyle, CycleStyleSchema } from './style.schema';
 export { CycleType, ExecutionMode };
 
 @Schema()
-export class ModePriority { 
+export class ModePriority {
     @Prop({ required: true, enum: ProcessMode })
     public mode: ProcessMode;
 

@@ -428,9 +428,9 @@ export class ProcessService {
             this.processList.push(process);
             report.push({ id: process.id, type: process.type, cause: 'schedule triggered : ' + process.cycle.name });
         } else
-             if (!conflictedProcesses.length) {
-            process.type = ProcessType.FORCE;
-        }
+            if (!conflictedProcesses.length) {
+                process.type = ProcessType.FORCE;
+            }
         for (const proc of conflictedProcesses) {
             if (cyclePriority.priority < proc.cycle.modePriority.find((x) => x.mode === proc.mode).priority) {
                 if ((process.mode === ProcessMode.SCHEDULED || process.mode === ProcessMode.TRIGGER) && process.schedule.shouldConfirmation) {
@@ -1006,7 +1006,7 @@ export class ProcessService {
                 status: data.status,
                 startedAt: data.startedAt,
                 duration: data.duration,
-                causes: causes
+                causes
             }
         }, data);
     }
@@ -1024,7 +1024,7 @@ export class ProcessService {
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
-            additionalData: { type: processModel.mode, value: data.status, status: data.status, causes: causes }
+            additionalData: { type: processModel.mode, value: data.status, status: data.status, causes }
         }, data);
     }
 

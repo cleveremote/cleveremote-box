@@ -78,13 +78,13 @@ export class SensorService {
                     const config = childSensor.config as ComSensorConfigModel;
                     //const value = +(results[config.code].value * (config.scale ?? 1)).toFixed(3);
                     //this.emitReceivedData(childSensor,value);
-                    this.emitReceivedData(childSensor, Number((Math.random()*100).toFixed(2)));
+                    this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
                 }
             } else {
                 //for (const result of results) {
-                   // this.emitReceivedData(sensor, result.value);
-                   this.emitReceivedData(sensor,  Number((Math.random()*100).toFixed(2)));
-               // }
+                // this.emitReceivedData(sensor, result.value);
+                this.emitReceivedData(sensor,  Number((Math.random() * 100).toFixed(2)));
+                // }
             }
         } catch (error) {
             this.logger.warn({ error, sensorId: sensor._id }, 'sensor read failed');
@@ -94,7 +94,7 @@ export class SensorService {
     private _resolveStrategy(type: SensorType): SensorStrategy {
         const strategy = this._strategies.get(type);
         if (!strategy) {
-            throw new NotImplementedError(`SensorService: unsupported sensor type "${type}"`); 
+            throw new NotImplementedError(`SensorService: unsupported sensor type "${type}"`);
         }
         return strategy;
     }
@@ -151,7 +151,7 @@ export class SensorService {
         if (isDeleted) {
             const index = this.configurationService.structure.sensors.findIndex(x => x._id === sensor._id);
             if (index !== -1) {
-                this.configurationService.structure.sensors.splice(index, 1); 
+                this.configurationService.structure.sensors.splice(index, 1);
             }
             this._deleteCronJob(sensor._id);
             return sensor;

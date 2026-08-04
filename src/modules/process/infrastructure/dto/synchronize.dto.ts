@@ -32,11 +32,11 @@ import { ElementType } from '@process/domain/models/event.model';
 
 export class PersistenceDTO {
     @IsBoolean()
-    @ApiProperty({ description: "Si vrai, écriture persistante (EEPROM) plutôt que volatile" })
+    @ApiProperty({ description: 'Si vrai, écriture persistante (EEPROM) plutôt que volatile' })
     public persist: boolean;
 
     @IsNumber()
-    @ApiProperty({ description: "Adresse cible pour l'écriture persistante" })
+    @ApiProperty({ description: 'Adresse cible pour l\'écriture persistante' })
     public address: number;
 }
 
@@ -54,34 +54,34 @@ export class IsNumberOrNumberArray implements ValidatorConstraintInterface {
 export class ModbusTaskParams {
     @IsNotEmpty()
     @IsNumber()
-    @ApiProperty({ description: "Longueur (nombre de registres à lire ou écrire)" })
+    @ApiProperty({ description: 'Longueur (nombre de registres à lire ou écrire)' })
     public length: number;
 
     @IsOptional()
     @IsNumber()
-    @ApiProperty({ description: "Facteur d’échelle appliqué à la valeur brute" })
+    @ApiProperty({ description: 'Facteur d’échelle appliqué à la valeur brute' })
     public scale: number;
 
     @IsOptional()
     @IsString()
-    @ApiProperty({ description: "Unité de mesure (ex: °C, L/h, bar...)" })
+    @ApiProperty({ description: 'Unité de mesure (ex: °C, L/h, bar...)' })
     public unit: string;
 
     @IsOptional()
     @Validate(IsNumberOrNumberArray)
-    @ApiProperty({ description: "Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)", required: false })
+    @ApiProperty({ description: 'Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)', required: false })
     public value?: number | number[];
 
     @IsOptional()
     @ValidateIf((o, value) => value !== null)
     @IsString()
-    @ApiProperty({ description: "Formule mathjs de transformation de la valeur lue (ex: \"raw\")", required: false, nullable: true })
+    @ApiProperty({ description: 'Formule mathjs de transformation de la valeur lue (ex: "raw")', required: false, nullable: true })
     public formula?: string | null;
 
     @IsOptional()
     @ValidateNested()
     @Type(() => PersistenceDTO)
-    @ApiProperty({ description: "Configuration de persistance (EEPROM) du paramètre, si applicable" })
+    @ApiProperty({ description: 'Configuration de persistance (EEPROM) du paramètre, si applicable' })
     public persistence?: PersistenceDTO;
 }
 
@@ -89,32 +89,32 @@ export class ComRequestConfigDTO {
     @IsArray()
     @ArrayNotEmpty()
     @IsEnum(ModbusFunctionName, { each: true })
-    @ApiProperty({ description: "Fonction(s) Modbus à exécuter", enum: ModbusFunctionName, isArray: true })
+    @ApiProperty({ description: 'Fonction(s) Modbus à exécuter', enum: ModbusFunctionName, isArray: true })
     public function: ModbusFunctionName[];
 
     @IsNotEmpty()
     @IsNumber()
-    @ApiProperty({ description: "Adresse Modbus à interroger (ou écrire)" })
+    @ApiProperty({ description: 'Adresse Modbus à interroger (ou écrire)' })
     public address: number;
 
     @IsOptional()
     @IsBoolean()
-    @ApiProperty({ description: "Désactive la requête sans la supprimer", required: false })
+    @ApiProperty({ description: 'Désactive la requête sans la supprimer', required: false })
     public disabled?: boolean;
 
     @IsOptional()
     @IsBoolean()
-    @ApiProperty({ description: "Indique si la requête a été traitée", required: false, default: false })
+    @ApiProperty({ description: 'Indique si la requête a été traitée', required: false, default: false })
     public done?: boolean;
 
     @IsOptional()
     @IsEnum(ModbusValueType)
-    @ApiProperty({ description: "Type de valeur lue (défaut : int)", enum: ModbusValueType, required: false })
+    @ApiProperty({ description: 'Type de valeur lue (défaut : int)', enum: ModbusValueType, required: false })
     public type?: ModbusValueType;
 
     @ValidateNested()
     @Type(() => ModbusTaskParams)
-    @ApiProperty({ description: "Paramètres de la requête (longueur, échelle, unité)" })
+    @ApiProperty({ description: 'Paramètres de la requête (longueur, échelle, unité)' })
     public params?: ModbusTaskParams;
 }
 
@@ -236,22 +236,22 @@ export class CycleSynchronizeDTO {
     @ValidateNested()
     @Type(() => Style)
     public style?: Style = {
-        "bgColor": "#2196F3",
-        "fontColor": "#FFFFFF",
-        "iconColor": {
-            "icon": "water-drop",
-            "base": "#1565C0"
-        }
-    };
+            bgColor: '#2196F3',
+            fontColor: '#FFFFFF',
+            iconColor: {
+                icon: 'water-drop',
+                base: '#1565C0'
+            }
+        };
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ModePriority)
     public modePriority?: ModePriority[] = [
-        { mode: ProcessMode.MANUAL, priority: 0 },
-        { mode: ProcessMode.SCHEDULED, priority: 1 },
-        { mode: ProcessMode.TRIGGER, priority: 2 }
-    ];
+            { mode: ProcessMode.MANUAL, priority: 0 },
+            { mode: ProcessMode.SCHEDULED, priority: 1 },
+            { mode: ProcessMode.TRIGGER, priority: 2 }
+        ];
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
@@ -886,45 +886,45 @@ export class DeviceConfigDTO {
     // MASTER
     @ValidateIf(o => o.type === DeviceType.MASTER)
     @IsEnum(MasterProtocol)
-    @ApiProperty({ description: "Protocole utilisé (TCP ou RTU)" })
+    @ApiProperty({ description: 'Protocole utilisé (TCP ou RTU)' })
     public protocol?: MasterProtocol;
 
     @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsString()
-    @ApiProperty({ description: "Adresse IP de l'équipement" })
+    @ApiProperty({ description: 'Adresse IP de l\'équipement' })
     public ipAddress?: string;
 
     @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsNumber()
-    @ApiProperty({ description: "Port TCP Modbus (502 par défaut)" })
+    @ApiProperty({ description: 'Port TCP Modbus (502 par défaut)' })
     public port?: number;
 
     @IsOptional()
     @IsNumber()
-    @ApiProperty({ description: "baudrate" })
+    @ApiProperty({ description: 'baudrate' })
     public baudRate?: number;
 
     @IsOptional()
     @IsString()
-    @ApiProperty({ description: "si rtu chemin" })
+    @ApiProperty({ description: 'si rtu chemin' })
     public path?: string;
 
     @IsOptional()
     @IsNumber()
-    @ApiProperty({ description: "timeout de connexion (ms)" })
+    @ApiProperty({ description: 'timeout de connexion (ms)' })
     public timeout?: number;
 
     // SLAVE
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()
     @IsNumber()
-    @ApiProperty({ description: "Identifiant d’esclave Modbus (Slave ID)" })
+    @ApiProperty({ description: 'Identifiant d’esclave Modbus (Slave ID)' })
     public slaveId?: number;
 
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()
     @IsString()
-    @ApiProperty({ description: "Identifiant du DeviceModel MASTER associé" })
+    @ApiProperty({ description: 'Identifiant du DeviceModel MASTER associé' })
     public masterDeviceId?: string;
 }
 
@@ -944,7 +944,7 @@ export class DeviceSynchronizeDTO {
 
     @IsOptional()
     @IsEnum(DeviceKind)
-    @ApiProperty({ description: "Nature de l'équipement (esclave Modbus générique, onduleur, ...)" })
+    @ApiProperty({ description: 'Nature de l\'équipement (esclave Modbus générique, onduleur, ...)' })
     public kind?: DeviceKind;
 
     @ValidateNested()
@@ -992,34 +992,34 @@ export class ComRequestDTO {
     @IsOptional()
     @IsNotEmpty()
     @IsString()
-    @ApiProperty({ description: "Identifiant unique de la requête" })
+    @ApiProperty({ description: 'Identifiant unique de la requête' })
     public _id: string;
 
     @IsNotEmpty()
     @IsString()
-    @ApiProperty({ description: "Identifiant de la connexion associée" })
+    @ApiProperty({ description: 'Identifiant de la connexion associée' })
     public deviceId: string;
 
     @IsNotEmpty()
     @IsString()
-    @ApiProperty({ description: "Nom lisible ou étiquette de la requête" })
+    @ApiProperty({ description: 'Nom lisible ou étiquette de la requête' })
     public name: string;
 
     @IsOptional()
     @IsString()
-    @ApiProperty({ description: "Description de la requête" })
+    @ApiProperty({ description: 'Description de la requête' })
     public description?: string;
 
     @IsArray()
     @ArrayNotEmpty()
     @IsEnum(ComRequestType, { each: true })
-    @ApiProperty({ description: "Type(s) de la requête de communication", enum: ComRequestType, isArray: true })
+    @ApiProperty({ description: 'Type(s) de la requête de communication', enum: ComRequestType, isArray: true })
     public type: ComRequestType[];
 
     @IsNotEmpty()
     @ValidateNested()
     @Type(() => ComRequestConfigDTO)
-    @ApiProperty({ description: "Configuration Modbus (fonction, adresse, paramètres)" })
+    @ApiProperty({ description: 'Configuration Modbus (fonction, adresse, paramètres)' })
     public config: ComRequestConfigDTO;
     @IsOptional()
     @IsBoolean()

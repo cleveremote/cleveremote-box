@@ -3,7 +3,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import ModbusRTU from "modbus-serial";
+import ModbusRTU from 'modbus-serial';
 import { create, all, MathNode, EvalFunction } from 'mathjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
@@ -18,7 +18,7 @@ const DEFAULT_LENGTH_BY_TYPE: Record<ModbusValueType, number> = {
     [ModbusValueType.FLOAT]: 2,
     [ModbusValueType.UINT32]: 2,
     [ModbusValueType.INT]: 1,
-    [ModbusValueType.FLOAT_6_BYTES]: 3,
+    [ModbusValueType.FLOAT_6_BYTES]: 3
 };
 
 /** REG1439, position du point décimal utilisée par les formules cumulative du compteur d'eau ultrasonique */
@@ -665,7 +665,7 @@ export class ModbusService {
         return detectedRegister;
 
     }
-  
+
 
     private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         if (!comRequest) {
@@ -714,18 +714,18 @@ export class ModbusService {
             } else {
                 fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
             }
-            if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? "d'écriture" : "de lecture"} configurée pour cette tâche`);
-            if (typeof client[fn] !== "function") throw new Error(`Fonction Modbus inconnue: ${fn}`);
+            if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? 'd\'écriture' : 'de lecture'} configurée pour cette tâche`);
+            if (typeof client[fn] !== 'function') throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
             const addr = comRequest.config.address;
             const params = comRequest.config.params || null;
             const type = comRequest.config.type;
 
             // --- Lecture ---
-            if (fn.startsWith("read")) {
+            if (fn.startsWith('read')) {
                 const length = params.length || (type ? DEFAULT_LENGTH_BY_TYPE[type] : 1);
                 const data = await client[fn](addr, length);
-                if (!data?.data) throw new Error("Aucune donnée reçue");
+                if (!data?.data) throw new Error('Aucune donnée reçue');
 
                 // readCoils/readDiscreteInputs renvoient des booléens (états ON/OFF), pas des
                 // registres 16 bits : le décodage ne s'applique qu'aux registres.
@@ -744,7 +744,7 @@ export class ModbusService {
                 return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
             }
             // --- Écriture ---
-            else if (fn.startsWith("write")) {
+            else if (fn.startsWith('write')) {
                 const address = param.params?.persistence?.persist ? param.address + param.params?.persistence?.address : param.address;
                 const data = await client[fn](address, param.params.value);
                 this.logger.log({ label: comRequest.name, value: param.params.value }, 'modbus write done');
@@ -752,9 +752,9 @@ export class ModbusService {
             }
 
             // --- Fonction non supportée ---
-            else {
-                throw new Error(`Type de fonction non supporté: ${fn}`);
-            }
+
+            throw new Error(`Type de fonction non supporté: ${fn}`);
+
 
         } catch (err) {
             this.logger.error({ taskId, err: err.message }, 'modbus task error');

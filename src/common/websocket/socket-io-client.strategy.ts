@@ -22,13 +22,13 @@ export class SocketIoClientStrategy extends Server
     /* istanbul ignore next */
     public listen(callback: () => void): void {
         this.client.on('connection', () => {
-          
+
         });
         this.client.on('error', (error) => {
-         
+
         });
         this.client.on('connected', (connected) => {
-          
+
         });
 
 

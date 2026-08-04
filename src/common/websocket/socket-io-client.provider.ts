@@ -10,7 +10,7 @@ export class SocketIoClientProvider {
 
     private _socket: Socket;
     private _localSocket: Socket;
-    
+
     public _getSerial(): string {
         return fs.readFileSync('/home/clv/udi/unique_device_id', 'utf8');
     }
@@ -19,7 +19,7 @@ export class SocketIoClientProvider {
         const socket = io(isLocal ? this._config.get('SOCKET_SERVER_LOCAL') : this._config.get('SOCKET_SERVER'), {
             extraHeaders: {
                 boxId: this._getSerial(),
-                type:'box'
+                type: 'box'
             }
         });
         isLocal ? (this._localSocket = socket) : (this._socket = socket);

@@ -95,7 +95,7 @@ export class TriggerService {
     }
 
     private _enqueueCheckTrigger(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): boolean {
-        if (!!trigger.isCheckInProgress) {
+        if (trigger.isCheckInProgress) {
             if (!this.triggerCheckQueue.find(x => x.trigger.id === trigger.id)) {
                 this.triggerCheckQueue.push({ trigger, data });
             }

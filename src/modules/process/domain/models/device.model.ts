@@ -20,7 +20,7 @@ export class MasterConfigModel {
     public ipAddress?: string;
     public port?: number;
     public baudRate?: number;
-    public path?:string;
+    public path?: string;
     public timeout?: number;
     // Registres à sonder (unit id DEFAULT_UNCONFIGURED_UNIT_ID) pour détecter un nouveau slave
     // non configuré : vide/absent = découverte désactivée pour ce Master.
@@ -39,7 +39,7 @@ export class DeviceModel {
     public kind?: DeviceKind;
     public description: string;
     public config: MasterConfigModel | SlaveConfigModel;
-    
+
     public createdAt?: Date;
     public updatedAt?: Date;
     public deletedAt?: Date | null = null;

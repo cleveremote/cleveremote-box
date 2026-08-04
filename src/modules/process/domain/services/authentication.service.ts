@@ -3,8 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
 import { AuthenticationModel } from '../models/authentication.model';
-import * as bcrypt from "bcrypt";
-import * as generator from "generate-password";
+import * as bcrypt from 'bcrypt';
+import * as generator from 'generate-password';
 //var fs = require('fs');
 import * as fs from 'fs'
 import { ConfigService } from '@nestjs/config';
@@ -22,7 +22,7 @@ export class AuthenticationService {
         const salt = bcrypt.genSaltSync(13);
         const password = bcrypt.hashSync(this._config.get('INITIAL_PASSWORD'), salt);
         const login: string = this._getSerial();
-        return { id: login, login, password }; 
+        return { id: login, login, password };
     }
 
     public _getSerial(): string {

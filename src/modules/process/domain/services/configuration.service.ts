@@ -24,7 +24,7 @@ export class StructureService {
     public sequences: SequenceModel[];
     public schedules: ScheduleModel[];
     public triggers: TriggerModel[];
-    public deviceListeners: { subject: BehaviorSubject<SensorValueModel | ProcessValueModel>, deviceId }[] = [];
+    public deviceListeners: { subject: BehaviorSubject<SensorValueModel | ProcessValueModel>; deviceId }[] = [];
 
     public constructor(
         private cycleRepository: CycleRepository,
@@ -142,7 +142,7 @@ export class StructureService {
     private _buildProcessValues(): ProcessValueModel[] {
         const cycles = this.structure.cycles.map((cycle) => this._toProcessValue(cycle, ExecutableType.CYCLE));
         const sequences = this.structure.getSequences().map((sequence) => this._toProcessValue(sequence, ExecutableType.SEQUENCE));
-        return [...cycles, ...sequences]; 
+        return [...cycles, ...sequences];
     }
 
     private _toProcessValue(executable: CycleModel | SequenceModel, type: ExecutableType): ProcessValueModel {
