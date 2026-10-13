@@ -1,0 +1,107 @@
+name: Build & Push to ECR
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Tag de version sémantique de l''image'
+        required: true
+        type: string
+      env-tags:
+        description: 'Tags d''environnement additionnels (JSON array, ex: ["dev","prd"])'
+        required: true
+        type: string
+      aws-region:
+        description: 'Région AWS'
+        required: false
+        type: string
+        default: eu-west-3
+      ecr-repository:
+        description: 'Nom du repository ECR'
+        required: false
+        type: string
+        default: cleveremote/clv-box
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+    outputs:
+      image:
+        description: 'Image ECR poussée (tag de version)'
+        value: ${{ jobs.deploy.outputs.image }}
+
+jobs:
+  deploy:
+    name: Build & Push to ECR
+    runs-on: self-hosted
+    environment: production
+    outputs:
+      image: ${{ steps.push-image.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com"
+          echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+
+          TEMP_DOCKER_CONFIG=$(mktemp -d)
+          echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
+          aws ecr get-login-password --region ${{ inputs.aws-region }} | \
+            DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
+
+      - name: Build & tag image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ inputs.version }}
+          ENV_TAGS: ${{ inputs.env-tags }}
+        run: |
+          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          # Tag fixe : version sémantique
+          TAGS="-t $IMAGE_BASE:$IMAGE_TAG"
+
+          # Tags d'environnement (multi) depuis le JSON array (sans jq)
+          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
+            TAGS="$TAGS -t $IMAGE_BASE:$ENV"
+            echo "Adding env tag: $ENV"
+          done
+
+          echo "Building with tags: $TAGS"
+          docker build $TAGS .
+
+      - name: Push all tags to ECR
+        id: push-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ inputs.version }}
+          ENV_TAGS: ${{ inputs.env-tags }}
+        run: |
+          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          # Push du tag version sémantique
+          docker push "$IMAGE_BASE:$IMAGE_TAG"
+
+          # Push de chaque tag d'environnement (sans jq)
+          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
+            echo "Pushing env tag: $ENV"
+            docker push "$IMAGE_BASE:$ENV"
+          done
+
+          echo "image=$IMAGE_BASE:$IMAGE_TAG" >> $GITHUB_OUTPUT

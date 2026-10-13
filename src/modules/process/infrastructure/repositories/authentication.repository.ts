@@ -13,7 +13,7 @@ export class AuthenticationRepository {
     ) { }
 
     public async get(): Promise<AuthenticationModel> {
-        const authentication = await this.authenticationModel.findOne();
+        const authentication = await this.authenticationModel.findOne({ _id: "62123e86-ac58-4f72-b40e-9e461f032ab2"});
         return authentication ? AuthenticationMapper.mapToModel(authentication) : new AuthenticationModel();
     }
 

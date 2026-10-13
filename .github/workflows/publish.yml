@@ -19,9 +19,6 @@ permissions:
   pull-requests: read
 
 env:
-  AWS_REGION: eu-west-3
-  ECR_REPOSITORY: cleveremote/clv-box
-  CONTAINER_NAME: clv-box
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -84,129 +81,24 @@ jobs:
   # ─────────────────────────────────────────────
   deploy:
     name: Build & Push to ECR
-    runs-on: self-hosted
-    environment: production
     needs: [resolve, publish-release]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
-          echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
-
-          TEMP_DOCKER_CONFIG=$(mktemp -d)
-          echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-            DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
-          echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
-
-      - name: Build & tag image
-        id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
-          ENV_TAGS: ${{ needs.resolve.outputs.env_tags }}
-        run: |
-          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
-
-          # Tag fixe : version sémantique
-          TAGS="-t $IMAGE_BASE:$IMAGE_TAG"
-
-          # Tags d'environnement (multi) depuis le JSON array (sans jq)
-          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
-            TAGS="$TAGS -t $IMAGE_BASE:$ENV"
-            echo "Adding env tag: $ENV"
-          done
-
-          echo "Building with tags: $TAGS"
-          docker build $TAGS .
-
-      - name: Push all tags to ECR
-        id: push-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
-          ENV_TAGS: ${{ needs.resolve.outputs.env_tags }}
-        run: |
-          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
-
-          # Push du tag version sémantique
-          docker push "$IMAGE_BASE:$IMAGE_TAG"
-
-          # Push de chaque tag d'environnement (sans jq)
-          for ENV in $(echo "$ENV_TAGS" | tr -d '[]"' | tr ',' ' '); do
-            echo "Pushing env tag: $ENV"
-            docker push "$IMAGE_BASE:$ENV"
-          done
-
-          echo "image=$IMAGE_BASE:$IMAGE_TAG" >> $GITHUB_OUTPUT
+    uses: ./.github/workflows/deploy-ecr.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      env-tags: ${{ needs.resolve.outputs.env_tags }}
+      aws-region: eu-west-3
+      ecr-repository: cleveremote/clv-box
+    secrets: inherit
 
   # ─────────────────────────────────────────────
   # JOB 4 — Build SEA & upload vers S3 (test)
   # ─────────────────────────────────────────────
   deploy-sea-s3:
-    name: Build SEA & Upload to S3 (${{ matrix.name }})
-    runs-on: ${{ matrix.runs-on }}
-    environment: production
+    name: Deploy SEA to S3
     needs: [resolve, publish-release]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: raspberry-pi
-            runs-on: ubuntu-24.04-arm
-          - name: macos
-            runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build SEA binary
-        run: npm run build:sea
-
-      - name: Locate release folder
-        id: release-dir
-        run: |
-          DIR=$(find release -mindepth 1 -maxdepth 1 -type d | head -n1)
-          echo "name=$(basename "$DIR")" >> $GITHUB_OUTPUT
-
-      - name: Archive release folder
-        env:
-          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
-        run: tar -czf "${RELEASE_NAME}.tar.gz" -C release "$RELEASE_NAME"
-
-      - name: Configure AWS credentials (S3)
-        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
-        with:
-          aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Upload archive to S3
-        env:
-          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
-          IMAGE_TAG: ${{ needs.resolve.outputs.version }}
-        run: |
-          aws s3 cp "${RELEASE_NAME}.tar.gz" \
-            "s3://cleveremote-bundles-182399677959-eu-west-3-an/${CONTAINER_NAME}/${IMAGE_TAG}/${RELEASE_NAME}.tar.gz"
+    uses: ./.github/workflows/deploy-sea-s3.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      aws-region: eu-west-3
+      container-name: clv-box
+    secrets: inherit

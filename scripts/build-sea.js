@@ -117,8 +117,8 @@ for (const srcDir of pkgDirs) {
   fs.cpSync(srcDir, destDir, { recursive: true });
 }
 
-// ConfigModule.forRoot() resolves .env relative to process.cwd(), so it must
-// sit next to the executable when it's launched from the release folder.
+// AppModule resolves .env next to process.execPath (the executable itself) when
+// present, so it must be copied alongside the built binary here.
 const envPath = path.join(root, ".env");
 if (fs.existsSync(envPath)) {
   fs.cpSync(envPath, path.join(releaseDir, ".env"));

@@ -1,0 +1,78 @@
+name: Deploy SEA to S3
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version tag utilisée comme chemin S3'
+        required: true
+        type: string
+      aws-region:
+        description: 'Région AWS'
+        required: false
+        type: string
+        default: eu-west-3
+      container-name:
+        description: 'Nom du conteneur/app utilisé dans le chemin S3'
+        required: false
+        type: string
+        default: clv-box
+    secrets:
+      AWS_S3_ACCESS_KEY_ID:
+        required: true
+      AWS_S3_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy-sea-s3:
+    name: Build SEA & Upload to S3 (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: raspberry-pi
+            runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SEA binary
+        run: npm run build:sea
+
+      - name: Locate release folder
+        id: release-dir
+        run: |
+          DIR=$(find release -mindepth 1 -maxdepth 1 -type d | head -n1)
+          echo "name=$(basename "$DIR")" >> $GITHUB_OUTPUT
+
+      - name: Archive release folder
+        env:
+          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
+        run: tar -czf "${RELEASE_NAME}.tar.gz" -C release "$RELEASE_NAME"
+
+      - name: Configure AWS credentials (S3)
+        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        with:
+          aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Upload archive to S3
+        env:
+          RELEASE_NAME: ${{ steps.release-dir.outputs.name }}
+          IMAGE_TAG: ${{ inputs.version }}
+          CONTAINER_NAME: ${{ inputs.container-name }}
+        run: |
+          aws s3 cp "${RELEASE_NAME}.tar.gz" \
+            "s3://cleveremote-bundles-182399677959-eu-west-3-an/${CONTAINER_NAME}/${IMAGE_TAG}/${RELEASE_NAME}.tar.gz"

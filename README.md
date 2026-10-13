@@ -270,3 +270,66 @@ async function readTempHumidity(slaveId = 1) {
  
   return { temperature, humidity };
 }
+
+
+Accès SSH par clé — procédure
+8 oct. 2026 · @Nadime
+Objectif : se connecter en SSH à un appareil (serveur, Raspberry Pi…) sans taper de mot de passe. À refaire pour chaque nouvel appareil.
+Variables à adapter
+• USER : utilisateur sur l'appareil (ex. clv)
+• IP : adresse de l'appareil (ex. 192.168.1.34 — trouvée avec hostname -I)
+• NOM_CLE : nom du fichier de clé (ex. clv_remote_access)
+• ALIAS : raccourci de connexion (ex. box)
+Méthode recommandée : générer la clé sur votre PC
+La clé privée ne quitte jamais votre PC.
+1. Sur votre PC, générer la clé :
+ssh-keygen -t ed25519 -f ~/.ssh/NOM_CLE -C "acces-ALIAS"
+(Entrée deux fois pour aucune passphrase, ou saisissez-en une pour plus de sécurité.)
+2. Copier la clé publique sur l'appareil (le mot de passe est demandé une dernière fois) :
+ssh-copy-id -i ~/.ssh/NOM_CLE.pub USER@IP
+Sous Windows (PowerShell), sans ssh-copy-id :
+type $env:USERPROFILE\.ssh\NOM_CLE.pub | ssh USER@IP "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+3. Ajouter un raccourci dans ~/.ssh/config sur votre PC :
+Host ALIAS
+  HostName IP
+  User USER
+  IdentityFile ~/.ssh/NOM_CLE
+4. Tester : ssh ALIAS — aucune demande de mot de passe.
+Depuis un Mac
+Ouvrir l'app Terminal (Cmd + Espace, taper « Terminal »). Tout est déjà installé sur macOS, y compris ssh-copy-id.
+1. Générer la clé :
+ssh-keygen -t ed25519 -f ~/.ssh/NOM_CLE -C "acces-ALIAS"
+2. (Optionnel, si vous avez mis une passphrase) l'enregistrer dans le trousseau macOS pour ne plus la taper :
+ssh-add --apple-use-keychain ~/.ssh/NOM_CLE
+3. Envoyer la clé publique sur l'appareil (mot de passe demandé une dernière fois) :
+ssh-copy-id -i ~/.ssh/NOM_CLE.pub USER@IP
+4. Créer ou compléter le fichier de config :
+touch ~/.ssh/config && chmod 600 ~/.ssh/config
+open -e ~/.ssh/config
+Puis y coller :
+Host ALIAS
+  HostName IP
+  User USER
+  IdentityFile ~/.ssh/NOM_CLE
+  AddKeysToAgent yes
+  UseKeychain yes
+5. Tester : ssh ALIAS
+Si la clé a été générée sur l'appareil (méthode alternative ci-dessous) : coller la clé privée avec pbpaste > ~/.ssh/NOM_CLE après l'avoir copiée, puis chmod 600 ~/.ssh/NOM_CLE.
+Méthode alternative : générer la clé sur l'appareil
+C'est ce qui a été fait pour la box. À utiliser si vous êtes déjà connecté sur l'appareil.
+1. Sur l'appareil :
+ssh-keygen -t ed25519 -f ~/.ssh/NOM_CLE -N "" -C "acces-ALIAS"
+cat ~/.ssh/NOM_CLE.pub >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+2. Tester localement : ssh -o PasswordAuthentication=no -i ~/.ssh/NOM_CLE USER@localhost echo OK
+3. Afficher la clé privée (cat ~/.ssh/NOM_CLE), la coller sur votre PC dans ~/.ssh/NOM_CLE, puis chmod 600 ~/.ssh/NOM_CLE (Linux/macOS).
+4. Ajouter le bloc Host dans ~/.ssh/config (voir ci-dessus) et tester ssh ALIAS.
+5. Supprimer la clé privée de l'appareil : rm ~/.ssh/NOM_CLE
+Optionnel : interdire le mot de passe
+Seulement après avoir vérifié que la connexion par clé marche, et en gardant une session ouverte pendant le test :
+sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+Dépannage
+• Mot de passe encore demandé : vérifier les droits (~/.ssh en 700, authorized_keys en 600) et lancer ssh -v ALIAS pour voir quelle clé est essayée.
+• « UNPROTECTED PRIVATE KEY FILE » : chmod 600 ~/.ssh/NOM_CLE.
+• Retirer l'accès d'un PC : supprimer sa ligne dans ~/.ssh/authorized_keys de l'appareil.
