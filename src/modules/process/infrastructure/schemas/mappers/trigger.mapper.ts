@@ -10,7 +10,7 @@ export class TriggerMapper {
         model.cycleId = trigger.cycleId;
         model.name = trigger.name;
         model.description = trigger.description;
-        model.conditions = (trigger.conditions ?? []).map(ConditionMapper.mapToModel);
+        model.conditions = ConditionMapper.mapListToModel(trigger.conditions);
         model.trigger = { timeAfter: trigger.trigger?.timeAfter, sunBehavior: trigger.trigger?.sunBehavior };
         model.delay = trigger.delay;
         model.shouldConfirmation = trigger.shouldConfirmation;

@@ -19,7 +19,7 @@ export class CycleMapper {
         model.status = cycle.status;
         model.style = cycle.style;
         model.executionMode = cycle.executionMode;
-        model.conditions = (cycle.conditions ?? []).map(ConditionMapper.mapToModel);
+        model.conditions = ConditionMapper.mapListToModel(cycle.conditions);
         model.modePriority = (cycle.modePriority ?? []).map((mp) => ({ mode: mp.mode, priority: mp.priority }));
         model.sequences = [];
         model.schedules = [];

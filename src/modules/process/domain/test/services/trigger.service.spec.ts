@@ -18,7 +18,7 @@ import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequen
 import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedule.schema';
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { ConditionModel } from '@process/domain/models/condition.model';
+import { ConditionModel, ConditionOperator } from '@process/domain/models/condition.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ElementType } from '@process/domain/models/event.model';
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
@@ -28,10 +28,9 @@ import { CreateTriggerModel } from './trigger.spec-mock';
 
 function CreateConditionModel(overrides: Partial<ConditionModel> = {}): ConditionModel {
     const condition = new ConditionModel();
-    condition.name = 'condition';
     condition.elementId = 'sensor-1';
     condition.elementType = ElementType.SENSOR;
-    condition.operator = '>';
+    condition.operator = ConditionOperator.GT;
     condition.value = 5;
     return Object.assign(condition, overrides);
 }
@@ -227,7 +226,7 @@ describe('TriggerService', () => {
 
     describe('reactive condition check (via onElementValueChanged)', () => {
         it('should schedule execution when a matching condition is verified', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
@@ -240,7 +239,7 @@ describe('TriggerService', () => {
         });
 
         it('should execute the planified process and re-open the trigger for checking once the cron tick fires', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
@@ -257,7 +256,7 @@ describe('TriggerService', () => {
         });
 
         it('should not schedule execution when the condition is not verified', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 2 }));
@@ -282,7 +281,7 @@ describe('TriggerService', () => {
         it('should skip a paused trigger', async () => {
             const trigger = CreateTriggerModel({
                 isPaused: true,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -298,7 +297,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(),
                 delay: 1000 * 60 * 60,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -313,7 +312,7 @@ describe('TriggerService', () => {
         it('should queue a check instead of re-running it when one is already in progress for that trigger', async () => {
             const trigger = CreateTriggerModel({
                 isCheckInProgress: true,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -326,7 +325,7 @@ describe('TriggerService', () => {
         });
 
         it('should re-run a queued check with its own queued data once the in-progress check completes', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             let resolveFirstCheck: (v: SensorValueModel) => void;
@@ -418,7 +417,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(Date.now() - 2000),
                 delay: 1000,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -434,7 +433,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(Date.now() - 100000),
                 delay: 0,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -450,7 +449,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(),
                 delay: undefined,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -463,7 +462,7 @@ describe('TriggerService', () => {
         });
 
         it('should not verify the condition when the device value resolves to undefined', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(undefined);
@@ -476,7 +475,7 @@ describe('TriggerService', () => {
 
         it('should read `.status` instead of `.value` for a non-SENSOR condition element type', async () => {
             const trigger = CreateTriggerModel({
-                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 1 })]
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: ConditionOperator.EQ, value: 'ON' })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -488,9 +487,9 @@ describe('TriggerService', () => {
             expect(schedulerRegistry.getCronJobs().size).toEqual(1);
         });
 
-        it('should compare a STOPPED status as 0 for a non-SENSOR condition element type', async () => {
+        it('should compare a STOPPED status as OFF for a non-SENSOR condition element type', async () => {
             const trigger = CreateTriggerModel({
-                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 0 })]
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: ConditionOperator.EQ, value: 'OFF' })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -503,7 +502,7 @@ describe('TriggerService', () => {
         });
 
         it('should not verify the condition when the extracted value itself is undefined', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue({ value: undefined } as never);
@@ -517,7 +516,7 @@ describe('TriggerService', () => {
         it('should compute the execution time from sunrise when sunBehavior.sunState is SUNRISE', async () => {
             const trigger = CreateTriggerModel({
                 trigger: { sunBehavior: { sunState: SunState.SUNRISE, timeDirection: TimeDirection.AFTER, time: 0 } },
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -532,7 +531,7 @@ describe('TriggerService', () => {
         it('should compute the execution time from sunset when sunBehavior.sunState is not SUNRISE', async () => {
             const trigger = CreateTriggerModel({
                 trigger: { sunBehavior: { sunState: SunState.SUNSET, timeDirection: TimeDirection.AFTER, time: 0 } },
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();

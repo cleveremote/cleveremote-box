@@ -35,7 +35,7 @@ import {
     ExecutionMode,
     ProcessMode
 } from '@process/domain/interfaces/executable.interface';
-import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
+import { ConditionConnector, ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
@@ -112,24 +112,24 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             expect(model.modePriority).toEqual([{ mode: ProcessMode.MANUAL, priority: 5 }]);
         });
 
-        it('should map every condition, including order/symbolStart/symbolEnd', () => {
+        it('should map every condition, including order/connector/symbolStart/symbolEnd', () => {
             const first = Object.assign(new ConditionSync(), {
-                name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 5,
-                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN, symbolEnd: ConditionSymbolEnd.AND
+                elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 5,
+                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN
             });
             const second = Object.assign(new ConditionSync(), {
-                name: 'c2', elementId: 'dev-2', elementType: 'SENSOR', operator: '<', value: 1,
-                order: 1, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
+                elementId: 'dev-2', elementType: 'SENSOR', operator: '<', value: 1,
+                order: 1, connector: ConditionConnector.AND, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
             });
             const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto({ conditions: [first, second] }));
 
             expect(model.conditions).toHaveLength(2);
             expect(model.conditions[0]).toEqual(expect.objectContaining({
-                name: 'c1', elementId: 'dev-1', elementType: 'SENSOR',
-                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN, symbolEnd: ConditionSymbolEnd.AND
+                elementId: 'dev-1', elementType: 'SENSOR',
+                order: 0, symbolStart: ConditionSymbolStart.OPEN_PAREN, symbolEnd: ConditionSymbolEnd.NONE
             }));
             expect(model.conditions[1]).toEqual(expect.objectContaining({
-                name: 'c2', order: 1, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
+                order: 1, connector: ConditionConnector.AND, symbolEnd: ConditionSymbolEnd.CLOSE_PAREN
             }));
         });
 
@@ -150,7 +150,7 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
         it('should map a normal sequence with its module references and conditions', () => {
             const module1 = Object.assign(new moduleConfigsSync(), { moduleId: 'module-1' });
             const module2 = Object.assign(new moduleConfigsSync(), { moduleId: 'module-2' });
-            const seqCondition = Object.assign(new ConditionSync(), { name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
+            const seqCondition = Object.assign(new ConditionSync(), { elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
             const sequenceSync = Object.assign(new SequenceSync(), {
                 _id: 'seq-1', name: 'seq', moduleConfigs: [module1, module2],
                 securityConfig: Object.assign(new SecurityConfigSync(), { maxDuration: 30, conditions: [seqCondition] })
@@ -167,11 +167,11 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
                 configTiming: { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 }
             });
             expect(sequence.securityConfig.conditions).toHaveLength(1);
-            expect(sequence.securityConfig.conditions[0]).toEqual(expect.objectContaining({ name: 'c1', elementId: 'dev-1' }));
+            expect(sequence.securityConfig.conditions[0]).toEqual(expect.objectContaining({ elementId: 'dev-1' }));
         });
 
         it('should map a normal trigger with its conditions', () => {
-            const triggerCondition = Object.assign(new ConditionSync(), { name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
+            const triggerCondition = Object.assign(new ConditionSync(), { elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
             const triggerSync = Object.assign(new TriggerSynchronizeDTO(), {
                 _id: 'trigger-1', shouldConfirmation: false, isPaused: false,
                 trigger: Object.assign(new TriggerSync(), { timeAfter: 0 }), cycleId: 'cycle-1', delay: 0,
@@ -290,11 +290,11 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
         });
 
         it('should map every condition', () => {
-            const condition = Object.assign(new ConditionSync(), { name: 'c1', elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
+            const condition = Object.assign(new ConditionSync(), { elementId: 'dev-1', elementType: 'SENSOR', operator: '>', value: 1 });
             const model = TriggerSynchronizeDTO.mapToTriggerModel(CreateDto({ conditions: [condition] }));
 
             expect(model.conditions).toHaveLength(1);
-            expect(model.conditions[0]).toEqual(expect.objectContaining({ name: 'c1', elementId: 'dev-1' }));
+            expect(model.conditions[0]).toEqual(expect.objectContaining({ elementId: 'dev-1' }));
         });
 
         it('should default conditions to an empty array when absent', () => {

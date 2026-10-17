@@ -262,10 +262,14 @@ export class ScheduleService {
             try {
                 value.nextDate().toJSDate();
             } catch (e) {
-                // nextDate() ne doit throw que pour un one-shot deja passe (cf. lib "cron") ; si un
-                // job recurrent finit ici pour une autre raison, c'etait jusqu'ici totalement
-                // silencieux (job + schedule persiste supprimes sans aucune trace de la cause reelle).
-                this.logger.error({ error: e, scheduleId: key }, 'clearAllSchedules: unexpected error computing nextDate, deleting job');
+                // nextDate() throw normalement pour un one-shot deja passe (cf. lib "cron") : cas nominal
+                // (ex: schedule d'un trigger), pas une erreur. Seul un job recurrent qui finit ici est anormal.
+                const isPastOneShot = typeof value.cronTime?.source !== 'string';
+                if (isPastOneShot) {
+                    this.logger.debug({ scheduleId: key }, 'clearAllSchedules: one-shot job already executed, deleting job');
+                } else {
+                    this.logger.error({ error: (e as Error)?.message ?? e, scheduleId: key }, 'clearAllSchedules: unexpected error computing nextDate, deleting job');
+                }
                 await this.deleteCronJob(key);
             }
         }

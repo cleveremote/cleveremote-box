@@ -424,6 +424,11 @@ export class ProcessService {
     }
 
     private async _manageProcessMode(process: ProcessModel): Promise<void> {
+        // conditions du cycle fausses : on ne demarre pas le cycle (ni execution, ni confirmation)
+        if (!(await this._areCycleConditionsVerified(process))) {
+            this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
+            return;
+        }
         const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
         const report: ProcessReport = [];
         const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
@@ -456,8 +461,6 @@ export class ProcessService {
             }
         }
 
-        await this._applyCycleConditionsGate(process, report);
-
         const confirmationType = report.find((x) => x.type === ProcessType.CONFIRMATION);
         if (confirmationType) {
             process.type = ProcessType.CONFIRMATION;
@@ -467,17 +470,9 @@ export class ProcessService {
         }
     }
 
-    private async _applyCycleConditionsGate(process: ProcessModel, report: ProcessReport): Promise<void> {
-        const isConditionsVerified = await evaluateConditions(process.cycle.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
-        if (isConditionsVerified) {
-            return;
-        }
-        process.type = ProcessType.CONFIRMATION;
-        if (!this.processList.find(x => x.cycle._id === process.cycle._id)) {
-            this.processList.push(process);
-        }
-        const cause = 'condition non vérifiée pour le cycle : ' + process.cycle.name;
-        report.push({ id: process.cycle._id, type: ProcessType.CONFIRMATION, cause });
+    private _areCycleConditionsVerified(process: ProcessModel): Promise<boolean> {
+        return evaluateConditions(process.cycle.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId),
+            (detail) => this.logger.warn({ cycleId: process.cycle._id, ...detail }, 'cycle conditions not verified'));
     }
 
     private _executeProcess(process: ProcessModel): void {
@@ -922,7 +917,8 @@ export class ProcessService {
 
     private _checkSequenceCondition(sequenceId: string): Promise<boolean> {
         const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
-        return evaluateConditions(sequence?.securityConfig?.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
+        return evaluateConditions(sequence?.securityConfig?.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId),
+            (detail) => this.logger.warn({ sequenceId, ...detail }, 'sequence conditions not verified'));
     }
 
     private async _switchProcess(previousData: { id: string; names: string[]; duration: number },

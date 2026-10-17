@@ -610,7 +610,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
         it('should require confirmation instead of silently skipping a sequence whose condition is already satisfied', async () => {
             const condition = Object.assign(new ConditionModel(), {
-                name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
+                elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
             });
             const [cycle] = await SeedCycles([
                 { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
@@ -632,8 +632,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         });
 
         it('should not skip the sequence and short-circuit further evaluation once an earlier condition fails', async () => {
-            const conditionA = Object.assign(new ConditionModel(), { name: 'a', elementId: 'sensor-a', elementType: 'SENSOR', operator: '>', value: 5 });
-            const conditionB = Object.assign(new ConditionModel(), { name: 'b', elementId: 'sensor-b', elementType: 'SENSOR', operator: '>', value: 5 });
+            const conditionA = Object.assign(new ConditionModel(), { elementId: 'sensor-a', elementType: 'SENSOR', operator: '>', value: 5 });
+            const conditionB = Object.assign(new ConditionModel(), { elementId: 'sensor-b', elementType: 'SENSOR', operator: '>', value: 5 });
             const [cycle] = await SeedCycles([
                 { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [conditionA, conditionB] }] }
             ]);
@@ -652,7 +652,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         });
 
         it('should not skip the sequence when the device value resolves to a falsy/missing value', async () => {
-            const condition = Object.assign(new ConditionModel(), { name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
             const [cycle] = await SeedCycles([
                 { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
             ]);
@@ -668,7 +668,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         });
 
         it('should not skip the sequence when the extracted value itself is undefined', async () => {
-            const condition = Object.assign(new ConditionModel(), { name: 'c', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
             const [cycle] = await SeedCycles([
                 { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
             ]);
@@ -799,7 +799,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     describe('premature stop races (concurrent reset while starting/advancing)', () => {
         it('should not start sequence 2 if the cycle is stopped while sequence 1 hands off to it', async () => {
             const condition = Object.assign(new ConditionModel(), {
-                name: 'gate', elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
+                elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
             });
             const [cycle] = await SeedCycles([
                 {

@@ -19,7 +19,7 @@ export class SequenceMapper {
         model.securityConfig = {
             maxDuration: sequence.securityConfig?.maxDuration,
             ...(sequence.securityConfig?.customStacks !== undefined && { customStacks: sequence.securityConfig.customStacks.map(CustomStackMapper.mapToModel) }),
-            ...(sequence.securityConfig?.conditions !== undefined && { conditions: sequence.securityConfig.conditions.map(ConditionMapper.mapToModel) })
+            ...(sequence.securityConfig?.conditions !== undefined && { conditions: ConditionMapper.mapListToModel(sequence.securityConfig.conditions) })
         };
         model.moduleConfigs = (sequence.moduleConfigs ?? []).map((ref) => ({
             moduleId: ref.moduleId,

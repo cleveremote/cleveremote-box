@@ -3,7 +3,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
-import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';

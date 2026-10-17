@@ -3,7 +3,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
-import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
+import { ConditionConnector, ConditionOperator, ConditionParentType, ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
+import { ElementType as ConditionElementType } from '@process/domain/models/event.model';
+import { validateConditionStructure } from '@process/domain/utils/evaluate-conditions.util';
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
@@ -26,9 +28,38 @@ import {
 } from '@process/domain/models/synchronize.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
+
+@ValidatorConstraint({ name: 'condition-value', async: false })
+export class IsConditionValue implements ValidatorConstraintInterface {
+    public validate(value: unknown, args: ValidationArguments) {
+        const condition = args.object as ConditionSync;
+        if (condition.elementType === ConditionElementType.SENSOR) {
+            return (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && !Number.isNaN(Number(value));
+        }
+        return value === ExecutableAction.ON || value === ExecutableAction.OFF;
+    }
+
+    public defaultMessage(args: ValidationArguments) {
+        return '($value) must be numeric for a SENSOR condition, ON or OFF for a CYCLE/SEQUENCE condition';
+    }
+}
+
+@ValidatorConstraint({ name: 'condition-expression', async: false })
+export class IsValidConditionExpression implements ValidatorConstraintInterface {
+    private error: string | null = null;
+
+    public validate(conditions: ConditionSync[] | undefined) {
+        this.error = Array.isArray(conditions) ? validateConditionStructure(conditions) : null;
+        return this.error === null;
+    }
+
+    public defaultMessage() {
+        return `invalid conditions expression: ${this.error}`;
+    }
+}
 
 export class PersistenceDTO {
     @IsBoolean()
@@ -139,6 +170,7 @@ export class SecurityConfigSync {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsArray()
@@ -276,6 +308,7 @@ export class CycleSynchronizeDTO {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsString()
@@ -517,13 +550,11 @@ export class IsNumberOrString implements ValidatorConstraintInterface {
     }
 }
 export class ConditionSync {
-    @IsString()
-    public name: string;
     @IsDefined()
-    @Validate(IsNumberOrString)
-    public value: number | ExecutableAction;
-    @IsString()
-    public operator: string;
+    @Validate(IsConditionValue)
+    public value: number | string;
+    @IsEnum(ConditionOperator)
+    public operator: ConditionOperator;
     @IsString()
     public elementId: string;
     @IsEnum(ElementType)
@@ -531,22 +562,37 @@ export class ConditionSync {
     @IsNumber()
     public order: number;
     @IsOptional()
-    @IsEnum(ConditionSymbolStart)
+    @IsEnum(ConditionConnector)
+    public connector?: ConditionConnector;
+    @IsOptional()
+    @IsIn(Object.values(ConditionSymbolStart))
     public symbolStart?: ConditionSymbolStart;
     @IsOptional()
-    @IsEnum(ConditionSymbolEnd)
+    @IsIn(Object.values(ConditionSymbolEnd))
     public symbolEnd?: ConditionSymbolEnd;
+    @IsOptional()
+    @IsString()
+    public parentId?: string;
+    @IsOptional()
+    @IsEnum(ConditionParentType)
+    public parentType?: ConditionParentType;
+    // etat UI du builder, accepte mais non persiste
+    @IsOptional()
+    @IsBoolean()
+    public isModified?: boolean;
 
     public static toModel(conditionSync: ConditionSync): SynchronizeConditionModel {
         const condition = new SynchronizeConditionModel();
-        condition.name = conditionSync.name;
         condition.elementId = conditionSync.elementId;
         condition.elementType = conditionSync.elementType;
         condition.operator = conditionSync.operator;
         condition.value = conditionSync.value;
         condition.order = conditionSync.order;
-        condition.symbolStart = conditionSync.symbolStart;
-        condition.symbolEnd = conditionSync.symbolEnd;
+        condition.connector = conditionSync.connector;
+        condition.symbolStart = conditionSync.symbolStart ?? ConditionSymbolStart.NONE;
+        condition.symbolEnd = conditionSync.symbolEnd ?? ConditionSymbolEnd.NONE;
+        condition.parentId = conditionSync.parentId;
+        condition.parentType = conditionSync.parentType;
         return condition;
     }
 }
@@ -604,6 +650,7 @@ export class TriggerSynchronizeDTO {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsBoolean()
