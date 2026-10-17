@@ -125,7 +125,7 @@ describe('ActuatorService', () => {
             actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
                 actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
                 connection, CreateLoggerMock() as never
-            ));
+            ), { removeModuleConfigsByModuleId: jest.fn() } as never);
             service = new ActuatorService(CreateLoggerMock() as never, actuatorRepository, [new RpiActuatorStrategy(CreateLoggerMock() as never), new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never)]);
         }, 120000);
 

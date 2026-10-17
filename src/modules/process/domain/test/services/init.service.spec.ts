@@ -68,7 +68,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
             actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
             connection, CreateLoggerMock() as never
-        ));
+        ), { removeModuleConfigsByModuleId: jest.fn() } as never);
     }, 120000);
 
     afterAll(async () => {
@@ -126,6 +126,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             actuatorService as unknown as ActuatorService,
             deviceService as unknown as DeviceService,
             globalSettingsService as unknown as GlobalSettingsService,
+            {} as never,
+            { discover: jest.fn().mockResolvedValue([]) } as never,
             logger as never,
             processService as unknown as ProcessService
         );

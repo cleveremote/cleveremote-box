@@ -8,14 +8,17 @@ import {
 } from '@process/infrastructure/schemas/actuator.schema';
 import { Device, DeviceSchema } from '@process/infrastructure/schemas/device.schema';
 import { ComRequest, ComRequestSchema } from '@process/infrastructure/schemas/comrequest.schema';
+import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequence.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
+import { SequenceMongooseRepository } from '@process/infrastructure/repositories/sequence-mongoose.repository';
 import { ComRequestkMongooseRepository } from '@process/infrastructure/repositories/com-request-mongoose.repository';
 import { ModbusService } from '@process/domain/services/modbus.service';
+import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { ActuatorService } from '../actuator.service';
 import { RpiActuatorStrategy } from './rpi-actuator.strategy';
 import { ComActuatorStrategy } from './com-actuator.strategy';
@@ -35,7 +38,8 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
                 ]
             },
             { name: Device.name, schema: DeviceSchema },
-            { name: ComRequest.name, schema: ComRequestSchema }
+            { name: ComRequest.name, schema: ComRequestSchema },
+            { name: Sequence.name, schema: SequenceSchema }
         ])
     ],
     providers: [
@@ -46,7 +50,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         DeviceMongooseRepository,
         ComRequestRepository,
         ComRequestkMongooseRepository,
+        SequenceMongooseRepository,
         ModbusService,
+        WaveshareDiscoveryService,
         RpiActuatorStrategy,
         ComActuatorStrategy,
         CtrlActuatorStrategy,
@@ -56,6 +62,6 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             inject: [RpiActuatorStrategy, ComActuatorStrategy, CtrlActuatorStrategy]
         }
     ],
-    exports: [ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, ModbusService, CtrlActuatorStrategy]
+    exports: [ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, ModbusService, WaveshareDiscoveryService, CtrlActuatorStrategy]
 })
 export class ActuatorModule { }

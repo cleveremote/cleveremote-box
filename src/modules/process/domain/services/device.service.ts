@@ -26,27 +26,30 @@ export class DeviceService {
     }
 
     public async init(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).init(device);
+        return this._resolveStrategy(device).init(device);
     }
 
     public async reset(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).reset(device);
+        return this._resolveStrategy(device).reset(device);
     }
 
     public async configure(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).configure(device);
+        return this._resolveStrategy(device).configure(device);
     }
 
     public async write(device: DeviceModel, params: { name: string; value: number }): Promise<void> {
-        return this._resolveStrategy(device.kind).write(device, params);
+        return this._resolveStrategy(device).write(device, params);
     }
 
     public async read(device: DeviceModel, params: { name: string; value: number }): Promise<number> {
-        return this._resolveStrategy(device.kind).read(device, params);
+        return this._resolveStrategy(device).read(device, params);
     }
 
-    private _resolveStrategy(kind?: DeviceKind): DeviceStrategy {
-        const resolvedKind = kind ?? DeviceKind.MODBUS_SLAVE;
+    private _resolveStrategy(device: DeviceModel): DeviceStrategy {
+        if (device.type !== DeviceType.SLAVE) {
+            throw new NotImplementedError(`DeviceService: no strategy for ${device.type} device "${device._id}"`);
+        }
+        const resolvedKind = (device.config as SlaveConfigModel).kind ?? DeviceKind.MODBUS_SLAVE;
         const strategy = this._strategies.get(resolvedKind);
         if (!strategy) {
             throw new NotImplementedError(`DeviceService: unsupported device kind "${resolvedKind}"`);
@@ -56,7 +59,7 @@ export class DeviceService {
 
     public async initAll(): Promise<void> {
         const deviceModel = await this.deviceRepository.get('8d6f3fe2-af41-405b-9523-a0a6fb589b70') as DeviceModel
-        return this._resolveStrategy(deviceModel.kind).init(deviceModel);
+        return this._resolveStrategy(deviceModel).init(deviceModel);
     }
 
     /**
@@ -115,11 +118,11 @@ export class DeviceService {
         const slaveConfig = new SlaveConfigModel();
         slaveConfig.slaveId = newSlaveId;
         slaveConfig.masterDeviceId = master._id;
+        slaveConfig.kind = DeviceKind.MODBUS_SLAVE;
 
         const slaveModel = new DeviceModel();
         slaveModel.name = `Slave ${newSlaveId} (auto-detected)`;
         slaveModel.type = DeviceType.SLAVE;
-        slaveModel.kind = DeviceKind.MODBUS_SLAVE;
         slaveModel.description = `Auto-detected on master "${master.name}" via register 0x${detectedRegister.toString(16)}`;
         slaveModel.config = slaveConfig;
 

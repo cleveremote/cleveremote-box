@@ -132,6 +132,7 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
             deviceRepository as unknown as DeviceRepository,
             comRequestRepository as unknown as ComRequestRepository,
             modBusService as unknown as ModbusService,
+            { refreshMasterAddress: jest.fn().mockResolvedValue(false) } as never,
             logger as never
         );
     });

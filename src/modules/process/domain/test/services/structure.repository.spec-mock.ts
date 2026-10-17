@@ -103,7 +103,9 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
         deviceRepository as any,
         modbusTaskRepository as any,
         valueRepository as any,
-        actuatorRepository as any
+        actuatorRepository as any,
+        {} as any,
+        logger as any
     );
 
     return { structureService, structureRepository, actuatorRegistry: structureRepository.actuatorRegistry, cycleRepository, logger };

@@ -119,6 +119,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
         service = new ModbusService(
             deviceRepository as never,
             modbusTaskRepository as never,
+            { refreshMasterAddress: jest.fn().mockResolvedValue(false) } as never,
             logger as never
         );
     });
@@ -1063,8 +1064,7 @@ describe('ModbusService (modbus-serial mocked)', () => {
             expect(writeRegister).toHaveBeenCalledWith(AO8CH_DEVICE_ADDRESS_REGISTER, 2);
             expect(deviceRepository.save).toHaveBeenCalledWith(expect.objectContaining({
                 type: DeviceType.SLAVE,
-                kind: DeviceKind.MODBUS_SLAVE,
-                config: expect.objectContaining({ slaveId: 2, masterDeviceId: 'master-x' })
+                config: expect.objectContaining({ slaveId: 2, masterDeviceId: 'master-x', kind: DeviceKind.MODBUS_SLAVE })
             }));
         });
 

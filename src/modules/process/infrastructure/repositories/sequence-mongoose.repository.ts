@@ -46,6 +46,14 @@ export class SequenceMongooseRepository {
         return sequences.map(SequenceMapper.mapToModel);
     }
 
+    // retire de toutes les sequences les moduleConfigs pointant vers l'actionneur supprime.
+    public async removeModuleConfigsByModuleId(moduleId: string): Promise<void> {
+        await this.sequenceModel.updateMany(
+            { 'moduleConfigs.moduleId': moduleId, ...NOT_DELETED_FILTER },
+            { $pull: { moduleConfigs: { moduleId } } }
+        );
+    }
+
     public async findByCycleId(cycleId: string): Promise<SequenceModel[]> {
         const sequences = await this.sequenceModel.find({ cycleId, ...NOT_DELETED_FILTER });
         return sequences.map(SequenceMapper.mapToModel);

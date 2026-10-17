@@ -1,15 +1,16 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import ModbusRTU from 'modbus-serial';
 import { create, all, MathNode, EvalFunction } from 'mathjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel, DEVICE_RANGE_TYPE_RANGES, DISCOVERY_REGISTER_BY_TYPE, getDeviceRangeType } from '@process/domain/models/device.model';
 import {
     ComRequestConfigModel, ComRequestModel, ModbusEvaluatedReading, ModbusExecuteResult, ModbusFunctionName, ModbusValueType
 } from '@process/domain/models/com-request.model';
+import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
 /** Longueur par défaut (en registres) appliquée quand params.length est absent et config.type est défini */
@@ -74,8 +75,9 @@ export class ModbusService {
     private readonly _decimalPositionByDevice = new Map<string, number>();
 
     public constructor(
-        private deviceRepository: DeviceRepository,
+        @Inject(forwardRef(() => DeviceRepository)) private deviceRepository: DeviceRepository,
         private modbusTaskRepository: ComRequestRepository,
+        private waveshareDiscoveryService: WaveshareDiscoveryService,
         private readonly logger: Logger
     ) {
         // Instance mathjs restreinte : formules stockables (ComRequest.config.params.formula)
@@ -108,7 +110,15 @@ export class ModbusService {
 
     private async _connectClient(client: ModbusRTU, masterConfig: MasterConfigModel, unitId: number): Promise<void> {
         if (masterConfig.protocol === MasterProtocol.TCP) {
-            await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            try {
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            } catch (err) {
+                // IP obsolète (master en DHCP) : on la retrouve par son deviceId puis on retente une fois
+                if (!UNREACHABLE_NETWORK_CODES.includes(err.code) || !await this.waveshareDiscoveryService.refreshMasterAddress(masterConfig)) {
+                    throw err;
+                }
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            }
         } else if (masterConfig.protocol === MasterProtocol.RTU) {
             await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
         } else {
@@ -356,6 +366,27 @@ export class ModbusService {
         });
         this.logger.log({ deviceId: masterDevice._id, newAddress, ok: isOk }, 'slave address changed');
         return isOk;
+    }
+
+    /**
+     * Remet un slave sur l'adresse d'origine de sa plage (DEVICE_RANGE_TYPE_RANGES[type].min,
+     * reservee aux modules neufs) pour qu'il soit de nouveau decouvrable. Le type est deduit de
+     * l'adresse courante (ex 62 -> DIGITAL_IO -> 61). Sans type/registre de decouverte, ou deja
+     * sur l'adresse min, rien a faire.
+     */
+    public async resetSlaveAddress(slave: DeviceModel, master: DeviceModel): Promise<void> {
+        const currentAddress = (slave.config as SlaveConfigModel).slaveId;
+        const type = getDeviceRangeType(currentAddress);
+        const register = type ? DISCOVERY_REGISTER_BY_TYPE[type] : undefined;
+        if (register === undefined) {
+            this.logger.warn({ deviceId: slave._id, currentAddress }, 'slave address reset skipped: no discovery register for its range');
+            return;
+        }
+        const originAddress = DEVICE_RANGE_TYPE_RANGES[type].min;
+        if (currentAddress === originAddress) {
+            return;
+        }
+        await this.setSlaveAdress(master, register, currentAddress, originAddress);
     }
 
     private _compileFormula(expr: string): CompiledFormula {
@@ -626,7 +657,7 @@ export class ModbusService {
         const masterConfig = master.config as MasterConfigModel;
         // opt-in par Master : sans discoveryRegisters renseigné, pas de sonde (pas de fallback
         // silencieux sur un registre par défaut) - cf. modbus-registers.util.ts.
-        const registersToProbe = masterConfig.discoveryRegisters ?? [];
+        const registersToProbe = masterConfig.discoveryRegisters ?? [0x4000]; //waveshare utilise ce registre comme par default pour 
         if (registersToProbe.length === 0) return;
 
         const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
@@ -643,7 +674,7 @@ export class ModbusService {
                     try {
                         await client.readHoldingRegisters(register, 1);
                         client.setTimeout(masterConfig.timeout || 2000);
-                        this.logger.log({ masterId: master._id, register: detectedRegister }, 'new unconfigured modbus slave detected');
+                        this.logger.log({ masterId: master._id, register }, 'new unconfigured modbus slave detected');
                         return register;
                     } catch (err) {
                         // cas nominal : ce registre ne répond pas - on essaie le suivant sans
@@ -666,6 +697,41 @@ export class ModbusService {
 
     }
 
+
+    /**
+     * Lit, sur une seule connexion au Master, le registre demandé pour chaque unit id cible
+     * (timeout court, comme probeMasterForNewSlave). Ne renvoie que les cibles qui ont répondu,
+     * avec la première valeur lue.
+     */
+    public async scanDiscoveryRegisters(
+        master: DeviceModel,
+        targets: { unitId: number; register: number }[]
+    ): Promise<{ unitId: number; register: number; value: number }[]> {
+        if (targets.length === 0) return [];
+        const masterConfig = master.config as MasterConfigModel;
+        const client = new ModbusRTU();
+        const responses = await this._enqueue(async () => {
+            const found: { unitId: number; register: number; value: number }[] = [];
+            try {
+                await this._connectClient(client, masterConfig, DEFAULT_UNCONFIGURED_UNIT_ID);
+                client.setTimeout(200);
+                for (const { unitId, register } of targets) {
+                    try {
+                        client.setID(unitId);
+                        const { data } = await client.readHoldingRegisters(register, 1);
+                        found.push({ unitId, register, value: data[0] });
+                    } catch {
+                        // cas nominal : rien ne répond à cet unit id / registre
+                    }
+                }
+            } catch (err) {
+                this.logger.warn({ masterId: master._id, err: err.message }, 'discovery scan connection failed');
+            }
+            return found;
+        });
+        client.close();
+        return responses;
+    }
 
     private async _executeComRequest(comRequest: ComRequestModel, param?: ComRequestConfigModel): Promise<ModbusExecuteResult | void> {
         if (!comRequest) {

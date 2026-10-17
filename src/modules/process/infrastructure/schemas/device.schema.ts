@@ -4,6 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { DeviceType, DeviceKind, MasterProtocol } from '@process/domain/models/device.model';
 
 @Schema({ _id: false })
+export class PortConfig {
+    @Prop({ required: true })
+    public portNumStart: number;
+
+    @Prop({ required: true })
+    public portCount: number;
+}
+export const PortConfigSchema = SchemaFactory.createForClass(PortConfig);
+
+@Schema({ _id: false })
 export class DeviceConfig {
     // MASTER
     @Prop({ enum: MasterProtocol })
@@ -11,6 +21,9 @@ export class DeviceConfig {
 
     @Prop()
     public ipAddress?: string;
+
+    @Prop()
+    public deviceId?: string;
 
     @Prop()
     public port?: number;
@@ -33,6 +46,12 @@ export class DeviceConfig {
 
     @Prop()
     public masterDeviceId?: string;
+
+    @Prop({ enum: DeviceKind })
+    public kind?: DeviceKind;
+
+    @Prop({ type: PortConfigSchema })
+    public portConfig?: PortConfig;
 }
 export const DeviceConfigSchema = SchemaFactory.createForClass(DeviceConfig);
 
@@ -49,6 +68,7 @@ export class Device {
     @Prop({ required: true, enum: DeviceType })
     public type: DeviceType;
 
+    // Legacy : kind est désormais stocké dans config.kind (slaves uniquement), lu en fallback par DeviceMapper
     @Prop({ enum: DeviceKind })
     public kind?: DeviceKind;
 

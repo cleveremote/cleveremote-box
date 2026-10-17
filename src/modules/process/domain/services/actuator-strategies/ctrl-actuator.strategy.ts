@@ -11,6 +11,7 @@ import { ComRequestRepository } from '@process/infrastructure/repositories/com-r
 import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
 import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
+import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -43,6 +44,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         private deviceRepository: DeviceRepository,
         private comRequestRepository: ComRequestRepository,
         private modbusService: ModbusService,
+        private waveshareDiscoveryService: WaveshareDiscoveryService,
         private readonly logger: Logger
     ) { }
 
@@ -183,7 +185,15 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
         const client = new ModbusRTU();
         if (masterConfig.protocol === MasterProtocol.TCP) {
-            await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            try {
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            } catch (err) {
+                // IP obsolète (master en DHCP) : on la retrouve par son deviceId puis on retente une fois
+                if (!UNREACHABLE_NETWORK_CODES.includes(err.code) || !await this.waveshareDiscoveryService.refreshMasterAddress(masterConfig)) {
+                    throw err;
+                }
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            }
         } else if (masterConfig.protocol === MasterProtocol.RTU) {
             await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
         } else {

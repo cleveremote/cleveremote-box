@@ -17,10 +17,16 @@ import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strate
 import { ActuatorService } from './actuator.service';
 import { DeviceService } from './device.service';
 import { GlobalSettingsService } from './global-settings.service';
+import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
+import { DeviceModel } from '../models/device.model';
+import { ComRequestModel } from '../models/com-request.model';
+import { SynchronizeDeviceModel } from '../models/synchronize.model';
+import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
 const DEFAULT_VALVE_TYPE = 'PROPORTIONAL';
+const TEST_SLAVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b60';
 
 @Injectable()
 export class InitService {
@@ -39,6 +45,8 @@ export class InitService {
         private actuatorService: ActuatorService,
         private deviceService: DeviceService,
         private globalSettingsService: GlobalSettingsService,
+        private deviceRepository: DeviceRepository,
+        private waveshareDiscoveryService: WaveshareDiscoveryService,
         private readonly logger: Logger,
         private readonly _processService: ProcessService
     ) { }
@@ -52,6 +60,10 @@ export class InitService {
         return wrap('StructureService.getStructure', () => this._loadConfiguration())
             .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
             //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+            //.then(() => wrap('InitService.testBuildSlaveComRequestsJson', () => this._testBuildSlaveComRequestsJson()))
+            //.then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
+            //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
+            .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
@@ -61,20 +73,19 @@ export class InitService {
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
             .then(() => wrap('init devices', () => this.deviceService.initAll()))
-        // .then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
             .then(async () => {
-                // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
-                // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
-                // const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
-                // await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
-                //     changes.forEach((change) => {
-                //         this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
-                //             .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
-                //     });
-                // });
+                // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
+                // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
+                const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
+                await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
+                    changes.forEach((change) => {
+                        this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
+                            .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
+                    });
+                });
 
-                //  const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-                // await this.actuatorService.execute(actuator as ActuatorModel, 50);
+                 const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
+                await this.actuatorService.execute(actuator as ActuatorModel, 50);
             })
 
             .catch((error) => {
@@ -121,6 +132,18 @@ export class InitService {
         //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
         await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL);
 
+    }
+
+    /**
+     * TEST - construit (et logue) l'objet JSON slave -> comrequests au format SynchronizeDeviceModel
+     * (device + comrequests imbriqués, cf. box/synchronize/device).
+     */
+    private async _testBuildSlaveComRequestsJson(slaveId = TEST_SLAVE_DEVICE_ID): Promise<SynchronizeDeviceModel> {
+        const slave = await this.deviceRepository.get(slaveId) as DeviceModel;
+        const comRequests = await this.comRequestRepository.get() as ComRequestModel[];
+        const json: SynchronizeDeviceModel = { ...slave, comrequests: comRequests.filter((request) => request.deviceId === slaveId) };
+        this.logger.log(JSON.stringify(json, null, 2), 'slave -> comrequests');
+        return json;
     }
 
     private _createDefaultValveConfig(channel: number): CtrlActuatorConfigModel {

@@ -29,7 +29,7 @@ export class ModbusSlaveStrategy implements DeviceStrategy {
                     await this.comRequestRepository.save(comRequest);
                 }
             } catch (err) {
-                this.logger.error({ comRequestId: comRequest._id, err: err.message }, 'inverter reset write failed');
+                this.logger.error({ comRequestId: comRequest._id, err: err instanceof Error ? err.message : String(err) }, 'inverter reset write failed');
             }
         }
     }

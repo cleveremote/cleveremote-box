@@ -19,6 +19,10 @@ import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ValueModel, ExecutableType } from '@process/domain/models/value.model';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateCycleModel } from './cycle.spec-mock';
+import { DeviceRangeType, DeviceType, DiscoveryAddressRegister, SlaveTemplate } from '@process/domain/models/device.model';
+import { ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { isValidUuid } from '@process/domain/utils/id.util';
 
 function CreateEmptyGetRepositoryMock(): { get: jest.Mock } {
     return { get: jest.fn().mockResolvedValue([]) };
@@ -81,7 +85,9 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             deviceRepository as never,
             modbusTaskRepository as never,
             eventRepository as never,
-            actuatorRepository as never
+            actuatorRepository as never,
+            {} as never,
+            {} as never
         );
     });
 
@@ -306,6 +312,68 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
 
             expect(result[0]).toMatchObject({ startedAt, duration: 1500 });
             expect(sequenceResult[0]).toMatchObject({ startedAt, duration: 30 });
+        });
+    });
+
+    describe('buildSlaveFromTemplate / scanMaster', () => {
+        const masterId = '8d6f3fe2-af41-405b-9523-a0a6fb589b42';
+        const template: SlaveTemplate = {
+            _id: '5b0c1f0e-3a3e-4c2a-9a51-2f6d1b7e8c01',
+            name: '8/IO IRRIGATION VALVES',
+            description: '8/IO IRRIGATION VALVES',
+            type: DeviceRangeType.DIGITAL_IO,
+            device: { name: '8/IO IRRIGATION VALVES', description: '8/IO IRRIGATION VALVES' },
+            comRequests: [
+                { name: 'digital output request', type: [ComRequestType.DIGITAL_OUTPUT], config: { address: 0, function: [ModbusFunctionName.WRITE_SINGLE_COIL] } },
+                { name: 'SWITCH ALL ON', description: 'SWITCH ALL ON', type: [ComRequestType.DIGITAL_IO_INIT], config: { address: 255, function: [ModbusFunctionName.WRITE_SINGLE_COIL], done: true, params: { length: 1, value: 1 } } },
+            ],
+        };
+
+        it('should build a slave attached to the master with linked comRequests', () => {
+            const { device, comRequests } = service.buildSlaveFromTemplate(template, masterId);
+
+            expect(isValidUuid(device._id)).toBe(true);
+            expect(device).toMatchObject({ type: DeviceType.SLAVE, config: { slaveId: 1, masterDeviceId: masterId }, deletedAt: null });
+            expect(comRequests).toHaveLength(2);
+            comRequests.forEach((cr) => {
+                expect(isValidUuid(cr._id)).toBe(true);
+                expect(cr.deviceId).toBe(device._id);
+            });
+            expect(comRequests[1].config.params).toEqual({ length: 1, value: 1 });
+            expect(comRequests[1].config).not.toBe(template.comRequests[1].config);
+        });
+
+        it('scanMaster should probe the first unit id of each range and readdress the new module', async () => {
+            const master = { _id: masterId, type: DeviceType.MASTER, config: {} };
+            deviceRepository.get.mockResolvedValue(master);
+            const save = jest.fn().mockImplementation(async (m) => m);
+            Object.assign(deviceRepository, { save, getSlavesByMasterId: jest.fn().mockResolvedValue([{ config: { slaveId: 62 } }]) });
+            Object.assign(modbusTaskRepository, { save });
+            const scanDiscoveryRegisters = jest.fn().mockResolvedValue([
+                { unitId: 61, register: 0x4000, value: 61 },
+                { unitId: 11, register: 0x0005, value: 95 },
+            ]);
+            const setSlaveAdress = jest.fn().mockResolvedValue(true);
+            const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            Object.assign(service, { modbusService: { scanDiscoveryRegisters, setSlaveAdress }, logger, _loadSlaveTemplates: () => [template] });
+
+            const created = await service.scanMaster(masterId);
+
+            const targets = scanDiscoveryRegisters.mock.calls[0][1] as { unitId: number; register: number }[];
+            expect(targets).toHaveLength(9);
+            expect(targets).toContainEqual({ unitId: 1, register: DiscoveryAddressRegister.INVERTER });
+            expect(targets).toContainEqual({ unitId: 81, register: DiscoveryAddressRegister.ANALOG_INPUT });
+            expect(setSlaveAdress).toHaveBeenCalledWith(master, 0x4000, 61, 63);
+            expect(created).toHaveLength(1);
+            expect(created[0].config).toEqual({ slaveId: 63, masterDeviceId: masterId });
+            expect(logger.warn).toHaveBeenCalledTimes(1);
+        });
+
+        it('should throw when master is missing or not a MASTER', async () => {
+            deviceRepository.get.mockResolvedValue(null);
+            await expect(service.scanMaster(masterId)).rejects.toThrow();
+            deviceRepository.get.mockResolvedValue({ _id: masterId, type: DeviceType.SLAVE });
+            await expect(service.scanMaster(masterId)).rejects.toThrow();
         });
     });
 });

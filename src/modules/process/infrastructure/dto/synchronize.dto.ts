@@ -882,6 +882,16 @@ export class StructureSynchronizeDTO {
 
 
 
+export class PortConfigDTO {
+    @IsNumber()
+    @ApiProperty({ description: 'Numéro du premier port' })
+    public portNumStart: number;
+
+    @IsNumber()
+    @ApiProperty({ description: 'Nombre de ports' })
+    public portCount: number;
+}
+
 export class DeviceConfigDTO {
     // MASTER
     @ValidateIf(o => o.type === DeviceType.MASTER)
@@ -893,6 +903,11 @@ export class DeviceConfigDTO {
     @IsString()
     @ApiProperty({ description: 'Adresse IP de l\'équipement' })
     public ipAddress?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant matériel Waveshare, utilisé pour retrouver l\'IP (DHCP)' })
+    public deviceId?: string;
 
     @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsNumber()
@@ -926,6 +941,12 @@ export class DeviceConfigDTO {
     @IsString()
     @ApiProperty({ description: 'Identifiant du DeviceModel MASTER associé' })
     public masterDeviceId?: string;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => PortConfigDTO)
+    @ApiProperty({ description: 'Configuration des ports de l\'équipement', required: false })
+    public portConfig?: PortConfigDTO;
 }
 
 export class DeviceSynchronizeDTO {
@@ -976,10 +997,10 @@ export class DeviceSynchronizeDTO {
         model.name = dto.name;
         model.description = dto.description;
         model.type = dto.type;
-        model.kind = dto.kind;
+        // kind reste au niveau racine du DTO (contrat client inchangé) mais n'a de sens que pour un SLAVE
         model.config = dto.type === DeviceType.MASTER
             ? Object.assign(new MasterConfigModel(), dto.config)
-            : Object.assign(new SlaveConfigModel(), dto.config);
+            : Object.assign(new SlaveConfigModel(), dto.config, { kind: dto.kind });
         model.delete = dto.delete ?? false;
         // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
         model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);

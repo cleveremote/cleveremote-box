@@ -185,7 +185,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             emptyGetRepo as never,
             emptyGetRepo as never,
             structureEventRepository as never,
-            emptyGetRepo as never
+            emptyGetRepo as never,
+            {} as never,
+            {} as never
         );
 
         actuatorService = {

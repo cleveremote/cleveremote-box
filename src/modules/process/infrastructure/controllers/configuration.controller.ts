@@ -29,6 +29,7 @@ import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
 import { DeviceService } from '@process/domain/services/device.service';
 import { DiscoverDeviceDTO } from '../dto/discover.dto';
+import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
 function flattenValidationErrors(errors: ValidationError[]): string[] {
     return errors.flatMap(error => [
@@ -55,8 +56,8 @@ export class ConfigurationController {
 
     public constructor(
         private _configurationService: StructureService,
+         private _waveshareDiscoveryService: WaveshareDiscoveryService    ,
         private _synchronizeService: SynchronizeService,
-        private _deviceService: DeviceService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -80,9 +81,8 @@ export class ConfigurationController {
     public async discoverDevice(
         @Payload() discoverDeviceDTO: DiscoverDeviceDTO
     ): Promise<DeviceModel[]> {
-        const uc = new DeviceDiscoverUC(this._deviceService);
+        const uc = new DeviceDiscoverUC(this._configurationService,this._waveshareDiscoveryService);
         return uc.execute(discoverDeviceDTO.masterId);
-        return [];
     }
 
     @MessagePattern(['box/synchronize/comrequest'])

@@ -38,6 +38,10 @@ import { EventMongooseRepository } from './repositories/event-mongoose.repositor
 import { HttpModule } from '@nestjs/axios';
 import { BleService } from '@process/domain/services/ble.service';
 import { PingController } from './controllers/ping.controller';
+import { SlaveTemplate, SlaveTemplateSchema } from './schemas/slave-template.schema';
+import { SlaveTemplateRepository } from './repositories/slave-template.repository';
+import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
+import { SlaveTemplateController } from './controllers/slave-template.controller';
 import { CycleMongooseRepository } from './repositories/cycle-mongoose.repository';
 import { SequenceMongooseRepository } from './repositories/sequence-mongoose.repository';
 import { ScheduleMongooseRepository } from './repositories/schedule-mongoose.repository';
@@ -69,7 +73,8 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
             { name: Sensor.name, schema: SensorSchema },
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema },
-            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
+            { name: GlobalSettings.name, schema: GlobalSettingsSchema },
+            { name: SlaveTemplate.name, schema: SlaveTemplateSchema }
         ]),
         ActuatorModule,
         DeviceModule
@@ -79,12 +84,14 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         ExecutionController,
         AuthenticationController,
         GlobalSettingsController,
+        SlaveTemplateController,
         PingController
     ],
     providers: [
         //----Repositories------//
         AuthenticationRepository,
         GlobalSettingsRepository,
+        SlaveTemplateRepository,
         CycleRepository,
         SequenceRepository,
         TriggerRepository,
@@ -101,6 +108,7 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         //---------------------//
         AuthenticationService,
         GlobalSettingsService,
+        SlaveTemplateService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,

@@ -382,10 +382,14 @@ export class ProcessService {
                 // JAMAIS ses sequences ni ne touche au Group parent : on se contente de lever la
                 // pause, exactement comme le ferait le Group en le "demarrant". S'il ne possede ni
                 // trigger ni schedule, on tombe dans le pipeline normal ci-dessous (deja existant).
+                // Exception : un enfant en attente de confirmation (WAITTING_CONFIRMATION) recoit ce
+                // FORCE comme la confirmation elle-meme -> il doit suivre le pipeline normal.
                 if (process.mode === ProcessMode.MANUAL && process.cycle.parentCycleId) {
+                    const isAwaitingConfirmation = process.cycle.status === ExecutableStatus.WAITTING_CONFIRMATION ||
+                        this.processList.some(x => x.cycle._id === process.cycle._id && x.type === ProcessType.CONFIRMATION);
                     const hasTriggerOrSchedule =
                         !!this._getChildTriggers(process.cycle._id).length || !!this._getChildSchedules(process.cycle._id).length;
-                    if (hasTriggerOrSchedule) {
+                    if (hasTriggerOrSchedule && !isAwaitingConfirmation) {
                         await this._setChildTriggersAndSchedulesPaused(process.cycle._id, false);
                         return; // ne jamais demarrer le cycle ni le Group parent dans ce cas
                     }

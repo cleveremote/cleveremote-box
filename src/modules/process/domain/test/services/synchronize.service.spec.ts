@@ -136,7 +136,7 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
             actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
             connection, CreateLoggerMock() as never
-        ));
+        ), sequenceMongooseRepository);
         sequenceRepository = new SequenceRepository(sequenceMongooseRepository);
         scheduleRepository = new ScheduleRepository(scheduleMongooseRepository);
         triggerRepository = new TriggerRepository(triggerMongooseRepository);
@@ -146,7 +146,13 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             scheduleRepository,
             triggerRepository
         );
-        deviceRepository = new DeviceRepository(new DeviceMongooseRepository(deviceModel as never));
+        deviceRepository = new DeviceRepository(
+            new DeviceMongooseRepository(deviceModel as never),
+            actuatorRepository,
+            { deleteForDevice: jest.fn() } as never,
+            { resetSlaveAddress: jest.fn() } as never,
+            CreateLoggerMock() as never
+        );
 
         const testingModule = await Test.createTestingModule({ imports: [ScheduleModule.forRoot()] }).compile();
         schedulerRegistry = testingModule.get(SchedulerRegistry);

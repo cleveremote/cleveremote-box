@@ -23,7 +23,7 @@ function CreateDeviceModel(kind?: DeviceKind): DeviceModel {
     const device = new DeviceModel();
     device._id = 'device-1';
     device.type = DeviceType.SLAVE;
-    device.kind = kind;
+    device.config = { slaveId: 1, kind: kind };
     return device;
 }
 

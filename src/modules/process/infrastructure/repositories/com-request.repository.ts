@@ -25,6 +25,14 @@ export class ComRequestRepository {
         return this.comRequestMongooseRepository.delete(id);
     }
 
+    // cascade utilisee par DeviceRepository.delete() : soft-supprime tous les comrequests du device.
+    public async deleteForDevice(deviceId: string): Promise<void> {
+        const existing = await this.comRequestMongooseRepository.findByDeviceId(deviceId);
+        for (const comRequest of existing) {
+            await this.comRequestMongooseRepository.delete(comRequest._id);
+        }
+    }
+
     // un modbusTask n'est soft-supprime que s'il est explicitement marque `delete: true`.
     public async saveMany(models: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
         for (const model of models) {

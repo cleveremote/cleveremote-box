@@ -1,6 +1,6 @@
 import { DeviceModel } from '@process/domain/models/device.model';
-import { DeviceService } from '@process/domain/services/device.service';
-import { SynchronizeService } from '@process/domain/services/synchronize.service';
+import { StructureService } from '@process/domain/services/configuration.service';
+import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
 /**
  * # Synchronisation et enregistrement d'une liste de devices (MASTER ou SLAVE)
@@ -9,9 +9,15 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
  *
 */
 export class DeviceDiscoverUC {
-    public constructor(private deviceService: DeviceService) { }
+    public constructor(
+        private configurationService: StructureService,
+        private waveshareDiscoveryService: WaveshareDiscoveryService
+    ) { }
 
     public execute(masterDeviceId: string): Promise<DeviceModel[]> {
-        return this.deviceService.discoverDevice(masterDeviceId);
+        if(!masterDeviceId) {
+            return this.waveshareDiscoveryService.discover();
+        }
+        return this.configurationService.scanMaster(masterDeviceId);
     }
 }

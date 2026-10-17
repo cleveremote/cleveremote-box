@@ -10,7 +10,7 @@ function CreateInverterDeviceModel(): DeviceModel {
     const device = new DeviceModel();
     device._id = 'device-1';
     device.type = DeviceType.SLAVE;
-    device.kind = DeviceKind.INVERTER;
+    device.config = { slaveId: 1, kind: DeviceKind.INVERTER };
     return device;
 }
 

@@ -1,3 +1,4 @@
+import { SequenceMongooseRepository } from '@process/infrastructure/repositories/sequence-mongoose.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
@@ -8,13 +9,18 @@ describe('ActuatorRepository', () => {
     let mongooseRepository: {
         create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByIds: jest.Mock;
     };
+    let sequenceMongooseRepository: { removeModuleConfigsByModuleId: jest.Mock };
     let repository: ActuatorRepository;
 
     beforeEach(() => {
         mongooseRepository = {
             create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByIds: jest.fn()
         };
-        repository = new ActuatorRepository(mongooseRepository as never as ActuatorMongooseRepository);
+        sequenceMongooseRepository = { removeModuleConfigsByModuleId: jest.fn() };
+        repository = new ActuatorRepository(
+            mongooseRepository as never as ActuatorMongooseRepository,
+            sequenceMongooseRepository as never as SequenceMongooseRepository
+        );
     });
 
     describe('save', () => {
@@ -52,6 +58,7 @@ describe('ActuatorRepository', () => {
             const result = await repository.delete('id-1');
 
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
+            expect(sequenceMongooseRepository.removeModuleConfigsByModuleId).toHaveBeenCalledWith('id-1');
             expect(result).toEqual(true);
         });
     });
@@ -99,6 +106,7 @@ describe('ActuatorRepository', () => {
             const result = await repository.saveMany([toDelete, toSave]);
 
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
+            expect(sequenceMongooseRepository.removeModuleConfigsByModuleId).toHaveBeenCalledWith('id-1');
             expect(mongooseRepository.create).toHaveBeenCalled();
             expect(result).toEqual(['final']);
         });

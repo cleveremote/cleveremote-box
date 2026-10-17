@@ -8,6 +8,7 @@ export class DeviceMapper {
             const config = new MasterConfigModel();
             config.protocol = device.config.protocol;
             config.ipAddress = device.config.ipAddress;
+            config.deviceId = device.config.deviceId;
             config.port = device.config.port;
             config.baudRate = device.config.baudRate;
             config.path = device.config.path;
@@ -18,6 +19,10 @@ export class DeviceMapper {
         const config = new SlaveConfigModel();
         config.slaveId = device.config.slaveId;
         config.masterDeviceId = device.config.masterDeviceId;
+        config.kind = device.config.kind ?? device.kind;
+        if (device.config.portConfig) {
+            config.portConfig = { portNumStart: device.config.portConfig.portNumStart, portCount: device.config.portConfig.portCount };
+        }
         return config;
     }
 
@@ -26,7 +31,6 @@ export class DeviceMapper {
         model._id = device._id;
         model.name = device.name;
         model.type = device.type;
-        model.kind = device.kind;
         model.description = device.description;
         model.config = DeviceMapper._mapConfig(device);
         model.createdAt = (device as unknown as { createdAt?: Date }).createdAt;
@@ -39,13 +43,13 @@ export class DeviceMapper {
         const device = new Device();
         device.name = model.name;
         device.type = model.type;
-        device.kind = model.kind;
         device.description = model.description;
         if (model.type === DeviceType.MASTER) {
             const config = model.config as MasterConfigModel;
             device.config = {
                 protocol: config.protocol,
                 ipAddress: config.ipAddress,
+                deviceId: config.deviceId,
                 port: config.port,
                 baudRate: config.baudRate,
                 path: config.path,
@@ -54,7 +58,7 @@ export class DeviceMapper {
             };
         } else {
             const config = model.config as SlaveConfigModel;
-            device.config = { slaveId: config.slaveId, masterDeviceId: config.masterDeviceId };
+            device.config = { slaveId: config.slaveId, masterDeviceId: config.masterDeviceId, kind: config.kind, portConfig: config.portConfig };
         }
         return device;
     }

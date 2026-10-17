@@ -85,6 +85,11 @@ export class ActuatorMongooseRepository {
         return actuators.map(ActuatorMapper.mapToModel);
     }
 
+    public async findByDeviceId(deviceId: string): Promise<ActuatorModel[]> {
+        const actuators = await this.actuatorModel.find({ 'config.deviceId': deviceId, ...NOT_DELETED_FILTER });
+        return actuators.map(ActuatorMapper.mapToModel);
+    }
+
     // migration one-shot, idempotente et non destructive : les box deployees ont des donnees
     // dans les anciennes collections relay_rpis/relay_coms (avant la fusion en une seule entite
     // "actuator" avec champ discriminant `type`). On ne peut pas se connecter a chaque box pour

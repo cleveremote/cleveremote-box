@@ -8,7 +8,7 @@ function CreateSlaveDeviceModel(): DeviceModel {
     const device = new DeviceModel();
     device._id = 'device-1';
     device.type = DeviceType.SLAVE;
-    device.kind = DeviceKind.MODBUS_SLAVE;
+    device.config = { slaveId: 1, kind: DeviceKind.MODBUS_SLAVE };
     return device;
 }
 
