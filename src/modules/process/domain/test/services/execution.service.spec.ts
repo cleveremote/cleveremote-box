@@ -608,78 +608,97 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
-        it('should require confirmation instead of silently skipping a sequence whose condition is already satisfied', async () => {
-            const condition = Object.assign(new ConditionModel(), {
-                elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5
-            });
-            const [cycle] = await SeedCycles([
-                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
-            ]);
-            valueRepository.getDeviceValue.mockResolvedValue({ value: 10 });
+        it('should skip a sequence whose conditions are not verified and run the next one without confirmation', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [{ moduleIds: ['module-a'], maxDuration: 30, conditions: [condition] }, { moduleIds: ['module-b'], maxDuration: 30 }]
+            }]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
 
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
-            await Flush(100);
+            await Flush(300);
 
-            // la sequence n'est plus "skippee" silencieusement : elle attend une confirmation.
-            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION })
-                })
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
+            expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-b' }), 1);
+            expect(eventRepository.save).not.toHaveBeenCalledWith(
+                expect.objectContaining({ additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION }) })
             );
-
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should not skip the sequence and short-circuit further evaluation once an earlier condition fails', async () => {
-            const conditionA = Object.assign(new ConditionModel(), { elementId: 'sensor-a', elementType: 'SENSOR', operator: '>', value: 5 });
-            const conditionB = Object.assign(new ConditionModel(), { elementId: 'sensor-b', elementType: 'SENSOR', operator: '>', value: 5 });
-            const [cycle] = await SeedCycles([
-                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [conditionA, conditionB] }] }
-            ]);
-            valueRepository.getDeviceValue.mockImplementation((elementId: string) =>
-                Promise.resolve(elementId === 'sensor-a' ? { value: 3 } : { value: 10 }));
-
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
-            await Flush(100);
-
-            // condition A (3 > 5) est fausse -> la sequence n'est PAS skippee, et la condition B
-            // (sensor-b) ne doit jamais avoir ete evaluee (court-circuit de asyncEvery).
-            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-            expect(valueRepository.getDeviceValue).not.toHaveBeenCalledWith('sensor-b');
-
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
-        });
-
-        it('should not skip the sequence when the device value resolves to a falsy/missing value', async () => {
+        it('should not start the cycle when no sequence is verified', async () => {
             const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
             const [cycle] = await SeedCycles([
                 { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
             ]);
-            // valueRepository.getDeviceValue resout 0 par defaut (falsy) : la condition ne doit
-            // jamais etre consideree comme satisfaite dans ce cas (garde `!extractedVal`).
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
 
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
             await Flush(100);
 
-            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
-
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
         });
 
-        it('should not skip the sequence when the extracted value itself is undefined', async () => {
+        it('should catch up a skipped sequence that becomes verified while another sequence is running', async () => {
             const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
-            const [cycle] = await SeedCycles([
-                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
-            ]);
-            valueRepository.getDeviceValue.mockResolvedValue({ value: undefined });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [{ moduleIds: ['module-a'], maxDuration: 30, conditions: [condition] }, { moduleIds: ['module-b'], maxDuration: 80 }]
+            }]);
+            let sensorValue = 2;
+            valueRepository.getDeviceValue.mockImplementation(() => Promise.resolve({ value: sensorValue }));
 
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
-            await Flush(100);
+            await Flush(30);
+            expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-b' }), 1);
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
 
-            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            sensorValue = 10;
+            await Flush(300);
 
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+            const calls = actuatorService.execute.mock.calls.map(([mod, action]) => `${mod._id}:${action}`);
+            expect(calls.indexOf('module-a:1')).toBeGreaterThan(calls.indexOf('module-b:1'));
+            expect(calls.indexOf('module-b:0')).toBeLessThan(calls.indexOf('module-a:1'));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should stop the cycle at the end even if a skipped sequence is still not verified', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [{ moduleIds: ['module-a'], maxDuration: 30 }, { moduleIds: ['module-b'], maxDuration: 30, conditions: [condition] }]
+            }]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(300);
+
+            expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 0);
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-b' }), 1);
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should switch off the last run sequence when the middle one is skipped', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [
+                    { moduleIds: ['module-a'], maxDuration: 30 },
+                    { moduleIds: ['module-b'], maxDuration: 30, conditions: [condition] },
+                    { moduleIds: ['module-c'], maxDuration: 30 }
+                ]
+            }]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(400);
+
+            const calls = actuatorService.execute.mock.calls.map(([mod, action]) => `${mod._id}:${action}`);
+            expect(calls.indexOf('module-a:0')).toBeGreaterThan(-1);
+            expect(calls.indexOf('module-a:0')).toBeLessThan(calls.indexOf('module-c:1'));
+            expect(calls).not.toContain('module-b:1');
         });
 
         it('should switch off the previous sequence before switching on the next one in a multi-sequence cycle', async () => {
