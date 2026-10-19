@@ -50,7 +50,8 @@ export class DeviceService {
             throw new NotImplementedError(`DeviceService: no strategy for ${device.type} device "${device._id}"`);
         }
         const resolvedKind = (device.config as SlaveConfigModel).kind ?? DeviceKind.MODBUS_SLAVE;
-        const strategy = this._strategies.get(resolvedKind);
+        // Les kinds sans stratégie dédiée (capteurs, modules IO) sont des esclaves Modbus génériques
+        const strategy = this._strategies.get(resolvedKind) ?? this._strategies.get(DeviceKind.MODBUS_SLAVE);
         if (!strategy) {
             throw new NotImplementedError(`DeviceService: unsupported device kind "${resolvedKind}"`);
         }

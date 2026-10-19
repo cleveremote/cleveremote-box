@@ -6,10 +6,11 @@ import { ComRequestRepository } from '@process/infrastructure/repositories/com-r
 import ModbusRTU from 'modbus-serial';
 import { create, all, MathNode, EvalFunction } from 'mathjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel, DEVICE_RANGE_TYPE_RANGES, DISCOVERY_REGISTER_BY_TYPE, getDeviceRangeType } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel, DEVICE_KIND_SPECS, getDeviceKindByAddress } from '@process/domain/models/device.model';
 import {
     ComRequestConfigModel, ComRequestModel, ModbusEvaluatedReading, ModbusExecuteResult, ModbusFunctionName, ModbusValueType
 } from '@process/domain/models/com-request.model';
+import { RegisterRequest } from '@process/domain/models/register-map.model';
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 
@@ -149,6 +150,11 @@ export class ModbusService {
      * transactions concurrentes (ex: un poll du moniteur pendant l'écriture d'un actionneur)
      * produisent des trames tronquées/entrelacées ("Data length error") côté modbus-serial.
      */
+    /** Accès public à la file (outils de test/diagnostic) : `run` s'exécute seul sur le bus. */
+    public runExclusive<T>(run: () => Promise<T>): Promise<T> {
+        return this._enqueue(run);
+    }
+
     private _enqueue<T>(run: () => Promise<T>): Promise<T> {
         return new Promise<T>((resolve, reject) => {
             this._queue.push({
@@ -369,20 +375,21 @@ export class ModbusService {
     }
 
     /**
-     * Remet un slave sur l'adresse d'origine de sa plage (DEVICE_RANGE_TYPE_RANGES[type].min,
+     * Remet un slave sur l'adresse d'origine de sa plage (DEVICE_KIND_SPECS[kind].range.min,
      * reservee aux modules neufs) pour qu'il soit de nouveau decouvrable. Le type est deduit de
      * l'adresse courante (ex 62 -> DIGITAL_IO -> 61). Sans type/registre de decouverte, ou deja
      * sur l'adresse min, rien a faire.
      */
     public async resetSlaveAddress(slave: DeviceModel, master: DeviceModel): Promise<void> {
         const currentAddress = (slave.config as SlaveConfigModel).slaveId;
-        const type = getDeviceRangeType(currentAddress);
-        const register = type ? DISCOVERY_REGISTER_BY_TYPE[type] : undefined;
-        if (register === undefined) {
+        const kind = getDeviceKindByAddress(currentAddress);
+        const spec = kind ? DEVICE_KIND_SPECS[kind] : undefined;
+        const register = spec?.discoveryRegister;
+        if (!spec || register === undefined) {
             this.logger.warn({ deviceId: slave._id, currentAddress }, 'slave address reset skipped: no discovery register for its range');
             return;
         }
-        const originAddress = DEVICE_RANGE_TYPE_RANGES[type].min;
+        const originAddress = spec.range.min;
         if (currentAddress === originAddress) {
             return;
         }
@@ -771,7 +778,16 @@ export class ModbusService {
 
             const isWrite = param !== undefined;
             let fn: string;
-            if (isWrite && Array.isArray(param.params?.value)) {
+            const fns = comRequest.config.function;
+            if (isWrite && fns.includes(ModbusFunctionName.CUSTOM_MULTIPLE_COILS) && (param.params?.length ?? 1) > 1) {
+                // custom multiple (FC05 + valeur custom répétée sur length coils), prioritaire sur write
+                fn = ModbusFunctionName.CUSTOM_MULTIPLE_COILS;
+            } else if (isWrite && fns.includes(ModbusFunctionName.CUSTOM_SINGLE_COIL)) {
+                // custom (FC05 + valeur custom ex: 0x5500) : prioritaire sur writeCoil, pas de méthode client dédiée
+                fn = ModbusFunctionName.CUSTOM_SINGLE_COIL;
+            } else if (isWrite && fns.includes(ModbusFunctionName.CUSTOM_MULTIPLE_COILS)) {
+                fn = ModbusFunctionName.CUSTOM_MULTIPLE_COILS;
+            } else if (isWrite && Array.isArray(param.params?.value)) {
                 // écriture multiple : un tableau de valeurs doit passer par writeCoils/writeRegisters,
                 // pas par writeCoil/writeRegister (qui n'acceptent qu'une valeur unique).
                 fn = comRequest.config.function.find(f =>
@@ -781,7 +797,8 @@ export class ModbusService {
                 fn = comRequest.config.function.find(f => f.startsWith(isWrite ? 'write' : 'read')) as string;
             }
             if (!fn) throw new Error(`Aucune fonction Modbus ${isWrite ? 'd\'écriture' : 'de lecture'} configurée pour cette tâche`);
-            if (typeof client[fn] !== 'function') throw new Error(`Fonction Modbus inconnue: ${fn}`);
+            const isToggle = fn === ModbusFunctionName.CUSTOM_SINGLE_COIL || fn === ModbusFunctionName.CUSTOM_MULTIPLE_COILS;
+            if (!isToggle && typeof client[fn] !== 'function') throw new Error(`Fonction Modbus inconnue: ${fn}`);
 
             const addr = comRequest.config.address;
             const params = comRequest.config.params || null;
@@ -809,6 +826,33 @@ export class ModbusService {
                 }
                 return { function: fn as ModbusFunctionName, result: data } as ModbusExecuteResult;
             }
+            // --- Toggle coil ---
+            else if (fn === ModbusFunctionName.CUSTOM_SINGLE_COIL) {
+                const address = param.params?.persistence?.persist ? param.address + param.params?.persistence?.address : param.address;
+                if (Array.isArray(param.params?.value)) {
+                    throw new Error(`Valeur pour toggle single coil ne peut pas être un tableau : ${param.params?.value}`);
+                }
+                await this._CustomCoil(client, slaveConfig.slaveId, address, param.params?.value);
+                this.logger.log({ label: comRequest.name, address }, 'modbus toggle done');
+                return { function: ModbusFunctionName.CUSTOM_SINGLE_COIL, result: { address } };
+            }
+            // --- Custom multiple coils ---
+            else if (fn === ModbusFunctionName.CUSTOM_MULTIPLE_COILS) {
+                // Pas d'équivalent FC15 : une trame FC05 avec la même valeur custom (ex: 0x5500)
+                // sur chaque coil de start à start + length - 1.
+                const start = param.params?.persistence?.persist ? param.address + param.params?.persistence?.address : param.address;
+                const value = param.params?.value;
+                if (typeof value !== 'number') {
+                    throw new Error(`Valeur custom multiple coils doit être un nombre (ex: 0x5500) : ${value}`);
+                }
+                const length = param.params?.length || 1;
+                const addresses = Array.from({ length }, (_, i) => start + i);
+                for (const address of addresses) {
+                    await this._CustomCoil(client, slaveConfig.slaveId, address, value);
+                }
+                this.logger.log({ label: comRequest.name, addresses, value }, 'modbus custom coils done');
+                return { function: ModbusFunctionName.CUSTOM_MULTIPLE_COILS, result: { addresses } };
+            }
             // --- Écriture ---
             else if (fn.startsWith('write')) {
                 const address = param.params?.persistence?.persist ? param.address + param.params?.persistence?.address : param.address;
@@ -832,6 +876,73 @@ export class ModbusService {
         } finally {
             client.close(() => this.logger.log({ taskId }, 'modbus connection closed'));
         }
+    }
+
+    /**
+     * Banc de test register map : exécute une requête brute sur le slave `deviceId`, dans la file
+     * du bus. Contrairement à execute(), les erreurs (exceptions Modbus comprises) sont propagées.
+     * Lecture : renvoie les données lues (bits tronqués à `length`) ; écriture : rien.
+     */
+    public async executeRegisterRequest(deviceId: string, request: RegisterRequest): Promise<(number | boolean)[] | void> {
+        const resolved = await this._resolveMasterConfig(deviceId);
+        if (!resolved) {
+            throw new Error(`executeRegisterRequest: no device found for deviceId "${deviceId}"`);
+        }
+        const { masterConfig, slaveConfig } = resolved;
+        const client = new ModbusRTU();
+        return this._enqueue(async () => {
+            await this._connectClient(client, masterConfig, slaveConfig.slaveId);
+            try {
+                return await this._runRegisterRequest(client, slaveConfig.slaveId, request);
+            } finally {
+                client.close(() => this.logger.log({ deviceId }, 'register request connection closed'));
+            }
+        });
+    }
+
+    // eslint-disable-next-line complexity
+    private async _runRegisterRequest(client: ModbusRTU, unitId: number, request: RegisterRequest): Promise<(number | boolean)[] | void> {
+        const { address, length, value } = request;
+        switch (request.function) {
+            case ModbusFunctionName.READ_COILS:
+            case ModbusFunctionName.READ_DISCRETE_INPUTS:
+                // modbus-serial complète les bits au multiple de 8
+                return (await client[request.function](address, length)).data.slice(0, length);
+            case ModbusFunctionName.READ_HOLDING_REGISTERS:
+            case ModbusFunctionName.READ_INPUT_REGISTERS:
+                return (await client[request.function](address, length)).data;
+            case ModbusFunctionName.WRITE_SINGLE_COIL:
+                await client.writeCoil(address, Boolean(value));
+                return;
+            case ModbusFunctionName.WRITE_SINGLE_REGISTER:
+                await client.writeRegister(address, value as number);
+                return;
+            case ModbusFunctionName.WRITE_MULTIPLE_COILS:
+                await client.writeCoils(address, value as boolean[]);
+                return;
+            case ModbusFunctionName.WRITE_MULTIPLE_REGISTERS:
+                await client.writeRegisters(address, value as number[]);
+                return;
+            case ModbusFunctionName.CUSTOM_SINGLE_COIL:
+                await this._CustomCoil(client, unitId, address, value as number);
+                return;
+            case ModbusFunctionName.CUSTOM_MULTIPLE_COILS:
+                for (let i = 0; i < length; i++) {
+                    await this._CustomCoil(client, unitId, address + i, value as number);
+                }
+                return;
+            default:
+                throw new Error(`Fonction Modbus non supportée: ${request.function}`);
+        }
+    }
+
+    // FC05 avec une valeur 16 bits custom (ex: 0x5500 = toggle) : writeCoil ne sait émettre que FF00/0000.
+    // L'écho est décodé par modbus-serial comme un writeCoil (state=false), on l'ignore.
+    private async _CustomCoil(client: ModbusRTU, unitId: number, address: number, value: number): Promise<void> {
+        const data = Buffer.from([(address >> 8) & 0xff, address & 0xff, (value >> 8) & 0xff, value & 0xff]);
+        await new Promise<void>((resolve, reject) => {
+            client.writeCustomFC(unitId, 0x05, data as unknown as Int8Array, (err) => (err ? reject(err) : resolve()));
+        });
     }
 
     private async _applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {

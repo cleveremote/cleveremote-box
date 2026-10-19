@@ -12,7 +12,7 @@ export class SlaveTemplateService {
 
     public async save(template: SlaveTemplate): Promise<SlaveTemplate> {
         const saved = await this.slaveTemplateRepository.save(template);
-        this.logger.log({ templateId: saved._id, name: saved.name, type: saved.type }, 'slave template saved');
+        this.logger.log({ templateId: saved._id, name: saved.name, kind: saved.kind }, 'slave template saved');
         return saved;
     }
 

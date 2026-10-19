@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, SchemaTypes } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { DeviceRangeType } from '@process/domain/models/device.model';
+import { DeviceKind } from '@process/domain/models/device.model';
 
 export type SlaveTemplateDocument = SlaveTemplate & Document;
 
@@ -16,8 +16,8 @@ export class SlaveTemplate {
     @Prop()
     public description?: string;
 
-    @Prop({ required: true, enum: DeviceRangeType })
-    public type: DeviceRangeType;
+    @Prop({ required: true, enum: DeviceKind })
+    public kind: DeviceKind;
 
     // structure libre (cf. SlaveTemplate du domaine) : validée en entrée par SlaveTemplateDTO
     @Prop({ type: SchemaTypes.Mixed, required: true })

@@ -2,14 +2,16 @@ import { ComRequestType } from '../interfaces/com-request.interface';
 import { SensorType } from '../interfaces/sensor.interface';
 
 export enum ModbusFunctionName {
-  READ_COILS = 'readCoils',
-  READ_DISCRETE_INPUTS = 'readDiscreteInputs',
-  READ_HOLDING_REGISTERS = 'readHoldingRegisters',
-  READ_INPUT_REGISTERS = 'readInputRegisters',
-  WRITE_SINGLE_COIL = 'writeCoil',
-  WRITE_SINGLE_REGISTER = 'writeRegister',
-  WRITE_MULTIPLE_COILS = 'writeCoils',
-  WRITE_MULTIPLE_REGISTERS = 'writeRegisters',
+  READ_COILS = 'readCoils', //01
+  READ_DISCRETE_INPUTS = 'readDiscreteInputs', //02
+  READ_HOLDING_REGISTERS = 'readHoldingRegisters', //03
+  READ_INPUT_REGISTERS = 'readInputRegisters', //04
+  WRITE_SINGLE_COIL = 'writeCoil', //05
+  WRITE_SINGLE_REGISTER = 'writeRegister', //06
+  WRITE_MULTIPLE_COILS = 'writeCoils',//15 (0F hex)
+  WRITE_MULTIPLE_REGISTERS = 'writeRegisters',//16 (10 hex)
+  CUSTOM_SINGLE_COIL = 'customCoil', //05 avec valeur 0x5500 (non standard, certaines cartes relais)
+  CUSTOM_MULTIPLE_COILS = 'customCoils', //05 + 0x5500 répété sur chaque coil (pas d'équivalent FC15)
 }
 
 // Copie locale des formes de retour de modbus-serial (ModbusRTU.d.ts) : ce sous-chemin
@@ -38,6 +40,14 @@ export interface ModbusWriteCoilResult {
     state: boolean;
 }
 
+export interface ModbusCustomCoilResult {
+     address: number;
+}
+
+export interface ModbusCustomMultipleResult {
+    addresses: number[];
+}
+
 export interface ModbusWriteRegisterResult {
     address: number;
     value: number;
@@ -57,6 +67,8 @@ export interface ModbusFunctionResultMap {
     [ModbusFunctionName.WRITE_SINGLE_REGISTER]: ModbusWriteRegisterResult;
     [ModbusFunctionName.WRITE_MULTIPLE_COILS]: ModbusWriteMultipleResult;
     [ModbusFunctionName.WRITE_MULTIPLE_REGISTERS]: ModbusWriteMultipleResult;
+    [ModbusFunctionName.CUSTOM_SINGLE_COIL]: ModbusCustomCoilResult;
+    [ModbusFunctionName.CUSTOM_MULTIPLE_COILS]: ModbusCustomMultipleResult;
 }
 
 export type ModbusExecuteResult<F extends ModbusFunctionName = ModbusFunctionName> = {

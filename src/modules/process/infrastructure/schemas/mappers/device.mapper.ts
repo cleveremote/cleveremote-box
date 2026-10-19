@@ -1,4 +1,4 @@
-import { DeviceModel, DeviceType, MasterConfigModel, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, SlaveConfigModel } from '@process/domain/models/device.model';
 import { Device, DeviceDocument } from '../device.schema';
 
 export class DeviceMapper {
@@ -19,7 +19,9 @@ export class DeviceMapper {
         const config = new SlaveConfigModel();
         config.slaveId = device.config.slaveId;
         config.masterDeviceId = device.config.masterDeviceId;
-        config.kind = device.config.kind ?? device.kind;
+        // 'INVERTER' : ancienne valeur de DeviceKind encore présente en base
+        const kind = device.config.kind ?? device.kind;
+        config.kind = (kind as string) === 'INVERTER' ? DeviceKind.INVERTER_VEICHI_SI23_V1 : kind;
         if (device.config.portConfig) {
             config.portConfig = { portNumStart: device.config.portConfig.portNumStart, portCount: device.config.portConfig.portCount };
         }

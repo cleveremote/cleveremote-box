@@ -8,7 +8,7 @@ export class SlaveTemplateMapper {
             _id: template._id,
             name: template.name,
             description: template.description,
-            type: template.type,
+            kind: template.kind,
             device: template.device as SlaveTemplateModel['device'],
             comRequests: template.comRequests as SlaveTemplateModel['comRequests']
         };
@@ -18,7 +18,7 @@ export class SlaveTemplateMapper {
         const template = new SlaveTemplate();
         template.name = model.name;
         template.description = model.description;
-        template.type = model.type;
+        template.kind = model.kind;
         template.device = { ...model.device };
         template.comRequests = model.comRequests.map((cr) => ({ ...cr }));
         return template;

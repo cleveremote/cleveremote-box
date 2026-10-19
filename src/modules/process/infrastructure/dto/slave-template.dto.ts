@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayNotEmpty, IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { DeviceKind, DeviceRangeType, SlaveTemplate } from '@process/domain/models/device.model';
+import { DeviceKind, SlaveTemplate } from '@process/domain/models/device.model';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import { ComRequestConfigDTO, PortConfigDTO } from './synchronize.dto';
 
@@ -68,9 +68,9 @@ export class SlaveTemplateDTO {
     @ApiProperty({ description: 'Description du template' })
     public description?: string;
 
-    @IsEnum(DeviceRangeType)
-    @ApiProperty({ description: 'Type de module (plage d\'adresses)', enum: DeviceRangeType })
-    public type: DeviceRangeType;
+    @IsEnum(DeviceKind)
+    @ApiProperty({ description: 'Kind du module (détermine sa plage d\'adresses)', enum: DeviceKind })
+    public kind: DeviceKind;
 
     @IsNotEmpty()
     @ValidateNested()
@@ -87,7 +87,7 @@ export class SlaveTemplateDTO {
             _id: dto._id,
             name: dto.name,
             description: dto.description,
-            type: dto.type,
+            kind: dto.kind,
             device: {
                 name: dto.device.name,
                 description: dto.device.description,

@@ -55,7 +55,7 @@ describe('DeviceService', () => {
 
     beforeEach(() => {
         modbusSlaveStrategy = CreateStrategyMock(DeviceKind.MODBUS_SLAVE);
-        inverterStrategy = CreateStrategyMock(DeviceKind.INVERTER);
+        inverterStrategy = CreateStrategyMock(DeviceKind.INVERTER_VEICHI_SI23_V1);
         deviceRepository = { getByType: jest.fn().mockResolvedValue([]), get: jest.fn() };
         modbusService = { probeMasterForNewSlave: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
@@ -68,7 +68,7 @@ describe('DeviceService', () => {
     });
 
     it('should dispatch to the strategy matching the device kind', async () => {
-        const device = CreateDeviceModel(DeviceKind.INVERTER);
+        const device = CreateDeviceModel(DeviceKind.INVERTER_VEICHI_SI23_V1);
         const params = { name: 'value', value: 0 };
 
         await service.read(device, params);

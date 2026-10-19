@@ -10,7 +10,7 @@ function CreateInverterDeviceModel(): DeviceModel {
     const device = new DeviceModel();
     device._id = 'device-1';
     device.type = DeviceType.SLAVE;
-    device.config = { slaveId: 1, kind: DeviceKind.INVERTER };
+    device.config = { slaveId: 1, kind: DeviceKind.INVERTER_VEICHI_SI23_V1 };
     return device;
 }
 
@@ -43,7 +43,7 @@ describe('InverterDeviceStrategy', () => {
     });
 
     it('should have the INVERTER kind', () => {
-        expect(strategy.kind).toEqual(DeviceKind.INVERTER);
+        expect(strategy.kind).toEqual(DeviceKind.INVERTER_VEICHI_SI23_V1);
     });
 
     it('should throw NotImplementedError on configure/write/read', async () => {

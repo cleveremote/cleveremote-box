@@ -11,7 +11,7 @@ import { buildOverrideParams } from '@process/domain/utils/build-override-params
 
 @Injectable()
 export class InverterDeviceStrategy implements DeviceStrategy {
-    public readonly kind = DeviceKind.INVERTER;
+    public readonly kind = DeviceKind.INVERTER_VEICHI_SI23_V1;
 
     public constructor(private comRequestRepository: ComRequestRepository,
         private modbusService: ModbusService,

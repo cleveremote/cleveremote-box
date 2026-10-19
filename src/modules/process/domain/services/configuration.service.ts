@@ -18,7 +18,7 @@ import { EventRepository } from '@process/infrastructure/repositories/event.repo
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { randomUUID } from 'node:crypto';
-import { DEVICE_RANGE_TYPE_RANGES, DeviceModel, DeviceRangeType, DeviceType, DISCOVERY_REGISTER_BY_TYPE, SlaveConfigModel, SlaveTemplate, getDeviceRangeType, DeviceKind } from '../models/device.model';
+import { DEVICE_KIND_SPECS, DeviceModel, DeviceType, SlaveConfigModel, SlaveTemplate, getDeviceKindByAddress, getDiscoveryTargets, DeviceKind } from '../models/device.model';
 import { ModbusService } from './modbus.service';
 import { Logger } from 'nestjs-pino';
 import { readFileSync } from 'node:fs';
@@ -196,7 +196,7 @@ export class StructureService {
             config: {
                 slaveId,
                 masterDeviceId,
-                kind: template.type === DeviceRangeType.INVERTER ? DeviceKind.INVERTER : DeviceKind.MODBUS_SLAVE,
+                kind: template.kind,
                 portConfig: template.device.portConfig && { ...template.device.portConfig }
             },
             deletedAt: null,
@@ -210,7 +210,7 @@ export class StructureService {
             config: structuredClone(cr.config),
             deletedAt: null,
         }));
-        const actuators = template.type === DeviceRangeType.DIGITAL_IO
+        const actuators = template.kind === DeviceKind.DIGITAL_IO_8_CH
             ? this._buildDigitalOutputActuators(device, comRequests)
             : [];
         return { device, comRequests, actuators };
@@ -256,7 +256,7 @@ export class StructureService {
 
     /**
      * Scanne un Master : pour chaque type de DiscoveryAddressRegister, lit son registre sur le
-     * premier unit id de sa plage (DEVICE_RANGE_TYPE_RANGES), réservé aux modules neufs. Quand un
+     * premier unit id de sa plage (DEVICE_KIND_SPECS), réservé aux modules neufs. Quand un
      * module répond, la valeur lue est son adresse : sa plage donne le type. Le module est alors
      * réadressé sur le premier slaveId libre de la plage, puis créé à partir du template du type.
      */
@@ -267,31 +267,27 @@ export class StructureService {
                 .map((slave) => (slave.config as SlaveConfigModel).slaveId)
         );
 
-        const targets: { unitId: number; register: number }[] = [];
-        for (const type of Object.values(DeviceRangeType)) {
-            const register = DISCOVERY_REGISTER_BY_TYPE[type];
-            if (register !== undefined) targets.push({ unitId: DEVICE_RANGE_TYPE_RANGES[type].min, register });
-        }
-
+        const targets = getDiscoveryTargets().map(({ unitId, register }) => ({ unitId, register }));
         const responses = await this.modbusService.scanDiscoveryRegisters(master, targets);
         const templates = this._loadSlaveTemplates();
         const created: DeviceModel[] = [];
         for (const { unitId, register, value: address } of responses) {
-            const type = getDeviceRangeType(address);
-            if (!type || DISCOVERY_REGISTER_BY_TYPE[type] !== register) {
+            const kind = getDeviceKindByAddress(address);
+            const spec = kind ? DEVICE_KIND_SPECS[kind] : undefined;
+            if (!kind || !spec || spec.discoveryRegister !== register) {
                 this.logger.warn({ masterDeviceId, unitId, register, address }, 'scanned address out of the range of its register type');
                 continue;
             }
-            const template = templates.find((t) => t.type === type);
+            const template = templates.find((t) => t.kind === kind);
             if (!template) {
-                this.logger.warn({ masterDeviceId, address, type }, 'no slave template for detected type');
+                this.logger.warn({ masterDeviceId, address, kind }, 'no slave template for detected type');
                 continue;
             }
-            const { min, max } = DEVICE_RANGE_TYPE_RANGES[type];
+            const { min, max } = spec.range;
             let newSlaveId = min + 1;
             while (newSlaveId <= max && existingSlaveIds.has(newSlaveId)) newSlaveId++;
             if (newSlaveId > max) {
-                this.logger.warn({ masterDeviceId, type }, 'no free slaveId left in range');
+                this.logger.warn({ masterDeviceId, kind }, 'no free slaveId left in range');
                 continue;
             }
             try {
@@ -302,7 +298,7 @@ export class StructureService {
             }
             created.push((await this._saveSlave(this.buildSlaveFromTemplate(template, masterDeviceId, newSlaveId))).device);
             existingSlaveIds.add(newSlaveId);
-            this.logger.log({ masterDeviceId, newSlaveId, type }, 'slave created from scan');
+            this.logger.log({ masterDeviceId, newSlaveId, kind }, 'slave created from scan');
         }
         return created;
     }

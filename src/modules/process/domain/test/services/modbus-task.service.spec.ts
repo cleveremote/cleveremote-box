@@ -16,6 +16,7 @@ interface MockModbusClient {
     readDiscreteInputs: jest.Mock;
     writeRegister: jest.Mock;
     writeRegisters: jest.Mock;
+    writeCustomFC: jest.Mock;
     close: jest.Mock;
 }
 
@@ -35,6 +36,7 @@ function CreateMockClient(overrides: Partial<MockModbusClient> = {}): MockModbus
         readDiscreteInputs: jest.fn().mockResolvedValue({ data: new Array(8).fill(false) }),
         writeRegister: jest.fn().mockResolvedValue({ address: 0, value: 0 }),
         writeRegisters: jest.fn().mockResolvedValue({ address: 0, length: 0 }),
+        writeCustomFC: jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(null)),
         close: jest.fn((cb?: () => void) => cb?.()),
         ...overrides
     };
@@ -259,6 +261,43 @@ describe('ModbusService (modbus-serial mocked)', () => {
 
             expect(writeRegister).toHaveBeenCalledWith(50, 42);
             expect(logger.log).toHaveBeenCalledWith(expect.objectContaining({ value: 42 }), 'modbus write done');
+        });
+
+        it('should send FC05 with the custom value (0x5500) for a customCoil com request, even alongside writeCoil', async () => {
+            mockModbusClients.length = 0;
+            const writeCustomFC = jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(null));
+            const writeCoil = jest.fn();
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeCustomFC, writeCoil } as never));
+            const param: ComRequestConfigModel = { address: 258, function: [], params: { value: 0x5500 } };
+
+            const res = await service.execute(CreateModbusTaskModel({ function: ['writeCoil', 'customCoil'], address: 258 }), param);
+
+            expect(writeCustomFC).toHaveBeenCalledWith(1, 0x05, Buffer.from([0x01, 0x02, 0x55, 0x00]), expect.any(Function));
+            expect(writeCoil).not.toHaveBeenCalled();
+            expect(res).toEqual({ function: 'customCoil', result: { address: 258 } });
+        });
+
+        it('should send the custom value on every coil from start to start + length - 1 for a customCoils com request', async () => {
+            mockModbusClients.length = 0;
+            const writeCustomFC = jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(null));
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeCustomFC }));
+            const param: ComRequestConfigModel = { address: 4, function: [], params: { value: 0x5500, length: 3 } };
+
+            const res = await service.execute(CreateModbusTaskModel({ function: ['customCoil', 'customCoils'], address: 4 }), param);
+
+            expect(writeCustomFC).toHaveBeenCalledTimes(3);
+            expect(writeCustomFC).toHaveBeenNthCalledWith(1, 1, 0x05, Buffer.from([0x00, 0x04, 0x55, 0x00]), expect.any(Function));
+            expect(writeCustomFC).toHaveBeenNthCalledWith(3, 1, 0x05, Buffer.from([0x00, 0x06, 0x55, 0x00]), expect.any(Function));
+            expect(res).toEqual({ function: 'customCoils', result: { addresses: [4, 5, 6] } });
+        });
+
+        it('should reject when the custom coil request fails with an unexpected error', async () => {
+            mockModbusClients.length = 0;
+            const writeCustomFC = jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(new Error('boom')));
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({ writeCustomFC }));
+
+            await expect(service.execute(CreateModbusTaskModel({ function: ['customCoil'], address: 0 }), { address: 0, function: [], params: { value: 0x5500 } }))
+                .rejects.toThrow('boom');
         });
 
         it('should throw when no configured function is known to the client', async () => {

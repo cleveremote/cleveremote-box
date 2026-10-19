@@ -1,0 +1,431 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; le champ 'wire'/'hex' n'est qu'affichage (valeur réellement émise sur le bus)",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'channel' : block.address.start + index voie (0-based) × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : saisie brute (affichée × scale en unit) ; 'boolean[]' : tableau 0/1 ; 'enum[]' : tableau d'enum[].value ; 'composite' : input.encode",
+    "channelLabel": "libellé voie = hardware.channels.labelStart + index",
+    "danger": "true : l'opération peut couper la communication avec le module (confirmation requise)"
+  },
+  "_id": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+  "name": "WAVESHARE MODBUS RTU IO 8CH",
+  "description": "Waveshare Modbus RTU IO 8CH - 8 entrées / 8 sorties digitales",
+  "kind": "DIGITAL_IO_8CH",
+  "hardware": {
+    "manufacturer": "Waveshare",
+    "model": "Modbus RTU IO 8CH",
+    "protocolVersion": "V2",
+    "documentation": "https://www.waveshare.com/wiki/Modbus_RTU_IO_8CH",
+    "channels": {
+      "outputs": 8,
+      "inputs": 8,
+      "labelStart": 1
+    },
+    "serial": {
+      "baudRate": 9600,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1
+    },
+    "unitId": {
+      "default": 1,
+      "min": 1,
+      "max": 255,
+      "broadcast": 0
+    },
+    "discoveryRegister": 16384,
+    "exceptionCodes": "modbusException"
+  },
+  "enums": {
+    "coilState": [
+      { "value": 1, "wire": "0xFF00", "label": "ON" },
+      { "value": 0, "wire": "0x0000", "label": "OFF" }
+    ],
+    "coilCommand": [
+      { "value": 65280, "hex": "0xFF00", "label": "ON" },
+      { "value": 0, "hex": "0x0000", "label": "OFF" },
+      { "value": 21760, "hex": "0x5500", "label": "TOGGLE" }
+    ],
+    "outputMode": [
+      { "value": 0, "hex": "0x0000", "label": "Normal", "description": "Sortie pilotée uniquement par commande Modbus" },
+      { "value": 1, "hex": "0x0001", "label": "Linkage", "description": "La sortie recopie l'état de l'entrée de même rang" },
+      { "value": 2, "hex": "0x0002", "label": "Toggle", "description": "Chaque impulsion sur l'entrée bascule la sortie" },
+      { "value": 3, "hex": "0x0003", "label": "Edge trigger", "description": "Chaque changement d'état de l'entrée bascule la sortie" }
+    ],
+    "baudRate": [
+      { "value": 0, "hex": "0x00", "label": "4800" },
+      { "value": 1, "hex": "0x01", "label": "9600" },
+      { "value": 2, "hex": "0x02", "label": "19200" },
+      { "value": 3, "hex": "0x03", "label": "38400" },
+      { "value": 4, "hex": "0x04", "label": "57600" },
+      { "value": 5, "hex": "0x05", "label": "115200" },
+      { "value": 6, "hex": "0x06", "label": "128000" },
+      { "value": 7, "hex": "0x07", "label": "256000" }
+    ],
+    "parity": [
+      { "value": 0, "hex": "0x00", "label": "None" },
+      { "value": 1, "hex": "0x01", "label": "Even", "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte" },
+      { "value": 2, "hex": "0x02", "label": "Odd", "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte" }
+    ],
+    "modbusException": [
+      { "value": 1, "hex": "0x01", "label": "Illegal function" },
+      { "value": 2, "hex": "0x02", "label": "Illegal data address" },
+      { "value": 3, "hex": "0x03", "label": "Illegal data value" },
+      { "value": 4, "hex": "0x04", "label": "Server failure" },
+      { "value": 5, "hex": "0x05", "label": "Acknowledge" },
+      { "value": 6, "hex": "0x06", "label": "Device busy" }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "outputs",
+      "label": "Sorties 1~8",
+      "area": "coil",
+      "access": "rw",
+      "address": { "start": 0, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'état des sorties",
+          "function": "readCoils",
+          "fc": 1,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "result": { "type": "boolean[]" }
+        },
+        {
+          "id": "set",
+          "label": "Sortie ON / OFF",
+          "function": "writeCoil",
+          "fc": 5,
+          "scope": "channel",
+          "input": { "type": "enum", "enum": "coilState" },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "toggle",
+          "label": "Basculer une sortie",
+          "function": "customCoil",
+          "fc": 5,
+          "scope": "channel",
+          "input": { "type": "none", "fixedValue": 21760 },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "setMask",
+          "label": "Écrire les 8 sorties",
+          "function": "writeCoils",
+          "fc": 15,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "boolean[]", "length": 8 },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "toggleRange",
+          "label": "Basculer les 8 sorties une à une",
+          "function": "customCoils",
+          "fc": 5,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none", "fixedValue": 21760 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "CH1 ON", "frame": "01 05 00 00 FF 00 8C 3A" },
+        { "label": "CH1 OFF", "frame": "01 05 00 00 00 00 CD CA" },
+        { "label": "CH2 ON", "frame": "01 05 00 01 FF 00 DD FA" },
+        { "label": "CH2 OFF", "frame": "01 05 00 01 00 00 9C 0A" },
+        { "label": "CH1 TOGGLE", "frame": "01 05 00 00 55 00 F2 9A" },
+        { "label": "CH2 TOGGLE", "frame": "01 05 00 01 55 00 A3 5A" },
+        { "label": "Lire 8 sorties", "frame": "01 01 00 00 00 08 3D CC" },
+        { "label": "8 sorties ON (FC15)", "frame": "01 0F 00 00 00 08 01 FF BE D5" },
+        { "label": "8 sorties OFF (FC15)", "frame": "01 0F 00 00 00 08 01 00 FE 95" },
+        { "label": "CH1-2 ON, CH3-8 OFF (FC15)", "frame": "01 0F 00 00 00 08 01 03 BE 94" }
+      ]
+    },
+    {
+      "id": "allOutputs",
+      "label": "Toutes les sorties",
+      "area": "coil",
+      "access": "w",
+      "address": { "start": 255, "count": 1 },
+      "operations": [
+        {
+          "id": "set",
+          "label": "Toutes ON / OFF",
+          "function": "writeCoil",
+          "fc": 5,
+          "scope": "fixed",
+          "input": { "type": "enum", "enum": "coilState" },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "toggle",
+          "label": "Basculer toutes les sorties",
+          "function": "customCoil",
+          "fc": 5,
+          "scope": "fixed",
+          "input": { "type": "none", "fixedValue": 21760 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Toutes ON", "frame": "01 05 00 FF FF 00 BC 0A" },
+        { "label": "Toutes OFF", "frame": "01 05 00 FF 00 00 FD FA" },
+        { "label": "Toutes TOGGLE", "frame": "01 05 00 FF 55 00 C2 AA" }
+      ]
+    },
+    {
+      "id": "flashOn",
+      "label": "Flash ON 1~8",
+      "description": "Allume la sortie puis la coupe automatiquement après N × 100 ms",
+      "area": "coil",
+      "access": "w",
+      "address": { "start": 512, "count": 8 },
+      "operations": [
+        {
+          "id": "pulse",
+          "label": "Impulsion ON temporisée",
+          "function": "customCoil",
+          "fc": 5,
+          "scope": "channel",
+          "input": { "type": "number", "min": 1, "max": 32767, "default": 7, "scale": 100, "unit": "ms" },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "CH1 flash ON 700 ms", "frame": "01 05 02 00 00 07 8D B0" },
+        { "label": "CH2 flash ON 800 ms", "frame": "01 05 02 01 00 08 9C 74" }
+      ]
+    },
+    {
+      "id": "flashOff",
+      "label": "Flash OFF 1~8",
+      "description": "Coupe la sortie puis la rallume automatiquement après N × 100 ms",
+      "area": "coil",
+      "access": "w",
+      "address": { "start": 1024, "count": 8 },
+      "operations": [
+        {
+          "id": "pulse",
+          "label": "Impulsion OFF temporisée",
+          "function": "customCoil",
+          "fc": 5,
+          "scope": "channel",
+          "input": { "type": "number", "min": 1, "max": 32767, "default": 5, "scale": 100, "unit": "ms" },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "CH1 flash OFF 500 ms", "frame": "01 05 04 00 00 05 0C F9" },
+        { "label": "CH2 flash OFF 600 ms", "frame": "01 05 04 01 00 06 1D 38" }
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Entrées 1~8",
+      "area": "discreteInput",
+      "access": "r",
+      "address": { "start": 0, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'état des entrées",
+          "function": "readDiscreteInputs",
+          "fc": 2,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "result": { "type": "boolean[]" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire 8 entrées", "frame": "01 02 00 00 00 08 79 CC" }
+      ]
+    },
+    {
+      "id": "outputModes",
+      "label": "Mode de contrôle des sorties 1~8",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": { "start": 4096, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les modes",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "result": { "type": "enum[]", "enum": "outputMode" }
+        },
+        {
+          "id": "set",
+          "label": "Définir le mode d'une sortie",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "channel",
+          "input": { "type": "enum", "enum": "outputMode" },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "setAll",
+          "label": "Définir les modes des 8 sorties",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "enum[]", "enum": "outputMode", "length": 8 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire modes CH1-8", "frame": "01 03 10 00 00 08 40 CC" },
+        { "label": "CH1 Linkage", "frame": "01 06 10 00 00 01 4C CA" },
+        { "label": "CH2 Toggle", "frame": "01 06 10 01 00 02 5D 0B" },
+        { "label": "CH1-8 Linkage", "frame": "01 10 10 00 00 08 10 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 7C B1" },
+        { "label": "CH1-8 Normal", "frame": "01 10 10 00 00 08 10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0B 5C" }
+      ]
+    },
+    {
+      "id": "uart",
+      "label": "Paramètres UART",
+      "description": "Octet haut : parité, octet bas : code vitesse",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 8192, "count": 1 },
+      "operations": [
+        {
+          "id": "set",
+          "label": "Définir vitesse et parité",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "composite",
+            "encode": "(parity << 8) | baudRate",
+            "fields": [
+              { "name": "parity", "enum": "parity", "byte": "high", "default": 0 },
+              { "name": "baudRate", "enum": "baudRate", "byte": "low", "default": 1 }
+            ]
+          },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "4800 N (broadcast)", "frame": "00 06 20 00 00 00 83 DB" },
+        { "label": "9600 N (broadcast)", "frame": "00 06 20 00 00 01 42 1B" },
+        { "label": "115200 N (broadcast)", "frame": "00 06 20 00 00 05 43 D8" }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse du module",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 16384, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": { "type": "number" }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": { "type": "number", "min": 1, "max": 255, "default": 1 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire l'adresse (broadcast)", "frame": "00 03 40 00 00 01 90 1B" },
+        { "label": "Réponse adresse = 2", "frame": "00 03 02 00 02 04 45" },
+        { "label": "Adresse -> 1", "frame": "00 06 40 00 00 01 5C 1B" },
+        { "label": "Adresse -> 2", "frame": "00 06 40 00 00 02 1C 1A" },
+        { "label": "Adresse -> 3", "frame": "00 06 40 00 00 03 DD DA" }
+      ]
+    },
+    {
+      "id": "version",
+      "label": "Version logicielle",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": { "start": 32768, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la version",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1, "formula": "raw / 100" },
+          "input": { "type": "none" },
+          "result": { "type": "version", "prefix": "V", "decimals": 2 }
+        }
+      ],
+      "examples": [
+        { "label": "Lire version (broadcast)", "frame": "00 03 80 00 00 01 AC 1B" },
+        { "label": "Réponse V2.00", "frame": "00 03 02 00 C8 84 12" }
+      ]
+    }
+  ],
+  "device": {
+    "name": "8/IO IRRIGATION VALVES",
+    "description": "8/IO IRRIGATION VALVES",
+    "portConfig": {
+      "portNumStart": 0,
+      "portCount": 8
+    }
+  },
+  "comRequests": [
+    {
+      "name": "SWITCH ALL OFF",
+      "description": "SWITCH ALL OFF",
+      "type": ["DIGITAL_IO_INIT"],
+      "config": {
+        "address": 255,
+        "function": ["writeCoil"],
+        "done": true,
+        "params": { "length": 1, "value": 0 }
+      }
+    },
+    {
+      "name": "SET ALL TOGGLE MODE",
+      "description": "SET ALL TOGGLE MODE",
+      "type": ["DIGITAL_IO_INIT"],
+      "config": {
+        "address": 4096,
+        "function": ["writeRegisters"],
+        "done": true,
+        "params": { "length": 8, "value": [2, 2, 2, 2, 2, 2, 2, 2] }
+      }
+    },
+    {
+      "name": "SWITCH ALL ON",
+      "description": "SWITCH ALL ON",
+      "type": ["DIGITAL_IO_INIT"],
+      "config": {
+        "address": 255,
+        "function": ["writeCoil"],
+        "done": true,
+        "params": { "length": 1, "value": 1 }
+      }
+    }
+  ]
+}

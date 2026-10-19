@@ -16,6 +16,8 @@ import { NOT_DELETED_FILTER, softDeleteUpdate } from '../schemas/soft-delete.uti
 const FUNCTION_TO_TYPE: Partial<Record<ModbusFunctionName, ComRequestType[]>> = {
     [ModbusFunctionName.READ_COILS]: [ComRequestType.DIGITAL_OUTPUT],
     [ModbusFunctionName.WRITE_SINGLE_COIL]: [ComRequestType.DIGITAL_OUTPUT],
+    [ModbusFunctionName.CUSTOM_SINGLE_COIL]: [ComRequestType.DIGITAL_OUTPUT],
+    [ModbusFunctionName.CUSTOM_MULTIPLE_COILS]: [ComRequestType.DIGITAL_OUTPUT],
     [ModbusFunctionName.WRITE_MULTIPLE_COILS]: [ComRequestType.DIGITAL_OUTPUT],
     [ModbusFunctionName.READ_DISCRETE_INPUTS]: [ComRequestType.DIGITAL_INPUT],
     [ModbusFunctionName.READ_HOLDING_REGISTERS]: [ComRequestType.ANALOG_OUTPUT],

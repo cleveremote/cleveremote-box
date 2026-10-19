@@ -19,7 +19,7 @@ import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ValueModel, ExecutableType } from '@process/domain/models/value.model';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateCycleModel } from './cycle.spec-mock';
-import { DeviceRangeType, DeviceType, DiscoveryAddressRegister, SlaveTemplate } from '@process/domain/models/device.model';
+import { DeviceKind, DeviceType, DiscoveryAddressRegister, SlaveTemplate } from '@process/domain/models/device.model';
 import { ModbusFunctionName } from '@process/domain/models/com-request.model';
 import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -321,7 +321,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             _id: '5b0c1f0e-3a3e-4c2a-9a51-2f6d1b7e8c01',
             name: '8/IO IRRIGATION VALVES',
             description: '8/IO IRRIGATION VALVES',
-            type: DeviceRangeType.DIGITAL_IO,
+            kind: DeviceKind.DIGITAL_IO_8_CH,
             device: { name: '8/IO IRRIGATION VALVES', description: '8/IO IRRIGATION VALVES' },
             comRequests: [
                 { name: 'digital output request', type: [ComRequestType.DIGITAL_OUTPUT], config: { address: 0, function: [ModbusFunctionName.WRITE_SINGLE_COIL] } },

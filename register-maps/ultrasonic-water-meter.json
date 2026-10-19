@@ -1,0 +1,2926 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; REGn de la doc constructeur = adresse n - 1",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'channel' : block.address.start + index × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'none' : input.fixedValue ; 'number' : saisie brute ; 'composite' : champs encodés par octet (BCD si encoding = bcd), un mot par 'word'",
+    "fields": "result 'fields' : champs décodés depuis la lecture (offset en mots) ; formules mathjs avec raw, les autres champs de la lecture et les valeurs scopeFrom",
+    "scopeFrom": "lectures exécutées avant l'opération pour alimenter ses formules (ex: position décimale des totaliseurs)",
+    "wordOrder": "valeurs 32 bits (int32, uint32, float) : mot de poids faible en premier (hardware.wordOrder)",
+    "danger": "true : l'opération peut couper la communication ou modifier le fonctionnement du compteur (confirmation requise)"
+  },
+  "_id": "7c2b1f4e-3d5a-4b8e-9f61-2a4c8e0d1b37",
+  "name": "COMPTEUR ULTRASONIQUE EAU / CHALEUR",
+  "description": "Compteur d'eau / chaleur à ultrasons - protocole Modbus Ver 0.1 (V00/V01)",
+  "kind": "FLOWMETER_ULTRASONIC_V1",
+  "hardware": {
+    "manufacturer": "Non précisé (Ultrasonic Water Meter / Heat Meter)",
+    "model": "Ultrasonic Water Meter / Heat Meter V00 / V01",
+    "protocolVersion": "Communication Protocol Ver 0.1 (fév. 2025)",
+    "documentation": "Ultrasonic_Water_Meter.pdf",
+    "serial": {
+      "baudRate": 9600,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1,
+      "baudRates": [
+        300,
+        600,
+        1200,
+        2400,
+        4800,
+        9600
+      ],
+      "parities": [
+        "none",
+        "even",
+        "odd"
+      ],
+      "note": "Paramètres série modifiables uniquement via le logiciel V00_SETUP (menu M25/M26)"
+    },
+    "unitId": {
+      "default": 1,
+      "min": 1,
+      "max": 255
+    },
+    "discoveryRegister": 61,
+    "exceptionCodes": "modbusException",
+    "wordOrder": "lowFirst",
+    "functionCodes": [
+      3,
+      6,
+      16
+    ],
+    "maxReadRegisters": 125,
+    "registerNumbering": "REGn = adresse n - 1 (ex : REG0361 → 360)"
+  },
+  "enums": {
+    "instantFlowUnit": [
+      {
+        "value": 0,
+        "label": "m³/h",
+        "description": "La table REG1437 indique m³/s, la table commune m³/h : à vérifier"
+      }
+    ],
+    "cumulativeFlowUnit": [
+      {
+        "value": 0,
+        "label": "m³"
+      },
+      {
+        "value": 1,
+        "label": "L"
+      },
+      {
+        "value": 2,
+        "label": "gal US"
+      },
+      {
+        "value": 3,
+        "label": "ft³"
+      },
+      {
+        "value": 4,
+        "label": "acre-ft"
+      },
+      {
+        "value": 5,
+        "label": "ft³",
+        "description": "Code 5 selon la table REG1438 (3 selon la note 1)"
+      }
+    ],
+    "heatUnit": [
+      {
+        "value": 0,
+        "label": "kWh"
+      },
+      {
+        "value": 1,
+        "label": "kBTU",
+        "description": "REG1496 indique 1 = GJ : à vérifier"
+      },
+      {
+        "value": 2,
+        "label": "GJ"
+      }
+    ],
+    "errorBits": [
+      {
+        "value": 0,
+        "label": "Erreur intégrateur de chaleur"
+      },
+      {
+        "value": 1,
+        "label": "Erreur sonde température départ"
+      },
+      {
+        "value": 2,
+        "label": "Erreur sonde température retour"
+      },
+      {
+        "value": 3,
+        "label": "Erreur de mesure du débitmètre"
+      },
+      {
+        "value": 4,
+        "label": "Inversion du sens d'écoulement"
+      },
+      {
+        "value": 5,
+        "label": "Erreur différence signal ultrasonique"
+      },
+      {
+        "value": 6,
+        "label": "Fonctionnement basse vitesse (signal absent ou débit faible prolongé)"
+      },
+      {
+        "value": 7,
+        "label": "Débitmètre non calibré"
+      },
+      {
+        "value": 8,
+        "label": "Voie 1 anormale"
+      },
+      {
+        "value": 9,
+        "label": "Voie 2 anormale"
+      },
+      {
+        "value": 10,
+        "label": "Voie 3 anormale"
+      },
+      {
+        "value": 11,
+        "label": "Voie 4 anormale"
+      },
+      {
+        "value": 12,
+        "label": "Tension batterie basse (< 3,2 V)"
+      },
+      {
+        "value": 13,
+        "label": "Température départ inférieure au retour"
+      },
+      {
+        "value": 14,
+        "label": "Amplitude du signal ultrasonique trop faible ou trop forte"
+      },
+      {
+        "value": 15,
+        "label": "Circuit d'acquisition ultrasonique défaillant"
+      },
+      {
+        "value": 16,
+        "label": "Sonde départ en circuit ouvert"
+      },
+      {
+        "value": 17,
+        "label": "Sonde retour en circuit ouvert"
+      },
+      {
+        "value": 18,
+        "label": "Résistance étalon 1 en circuit ouvert"
+      },
+      {
+        "value": 19,
+        "label": "Résistance étalon 2 en circuit ouvert"
+      },
+      {
+        "value": 20,
+        "label": "Sonde départ en court-circuit"
+      },
+      {
+        "value": 21,
+        "label": "Sonde retour en court-circuit"
+      },
+      {
+        "value": 22,
+        "label": "Résistance étalon 1 en court-circuit"
+      },
+      {
+        "value": 23,
+        "label": "Résistance étalon 2 en court-circuit"
+      },
+      {
+        "value": 24,
+        "label": "Erreur checksum zone paramètres"
+      },
+      {
+        "value": 25,
+        "label": "Erreur vérification du code programme"
+      },
+      {
+        "value": 26,
+        "label": "Erreur fusible"
+      },
+      {
+        "value": 27,
+        "label": "Erreur oscillateur basse fréquence"
+      },
+      {
+        "value": 28,
+        "label": "Erreur touche capacitive"
+      },
+      {
+        "value": 29,
+        "label": "Fréquence d'horloge hors plage"
+      },
+      {
+        "value": 30,
+        "label": "Erreur module de communication sans fil"
+      },
+      {
+        "value": 31,
+        "label": "Bit de réserve"
+      }
+    ],
+    "modbusException": [
+      {
+        "value": 1,
+        "label": "Illegal function"
+      },
+      {
+        "value": 2,
+        "label": "Illegal data address"
+      },
+      {
+        "value": 3,
+        "label": "Illegal data value"
+      },
+      {
+        "value": 4,
+        "label": "Server failure"
+      },
+      {
+        "value": 5,
+        "label": "Acknowledge"
+      },
+      {
+        "value": 6,
+        "label": "Device busy"
+      }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "commTest",
+      "label": "Registres de test",
+      "description": "Valeurs fixes : une autre valeur (0, 250.264...) signale un décalage d'adresse de ±1",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 360,
+        "count": 6
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Tester la communication",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 6
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "test361",
+                "label": "REG0361 (toujours 361.0)",
+                "offset": 0,
+                "type": "float",
+                "expected": 361
+              },
+              {
+                "name": "test363",
+                "label": "REG0363 (toujours 363348858)",
+                "offset": 2,
+                "type": "int32",
+                "expected": 363348858
+              },
+              {
+                "name": "test365",
+                "label": "REG0365 (toujours -987654321)",
+                "offset": 4,
+                "type": "int32",
+                "expected": -987654321
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire REG0361",
+          "frame": "01 03 01 68 00 02 44 2B"
+        },
+        {
+          "label": "Lire REG0362 (décalé)",
+          "frame": "01 03 01 69 00 02 15 EB"
+        }
+      ]
+    },
+    {
+      "id": "units",
+      "label": "Unités et position décimale",
+      "description": "Alimente les formules des totaliseurs (scopeFrom) : valeur réelle = N × 10^(n-3)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 1436,
+        "count": 6
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les unités",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 6
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instantFlowUnit",
+                "label": "Unité du débit instantané",
+                "offset": 0,
+                "type": "int16",
+                "enum": "instantFlowUnit"
+              },
+              {
+                "name": "cumulativeFlowUnit",
+                "label": "Unité des volumes cumulés",
+                "offset": 1,
+                "type": "int16",
+                "enum": "cumulativeFlowUnit"
+              },
+              {
+                "name": "flowDecimal",
+                "label": "Position décimale des volumes (n, -4..3)",
+                "offset": 2,
+                "type": "int16"
+              },
+              {
+                "name": "heatDecimal",
+                "label": "Position décimale de la chaleur (n, -3..4)",
+                "offset": 3,
+                "type": "int16"
+              },
+              {
+                "name": "heatUnit",
+                "label": "Unité de la chaleur",
+                "offset": 4,
+                "type": "int16",
+                "enum": "heatUnit"
+              },
+              {
+                "name": "modbusAddress",
+                "label": "Adresse de communication",
+                "offset": 5,
+                "type": "int16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "waterMeter",
+      "label": "Scénario compteur d'eau (REG1437-1469)",
+      "description": "Tous les registres utiles d'un compteur d'eau en une seule lecture",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 1436,
+        "count": 33
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le scénario compteur d'eau",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 33
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instantFlowUnit",
+                "label": "Unité du débit instantané",
+                "offset": 0,
+                "type": "int16",
+                "enum": "instantFlowUnit"
+              },
+              {
+                "name": "cumulativeFlowUnit",
+                "label": "Unité des volumes cumulés",
+                "offset": 1,
+                "type": "int16",
+                "enum": "cumulativeFlowUnit"
+              },
+              {
+                "name": "flowDecimalPosition",
+                "label": "Position décimale des volumes (REG1439)",
+                "offset": 2,
+                "type": "int16"
+              },
+              {
+                "name": "heatDecimalPosition",
+                "label": "Position décimale chaleur (inutilisé)",
+                "offset": 3,
+                "type": "int16"
+              },
+              {
+                "name": "heatUnitSelection",
+                "label": "Unité chaleur (inutilisé)",
+                "offset": 4,
+                "type": "int16"
+              },
+              {
+                "name": "modbusAddress",
+                "label": "Adresse de communication",
+                "offset": 5,
+                "type": "int16"
+              },
+              {
+                "name": "netCumulative",
+                "label": "Volume net cumulé",
+                "offset": 6,
+                "type": "int32",
+                "unit": "unité REG1446",
+                "formula": "raw * 10 ^ (cumulativeDecimal - 3)"
+              },
+              {
+                "name": "cumulativeDecimal",
+                "label": "Position décimale des volumes (REG1445)",
+                "offset": 8,
+                "type": "int16"
+              },
+              {
+                "name": "cumulativeUnit",
+                "label": "Unité des volumes cumulés (REG1446)",
+                "offset": 9,
+                "type": "int16",
+                "enum": "cumulativeFlowUnit"
+              },
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 10,
+                "type": "float",
+                "unit": "m³/h"
+              },
+              {
+                "name": "flowVelocity",
+                "label": "Vitesse d'écoulement",
+                "offset": 12,
+                "type": "float",
+                "unit": "m/s"
+              },
+              {
+                "name": "userScaleFactor",
+                "label": "Facteur d'échelle utilisateur",
+                "offset": 14,
+                "type": "float",
+                "description": "Généralement 1.0"
+              },
+              {
+                "name": "netCumulativeFloat",
+                "label": "Volume net cumulé (flottant, faible précision)",
+                "offset": 16,
+                "type": "float"
+              },
+              {
+                "name": "batteryVoltage",
+                "label": "Tension batterie",
+                "offset": 18,
+                "type": "float",
+                "unit": "V"
+              },
+              {
+                "name": "upstreamSignal",
+                "label": "Force du signal amont (voie 1)",
+                "offset": 20,
+                "type": "int16"
+              },
+              {
+                "name": "downstreamSignal",
+                "label": "Force du signal aval (voie 2)",
+                "offset": 21,
+                "type": "int16"
+              },
+              {
+                "name": "workStatus",
+                "label": "État de fonctionnement / réglage",
+                "offset": 22,
+                "type": "int16"
+              },
+              {
+                "name": "errorCode",
+                "label": "Code d'état 32 bits",
+                "offset": 23,
+                "type": "bits",
+                "words": 2,
+                "enum": "errorBits"
+              },
+              {
+                "name": "workTimer",
+                "label": "Compteur de fonctionnement",
+                "offset": 25,
+                "type": "uint32"
+              },
+              {
+                "name": "positiveCumulative",
+                "label": "Volume positif cumulé",
+                "offset": 27,
+                "type": "int32",
+                "unit": "unité REG1446",
+                "formula": "raw * 10 ^ (cumulativeDecimal - 3)"
+              },
+              {
+                "name": "esn",
+                "label": "Numéro de série électronique (ESN)",
+                "offset": 29,
+                "type": "bcd",
+                "words": 2,
+                "description": "Firmware > V60.05"
+              },
+              {
+                "name": "softwareVersion",
+                "label": "Version logicielle",
+                "offset": 31,
+                "type": "ascii",
+                "words": 2,
+                "description": "Firmware > V60.05"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire REG1442-1469 (28 registres)",
+          "frame": "01 03 05 A1 00 1C 15 2D"
+        }
+      ]
+    },
+    {
+      "id": "heatMeter",
+      "label": "Scénario compteur de chaleur (REG1491-1530)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 1490,
+        "count": 40
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le scénario compteur de chaleur",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 40
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instrumentType",
+                "label": "Type d'instrument (EN1434-3)",
+                "offset": 0,
+                "type": "int16"
+              },
+              {
+                "name": "instantFlowUnit",
+                "label": "Unité du débit instantané",
+                "offset": 1,
+                "type": "int16",
+                "enum": "instantFlowUnit"
+              },
+              {
+                "name": "cumulativeFlowUnit",
+                "label": "Unité des volumes cumulés",
+                "offset": 2,
+                "type": "int16",
+                "enum": "cumulativeFlowUnit"
+              },
+              {
+                "name": "flowDecimal",
+                "label": "Position décimale des volumes (n, -4..3)",
+                "offset": 3,
+                "type": "int16"
+              },
+              {
+                "name": "heatDecimal",
+                "label": "Position décimale de la chaleur (n, -3..4)",
+                "offset": 4,
+                "type": "int16"
+              },
+              {
+                "name": "heatUnit",
+                "label": "Unité de la chaleur",
+                "offset": 5,
+                "type": "int16",
+                "enum": "heatUnit"
+              },
+              {
+                "name": "negativeHeat",
+                "label": "Chaleur négative cumulée",
+                "offset": 6,
+                "type": "int32",
+                "unit": "unité REG1496",
+                "formula": "raw * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "positiveHeat",
+                "label": "Chaleur positive cumulée",
+                "offset": 8,
+                "type": "int32",
+                "unit": "unité REG1496",
+                "formula": "raw * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "thermalPower",
+                "label": "Puissance thermique instantanée",
+                "offset": 10,
+                "type": "float",
+                "unit": "kW"
+              },
+              {
+                "name": "netCumulative",
+                "label": "Volume net cumulé",
+                "offset": 12,
+                "type": "int32",
+                "unit": "unité REG1493",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 14,
+                "type": "float",
+                "unit": "m³/h"
+              },
+              {
+                "name": "workingSeconds",
+                "label": "Heures de fonctionnement cumulées",
+                "offset": 16,
+                "type": "uint32",
+                "unit": "s"
+              },
+              {
+                "name": "supplyTemperature",
+                "label": "Température départ T1",
+                "offset": 18,
+                "type": "float",
+                "unit": "°C"
+              },
+              {
+                "name": "returnTemperature",
+                "label": "Température retour T2",
+                "offset": 20,
+                "type": "float",
+                "unit": "°C"
+              },
+              {
+                "name": "errorCode",
+                "label": "Code d'état 32 bits",
+                "offset": 22,
+                "type": "bits",
+                "words": 2,
+                "enum": "errorBits"
+              },
+              {
+                "name": "dateTime",
+                "label": "Date et heure",
+                "offset": 24,
+                "type": "bcdDateTime"
+              },
+              {
+                "name": "workStatus",
+                "label": "État de fonctionnement / réglage",
+                "offset": 27,
+                "type": "int16"
+              },
+              {
+                "name": "batteryVoltage",
+                "label": "Tension batterie",
+                "offset": 28,
+                "type": "float",
+                "unit": "V",
+                "description": "Firmware > V60.07"
+              },
+              {
+                "name": "manufacturerFactor",
+                "label": "Facteur de correction constructeur",
+                "offset": 30,
+                "type": "float"
+              },
+              {
+                "name": "positiveCumulative",
+                "label": "Volume positif cumulé",
+                "offset": 32,
+                "type": "int32",
+                "unit": "unité REG1493",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "userFactor",
+                "label": "Facteur de correction utilisateur",
+                "offset": 34,
+                "type": "float"
+              },
+              {
+                "name": "softwareVersion",
+                "label": "Version logicielle",
+                "offset": 36,
+                "type": "ascii",
+                "words": 2,
+                "description": "Firmware > V60.07"
+              },
+              {
+                "name": "esn",
+                "label": "Numéro de série électronique (ESN)",
+                "offset": 38,
+                "type": "bcd",
+                "words": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "instantaneous",
+      "label": "Mesures instantanées",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 0,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les mesures instantanées",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 0,
+                "type": "float",
+                "unit": "m³/h"
+              },
+              {
+                "name": "instantHeat",
+                "label": "Chaleur instantanée",
+                "offset": 2,
+                "type": "float",
+                "unit": "kW"
+              },
+              {
+                "name": "flowVelocity",
+                "label": "Vitesse d'écoulement",
+                "offset": 4,
+                "type": "float",
+                "unit": "m/s"
+              },
+              {
+                "name": "pressure",
+                "label": "Pression (réserve)",
+                "offset": 6,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire la vitesse (REG0005)",
+          "frame": "01 03 00 04 00 02 85 CA"
+        },
+        {
+          "label": "Réponse 1.2345678 m/s",
+          "frame": "01 03 04 06 51 3F 9E 3B 32"
+        }
+      ]
+    },
+    {
+      "id": "totalizers",
+      "label": "Totaliseurs",
+      "description": "Valeur = (N + Nf) × 10^(n-3) pour les volumes, 10^(n-4) pour la chaleur (n lu dans le bloc units)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 8,
+        "count": 24
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les totaliseurs",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 24
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "positiveFlow",
+                "label": "Volume positif",
+                "offset": 0,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + positiveFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "positiveFlowFraction",
+                "label": "Volume positif (partie fractionnaire Nf)",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "negativeFlow",
+                "label": "Volume négatif",
+                "offset": 4,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + negativeFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "negativeFlowFraction",
+                "label": "Volume négatif (partie fractionnaire Nf)",
+                "offset": 6,
+                "type": "float"
+              },
+              {
+                "name": "positiveHeat",
+                "label": "Chaleur positive",
+                "offset": 8,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "(raw + positiveHeatFraction) * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "positiveHeatFraction",
+                "label": "Chaleur positive (partie fractionnaire Nf)",
+                "offset": 10,
+                "type": "float"
+              },
+              {
+                "name": "negativeHeat",
+                "label": "Chaleur négative",
+                "offset": 12,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "(raw + negativeHeatFraction) * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "negativeHeatFraction",
+                "label": "Chaleur négative (partie fractionnaire Nf)",
+                "offset": 14,
+                "type": "float"
+              },
+              {
+                "name": "netFlow",
+                "label": "Volume net",
+                "offset": 16,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + netFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "netFlowFraction",
+                "label": "Volume net (partie fractionnaire Nf)",
+                "offset": 18,
+                "type": "float"
+              },
+              {
+                "name": "netHeat",
+                "label": "Chaleur nette",
+                "offset": 20,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "(raw + netHeatFraction) * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "netHeatFraction",
+                "label": "Chaleur nette (partie fractionnaire Nf)",
+                "offset": 22,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire le volume net (REG0025)",
+          "frame": "01 03 00 18 00 02 44 0C"
+        },
+        {
+          "label": "Réponse 802609",
+          "frame": "01 03 04 3F 31 00 0C A7 ED"
+        }
+      ]
+    },
+    {
+      "id": "temperatures",
+      "label": "Températures",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 32,
+        "count": 4
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les températures",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 4
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "supplyTemperature",
+                "label": "Température départ T1",
+                "offset": 0,
+                "type": "float",
+                "unit": "°C"
+              },
+              {
+                "name": "returnTemperature",
+                "label": "Température retour T2",
+                "offset": 2,
+                "type": "float",
+                "unit": "°C"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "weekDay",
+      "label": "Jour de la semaine",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 51,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le jour",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "weekDay",
+                "label": "Jour de la semaine",
+                "offset": 0,
+                "type": "int16",
+                "description": "Firmware > V60.10"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "label": "Calendrier (date et heure)",
+      "description": "Ordre des octets BCD (SMHDMY, poids faible en premier) à vérifier sur l'appareil",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 52,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la date et l'heure",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "dateTime",
+                "label": "Date et heure",
+                "offset": 0,
+                "type": "bcdDateTime"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler la date et l'heure",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "composite",
+            "encode": "6 octets BCD S M H J M A, octet de poids faible en premier",
+            "fields": [
+              {
+                "name": "second",
+                "word": 0,
+                "byte": "low",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 59
+              },
+              {
+                "name": "minute",
+                "word": 0,
+                "byte": "high",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 59
+              },
+              {
+                "name": "hour",
+                "word": 1,
+                "byte": "low",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 23
+              },
+              {
+                "name": "day",
+                "word": 1,
+                "byte": "high",
+                "encoding": "bcd",
+                "min": 1,
+                "max": 31
+              },
+              {
+                "name": "month",
+                "word": 2,
+                "byte": "low",
+                "encoding": "bcd",
+                "min": 1,
+                "max": 12
+              },
+              {
+                "name": "year",
+                "word": 2,
+                "byte": "high",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 99
+              }
+            ]
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire REG0053-0055",
+          "frame": "01 03 00 34 00 03 44 05"
+        }
+      ]
+    },
+    {
+      "id": "autoSave",
+      "label": "Sauvegarde automatique (jour/heure)",
+      "description": "Ex : 0x0512 = le 5 à 12h00, 0x0012 = tous les jours à 12h00",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 55,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le moment de sauvegarde",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "autoSave",
+                "label": "Moment de sauvegarde (BCD JJHH)",
+                "offset": 0,
+                "type": "bcd"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler le moment de sauvegarde",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "composite",
+            "encode": "(BCD jour << 8) | BCD heure ; jour 0 = tous les jours",
+            "fields": [
+              {
+                "name": "day",
+                "byte": "high",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 31,
+                "default": 0
+              },
+              {
+                "name": "hour",
+                "byte": "low",
+                "encoding": "bcd",
+                "min": 0,
+                "max": 23,
+                "default": 12
+              }
+            ]
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "writeProtection",
+      "label": "Mot de passe de protection en écriture",
+      "description": "Peut verrouiller les écritures suivantes",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 56,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'état de protection",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "writeProtection",
+                "label": "État / mot de passe",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Écrire le mot de passe",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sleep",
+      "label": "Mise en veille",
+      "description": "Écrire 0x5A58 : le compteur passe en mode veille",
+      "area": "holdingRegister",
+      "access": "w",
+      "danger": true,
+      "address": {
+        "start": 57,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "enter",
+          "label": "Passer en veille",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "none",
+            "fixedValue": 23128
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "keyWrite",
+      "label": "Écriture touche",
+      "description": "Codes de touche non documentés",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 58,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "keyWrite",
+                "label": "Valeur touche",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Simuler une touche",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "menuAccess",
+      "label": "Menu d'affichage à ouvrir",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 59,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "menuAccess",
+                "label": "Numéro de menu demandé",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Ouvrir le menu",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 0,
+            "max": 255
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "currentMenu",
+      "label": "Menu d'affichage courant",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 60,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "currentMenu",
+                "label": "Numéro du menu affiché",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer le menu affiché",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 0,
+            "max": 255
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse Modbus",
+      "description": "Registre de découverte (adresse 61)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 61,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "deviceAddress",
+                "label": "Adresse",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 1,
+            "max": 255,
+            "default": 1
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "batchController",
+      "label": "Contrôleur de dosage (BC)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 62,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "batchRuntime",
+                "label": "Durée de fonctionnement",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "start",
+          "label": "Démarrer le dosage",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "none",
+            "fixedValue": 0
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "octPulses",
+      "label": "Sorties impulsions OCT",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 63,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les impulsions restantes",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "oct1Remaining",
+                "label": "OCT1 : impulsions restantes",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "oct2Remaining",
+                "label": "OCT2 : impulsions restantes",
+                "offset": 1,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "errorCodes",
+      "label": "Codes d'erreur",
+      "description": "Répartition des bits entre REG0071 et REG0072 déduite de la doc : à vérifier",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 70,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les erreurs",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "errorHigh",
+                "label": "Code erreur octets 3-4 (bits 16-31)",
+                "offset": 0,
+                "type": "bits",
+                "enum": "errorBits",
+                "bitOffset": 16
+              },
+              {
+                "name": "errorLow",
+                "label": "Code erreur octets 1-2 (bits 0-15)",
+                "offset": 1,
+                "type": "bits",
+                "enum": "errorBits",
+                "bitOffset": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sensorDiagnostics",
+      "label": "Diagnostic capteurs",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 76,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le diagnostic",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "t1Resistance",
+                "label": "Résistance sonde T1",
+                "offset": 0,
+                "type": "float",
+                "unit": "Ω"
+              },
+              {
+                "name": "t2Resistance",
+                "label": "Résistance sonde T2",
+                "offset": 2,
+                "type": "float",
+                "unit": "Ω"
+              },
+              {
+                "name": "transitTimeDifference",
+                "label": "Différence de temps de propagation",
+                "offset": 4,
+                "type": "float",
+                "unit": "µs"
+              },
+              {
+                "name": "propagationLag",
+                "label": "Retard de propagation",
+                "offset": 6,
+                "type": "float",
+                "unit": "ns"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "signal",
+      "label": "Signal et batterie",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 91,
+        "count": 4
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le signal",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 4
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "signalQuality",
+                "label": "Qualité du signal (voie 1 en octet bas)",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "channel1Strength",
+                "label": "Force du signal voie 1",
+                "offset": 1,
+                "type": "uint16",
+                "description": "0~4095"
+              },
+              {
+                "name": "channel2Strength",
+                "label": "Force du signal voie 2",
+                "offset": 2,
+                "type": "uint16",
+                "description": "0~4095"
+              },
+              {
+                "name": "batteryLevel",
+                "label": "Tension batterie",
+                "offset": 3,
+                "type": "uint16",
+                "unit": "V",
+                "formula": "raw * 2.5 / 4096"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtimeStats",
+      "label": "Statistiques de fonctionnement",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 98,
+        "count": 12
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les statistiques",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 12
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "reynolds",
+                "label": "Nombre de Reynolds",
+                "offset": 0,
+                "type": "float"
+              },
+              {
+                "name": "reynoldsFactor",
+                "label": "Facteur de correction Reynolds",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "normalWorkingTime",
+                "label": "Temps de fonctionnement normal",
+                "offset": 4,
+                "type": "uint32",
+                "unit": "s"
+              },
+              {
+                "name": "totalWorkingTime",
+                "label": "Temps de fonctionnement total",
+                "offset": 6,
+                "type": "uint32",
+                "unit": "s"
+              },
+              {
+                "name": "powerUps",
+                "label": "Nombre de mises sous tension",
+                "offset": 8,
+                "type": "uint32"
+              },
+              {
+                "name": "cpuTemperature",
+                "label": "Température CPU",
+                "offset": 10,
+                "type": "float",
+                "unit": "°C"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "extraChannels",
+      "label": "Signal voies 3 et 4",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 110,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "channel3Strength",
+                "label": "Force du signal voie 3",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "channel4Strength",
+                "label": "Force du signal voie 4",
+                "offset": 1,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "floatTotals",
+      "label": "Totaliseurs flottants (faible précision)",
+      "description": "Précision limitée à 6 chiffres : préférer les blocs totalizers/periodTotals",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 112,
+        "count": 16
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 16
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "netFlow",
+                "label": "Volume net",
+                "offset": 0,
+                "type": "float"
+              },
+              {
+                "name": "positiveFlow",
+                "label": "Volume positif",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "negativeFlow",
+                "label": "Volume négatif",
+                "offset": 4,
+                "type": "float"
+              },
+              {
+                "name": "netHeat",
+                "label": "Chaleur nette",
+                "offset": 6,
+                "type": "float"
+              },
+              {
+                "name": "positiveHeat",
+                "label": "Chaleur positive",
+                "offset": 8,
+                "type": "float"
+              },
+              {
+                "name": "negativeHeat",
+                "label": "Chaleur négative",
+                "offset": 10,
+                "type": "float"
+              },
+              {
+                "name": "todayNetFlow",
+                "label": "Volume net du jour",
+                "offset": 12,
+                "type": "float"
+              },
+              {
+                "name": "monthNetFlow",
+                "label": "Volume net du mois",
+                "offset": 14,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "tariffs",
+      "label": "Totaliseurs tarifaires",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 128,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "tariff2",
+                "label": "Tarif 2",
+                "offset": 0,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + tariff2Fraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "tariff2Fraction",
+                "label": "Tarif 2 (partie fractionnaire Nf)",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "tariff3",
+                "label": "Tarif 3",
+                "offset": 4,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + tariff3Fraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "tariff3Fraction",
+                "label": "Tarif 3 (partie fractionnaire Nf)",
+                "offset": 6,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "periodTotals",
+      "label": "Cumuls jour / mois / année",
+      "description": "Année : la doc indique 0144-0145, adresses 0145-0146 retenues (continuité de la table)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 136,
+        "count": 20
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les cumuls",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 20
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "todayFlow",
+                "label": "Volume du jour",
+                "offset": 0,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + todayFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "todayFlowFraction",
+                "label": "Volume du jour (partie fractionnaire Nf)",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "monthFlow",
+                "label": "Volume du mois",
+                "offset": 4,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + monthFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "monthFlowFraction",
+                "label": "Volume du mois (partie fractionnaire Nf)",
+                "offset": 6,
+                "type": "float"
+              },
+              {
+                "name": "yearFlow",
+                "label": "Volume de l'année",
+                "offset": 8,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "(raw + yearFlowFraction) * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "yearFlowFraction",
+                "label": "Volume de l'année (partie fractionnaire Nf)",
+                "offset": 10,
+                "type": "float"
+              },
+              {
+                "name": "todayHeat",
+                "label": "Chaleur du jour",
+                "offset": 12,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "(raw + todayHeatFraction) * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "todayHeatFraction",
+                "label": "Chaleur du jour (partie fractionnaire Nf)",
+                "offset": 14,
+                "type": "float"
+              },
+              {
+                "name": "monthHeat",
+                "label": "Chaleur du mois",
+                "offset": 16,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "(raw + monthHeatFraction) * 10 ^ (heatDecimal - 4)"
+              },
+              {
+                "name": "monthHeatFraction",
+                "label": "Chaleur du mois (partie fractionnaire Nf)",
+                "offset": 18,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "historyPointers",
+      "label": "Pointeurs d'historique",
+      "description": "Index à passer en channel aux blocs dailyHistory / monthlyHistory",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 161,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les pointeurs",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "dailyPointer",
+                "label": "Bloc journalier courant",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "monthlyPointer",
+                "label": "Bloc mensuel courant (0-31)",
+                "offset": 1,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "powerEvents",
+      "label": "Défauts et mise sous tension",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 164,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "faultRunTime",
+                "label": "Temps de fonctionnement en défaut",
+                "offset": 0,
+                "type": "uint32",
+                "unit": "s"
+              },
+              {
+                "name": "powerUpTime",
+                "label": "Dernière mise sous tension (BCD brut)",
+                "offset": 2,
+                "type": "hex",
+                "words": 6
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "batteryVoltage",
+      "label": "Tension batterie (flottant)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 173,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "batteryVoltage",
+                "label": "Tension batterie",
+                "offset": 0,
+                "type": "float",
+                "unit": "V"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "temperatureDifference",
+      "label": "Écart de température",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 180,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "temperatureDifference",
+                "label": "Écart T1 - T2",
+                "offset": 0,
+                "type": "float",
+                "unit": "°C"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "autoStorage",
+      "label": "Données sauvegardées automatiquement",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 186,
+        "count": 12
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 12
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "totalTime",
+                "label": "Temps total",
+                "offset": 0,
+                "type": "float",
+                "unit": "h"
+              },
+              {
+                "name": "positiveCumulative",
+                "label": "Volume positif cumulé",
+                "offset": 2,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 6,
+                "type": "float"
+              },
+              {
+                "name": "negativeFlowTime",
+                "label": "Temps total en débit négatif",
+                "offset": 8,
+                "type": "uint32",
+                "unit": "s"
+              },
+              {
+                "name": "negativeCumulative",
+                "label": "Volume négatif cumulé",
+                "offset": 10,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "verification",
+      "label": "Vérification / étalonnage",
+      "description": "Les unités des accumulateurs sont inversées dans la doc (m³ / kWh) : à vérifier",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 200,
+        "count": 9
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 9
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "heatAccumulator",
+                "label": "Accumulateur de chaleur (vérification)",
+                "offset": 0,
+                "type": "int32"
+              },
+              {
+                "name": "heatAccumulatorDecimal",
+                "label": "Accumulateur de chaleur, partie décimale",
+                "offset": 2,
+                "type": "float"
+              },
+              {
+                "name": "flowAccumulator",
+                "label": "Accumulateur de volume (vérification)",
+                "offset": 4,
+                "type": "int32"
+              },
+              {
+                "name": "flowAccumulatorDecimal",
+                "label": "Accumulateur de volume, partie décimale",
+                "offset": 6,
+                "type": "float"
+              },
+              {
+                "name": "checkingTime",
+                "label": "Durée de vérification",
+                "offset": 8,
+                "type": "uint16",
+                "unit": "s",
+                "formula": "raw * 0.25"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pipeDiameter",
+      "label": "Diamètre intérieur de la conduite",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 220,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "pipeDiameter",
+                "label": "Diamètre intérieur",
+                "offset": 0,
+                "type": "float",
+                "unit": "mm"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "monthlyMax",
+      "label": "Maximums du mois",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 258,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "maxFlow",
+                "label": "Débit instantané max",
+                "offset": 0,
+                "type": "float",
+                "unit": "m³/h"
+              },
+              {
+                "name": "maxHeat",
+                "label": "Chaleur instantanée max",
+                "offset": 2,
+                "type": "float",
+                "unit": "kW"
+              },
+              {
+                "name": "maxSupplyTemperature",
+                "label": "Température départ max",
+                "offset": 4,
+                "type": "float",
+                "unit": "°C"
+              },
+              {
+                "name": "maxReturnTemperature",
+                "label": "Température retour max",
+                "offset": 6,
+                "type": "float",
+                "unit": "°C"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "meteringTimes",
+      "label": "Temps de mesure et adresse M-Bus",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 270,
+        "count": 6
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 6
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "timeLag",
+                "label": "Décalage temporel",
+                "offset": 0,
+                "type": "float",
+                "unit": "ns"
+              },
+              {
+                "name": "mbusSecondAddress",
+                "label": "Adresse secondaire M-Bus",
+                "offset": 2,
+                "type": "bcd",
+                "words": 2
+              },
+              {
+                "name": "negativeMeteringTime",
+                "label": "Temps de comptage négatif",
+                "offset": 4,
+                "type": "uint32",
+                "unit": "s"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dailyMax",
+      "label": "Maximums du jour",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 284,
+        "count": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "maxFlow",
+                "label": "Débit instantané max",
+                "offset": 0,
+                "type": "float",
+                "unit": "m³/h"
+              },
+              {
+                "name": "maxHeat",
+                "label": "Chaleur instantanée max",
+                "offset": 2,
+                "type": "float",
+                "unit": "kW"
+              },
+              {
+                "name": "maxSupplyTemperature",
+                "label": "Température départ max",
+                "offset": 4,
+                "type": "float",
+                "unit": "°C"
+              },
+              {
+                "name": "maxReturnTemperature",
+                "label": "Température retour max",
+                "offset": 6,
+                "type": "float",
+                "unit": "°C"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mbusUserCode",
+      "label": "Code utilisateur M-Bus",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 294,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "mbusUserCode",
+                "label": "Code utilisateur",
+                "offset": 0,
+                "type": "bcd",
+                "words": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "tariffSchedule",
+      "label": "Horaires tarifs et contrôleur de dosage",
+      "description": "REG0303-0310 : découpage en demi-registres ambigu dans la doc, restitué en brut",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 296,
+        "count": 16
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 16
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "tariffStop",
+                "label": "Arrêt des tarifs (BCD)",
+                "offset": 0,
+                "type": "bcd",
+                "words": 2
+              },
+              {
+                "name": "tariff2Start",
+                "label": "Démarrage tarif 2 (BCD)",
+                "offset": 2,
+                "type": "bcd",
+                "words": 2
+              },
+              {
+                "name": "tariff3Start",
+                "label": "Démarrage tarif 3 (BCD)",
+                "offset": 4,
+                "type": "bcd",
+                "words": 2
+              },
+              {
+                "name": "dosingSchedule",
+                "label": "État + démarrages contrôleur de dosage #1-#5 (BCD brut)",
+                "offset": 6,
+                "type": "hex",
+                "words": 8
+              },
+              {
+                "name": "dosingQuantity",
+                "label": "Quantité de dosage réglée",
+                "offset": 14,
+                "type": "float"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "monthlyHistory",
+      "label": "Historique mensuel",
+      "description": "32 blocs de 8 registres en rotation ; channel = index du bloc (cf. historyPointers)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 512,
+        "count": 32,
+        "stride": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire un bloc",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "channel",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "dataBlock",
+                "label": "Numéro de bloc",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "status",
+                "label": "État",
+                "offset": 1,
+                "type": "uint16"
+              },
+              {
+                "name": "empty",
+                "label": "Réservé",
+                "offset": 2,
+                "type": "hex"
+              },
+              {
+                "name": "yearMonth",
+                "label": "Année / mois (BCD, mois en octet bas)",
+                "offset": 3,
+                "type": "bcd"
+              },
+              {
+                "name": "flow",
+                "label": "Volume cumulé",
+                "offset": 4,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "heat",
+                "label": "Chaleur cumulée",
+                "offset": 6,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "raw * 10 ^ (heatDecimal - 4)"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dailyHistory",
+      "label": "Historique journalier",
+      "description": "32 blocs de 8 registres en rotation ; channel = index du bloc (cf. historyPointers)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 768,
+        "count": 32,
+        "stride": 8
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire un bloc",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "channel",
+          "params": {
+            "length": 8
+          },
+          "input": {
+            "type": "none"
+          },
+          "scopeFrom": [
+            "units.read"
+          ],
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "dataBlock",
+                "label": "Numéro de bloc",
+                "offset": 0,
+                "type": "uint16"
+              },
+              {
+                "name": "status",
+                "label": "État",
+                "offset": 1,
+                "type": "uint16"
+              },
+              {
+                "name": "day",
+                "label": "Jour (BCD, octet haut)",
+                "offset": 2,
+                "type": "bcd"
+              },
+              {
+                "name": "yearMonth",
+                "label": "Année / mois (BCD, mois en octet bas)",
+                "offset": 3,
+                "type": "bcd"
+              },
+              {
+                "name": "flow",
+                "label": "Volume cumulé",
+                "offset": 4,
+                "type": "int32",
+                "unit": "unité REG1438",
+                "formula": "raw * 10 ^ (flowDecimal - 3)"
+              },
+              {
+                "name": "heat",
+                "label": "Chaleur cumulée",
+                "offset": 6,
+                "type": "int32",
+                "unit": "unité REG1441",
+                "formula": "raw * 10 ^ (heatDecimal - 4)"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "device": {
+    "name": "COMPTEUR ULTRASONIQUE",
+    "description": "Compteur d'eau / chaleur à ultrasons"
+  },
+  "comRequests": [
+    {
+      "name": "DEBIT INSTANTANE",
+      "description": "Débit instantané (REG0001-0002)",
+      "type": [
+        "COM_READ"
+      ],
+      "config": {
+        "address": 0,
+        "function": [
+          "readHoldingRegisters"
+        ],
+        "type": "float",
+        "done": false,
+        "params": {
+          "length": 2,
+          "unit": "m3/h",
+          "formula": "raw"
+        }
+      }
+    },
+    {
+      "name": "VOLUME NET CUMULE",
+      "description": "Volume net cumulé (REG0025-0028, position décimale REG1439)",
+      "type": [
+        "COM_READ"
+      ],
+      "config": {
+        "address": 24,
+        "function": [
+          "readHoldingRegisters"
+        ],
+        "type": "cumulative",
+        "done": false,
+        "params": {
+          "length": 4,
+          "unit": "m3",
+          "formula": "(N + Nf) * 10 ^ (n - 3)"
+        }
+      }
+    }
+  ]
+}

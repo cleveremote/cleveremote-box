@@ -12,32 +12,20 @@ export enum DeviceType {
 }
 
 export enum DeviceKind {
-    ANALOG_OUTPUT_8_CH = 'ANALOG_OUTPUT_8CH',
-    ANALOG_INPUT_8_CH = 'DIGITAL_IO_8CH',
-    DIGITAL_IO_8_CH = 'DIGITAL_IO_8CH',
-    MODBUS_SLAVE = 'MODBUS_SLAVE',
     INVERTER_VEICHI_SI23_V1 = 'INVERTER_VEICHI_SI23_V1',
-    INVERTER = 'INVERTER',
     //SENSORS
-    FLOWMETER_ULTRASONIC_V1 = 'FLOWMETER_ULTRASONIC',
     FLOWMETER_V1 = 'FLOWMETER_V1',
     PRESSURE_V1 = 'PRESSURE_V1',
     EC_METER_V1 = 'EC_METER_V1',
+    FLOWMETER_ULTRASONIC_V1 = 'FLOWMETER_ULTRASONIC_V1',
     TEMPERATURE_MOISTURE_V1 = 'TEMPERATURE_MOISTURE_V1',
+    //IO MODULES
+    DIGITAL_IO_8_CH = 'DIGITAL_IO_8CH',
+    ANALOG_OUTPUT_8_CH = 'ANALOG_OUTPUT_8CH',
+    ANALOG_INPUT_8_CH = 'ANALOG_INPUT_8CH',
+    // Esclave Modbus générique (ex-OTHERS)
+    MODBUS_SLAVE = 'MODBUS_SLAVE',
     UNKNOWN_DEVICE = 'UNKNOWN_DEVICE',
-}
-
-export enum DeviceRangeType {
-    INVERTER = 'INVERTER',
-    FLOWMETER = 'FLOWMETER',
-    PRESSURE = 'PRESSURE',
-    EC_METER = 'EC_METER',
-    FLOWMETER_ULTRASONIC = 'FLOWMETER_ULTRASONIC',
-    TEMPERATURE_MOISTURE = 'TEMPERATURE_MOISTURE',
-    DIGITAL_IO = 'DIGITAL_IO',
-    ANALOG_OUTPUT = 'ANALOG_OUTPUT',
-    ANALOG_INPUT = 'ANALOG_INPUT',
-    OTHERS = 'OTHERS',
 }
 
 // Registre Modbus sondé pour identifier le type d'un slave lors de la découverte
@@ -52,36 +40,46 @@ export enum DiscoveryAddressRegister {
     ANALOG_INPUT = 0x4000,
 }
 
-// Registre de découverte de chaque type (OTHERS n'est pas découvrable)
-export const DISCOVERY_REGISTER_BY_TYPE: Partial<Record<DeviceRangeType, DiscoveryAddressRegister>> = {
-    [DeviceRangeType.INVERTER]: DiscoveryAddressRegister.INVERTER,
-    [DeviceRangeType.FLOWMETER]: DiscoveryAddressRegister.FLOWMETER,
-    [DeviceRangeType.PRESSURE]: DiscoveryAddressRegister.PRESSURE,
-    [DeviceRangeType.EC_METER]: DiscoveryAddressRegister.EC_TMP_MOISTURE_METER,
-    [DeviceRangeType.FLOWMETER_ULTRASONIC]: DiscoveryAddressRegister.FLOWMETER_ULTRASONIC,
-    [DeviceRangeType.TEMPERATURE_MOISTURE]: DiscoveryAddressRegister.EC_TMP_MOISTURE_METER,
-    [DeviceRangeType.DIGITAL_IO]: DiscoveryAddressRegister.DIGITAL_IO,
-    [DeviceRangeType.ANALOG_OUTPUT]: DiscoveryAddressRegister.ANALOG_OUTPUT,
-    [DeviceRangeType.ANALOG_INPUT]: DiscoveryAddressRegister.ANALOG_INPUT,
+// Plage [min, max] d'unit ids (bornes incluses)
+export interface AddressRange {
+    min: number;
+    max: number;
+}
+
+export interface DeviceKindSpec {
+    range: AddressRange;
+    // Absent = kind non découvrable
+    discoveryRegister?: DiscoveryAddressRegister;
+}
+
+// Spécification de chaque kind : plage d'adresses + registre de découverte.
+// Record complet : tout nouveau DeviceKind doit être déclaré ici (undefined = sans plage).
+export const DEVICE_KIND_SPECS: Record<DeviceKind, DeviceKindSpec | undefined> = {
+    [DeviceKind.INVERTER_VEICHI_SI23_V1]: { range: { min: 1, max: 10 }, discoveryRegister: DiscoveryAddressRegister.INVERTER },
+    [DeviceKind.FLOWMETER_V1]: { range: { min: 11, max: 20 }, discoveryRegister: DiscoveryAddressRegister.FLOWMETER },
+    [DeviceKind.PRESSURE_V1]: { range: { min: 21, max: 30 }, discoveryRegister: DiscoveryAddressRegister.PRESSURE },
+    [DeviceKind.EC_METER_V1]: { range: { min: 31, max: 40 }, discoveryRegister: DiscoveryAddressRegister.EC_TMP_MOISTURE_METER },
+    [DeviceKind.FLOWMETER_ULTRASONIC_V1]: { range: { min: 41, max: 50 }, discoveryRegister: DiscoveryAddressRegister.FLOWMETER_ULTRASONIC },
+    [DeviceKind.TEMPERATURE_MOISTURE_V1]: { range: { min: 51, max: 60 }, discoveryRegister: DiscoveryAddressRegister.EC_TMP_MOISTURE_METER },
+    [DeviceKind.DIGITAL_IO_8_CH]: { range: { min: 61, max: 70 }, discoveryRegister: DiscoveryAddressRegister.DIGITAL_IO },
+    [DeviceKind.ANALOG_OUTPUT_8_CH]: { range: { min: 71, max: 80 }, discoveryRegister: DiscoveryAddressRegister.ANALOG_OUTPUT },
+    [DeviceKind.ANALOG_INPUT_8_CH]: { range: { min: 81, max: 90 }, discoveryRegister: DiscoveryAddressRegister.ANALOG_INPUT },
+    [DeviceKind.MODBUS_SLAVE]: { range: { min: 91, max: 100 } },
+    [DeviceKind.UNKNOWN_DEVICE]: undefined,
 };
 
-// Plage [min, max] (bornes incluses) associée à chaque type : TYPE_n couvre (n-1)*10+1 -> n*10
-export const DEVICE_RANGE_TYPE_RANGES: Record<DeviceRangeType, { min: number; max: number }> = {
-    [DeviceRangeType.INVERTER]: { min: 1, max: 10 },
-    [DeviceRangeType.FLOWMETER]: { min: 11, max: 20 },
-    [DeviceRangeType.PRESSURE]: { min: 21, max: 30 },
-    [DeviceRangeType.EC_METER]: { min: 31, max: 40 },
-    [DeviceRangeType.FLOWMETER_ULTRASONIC]: { min: 41, max: 50 },
-    [DeviceRangeType.TEMPERATURE_MOISTURE]: { min: 51, max: 60 },
-    [DeviceRangeType.DIGITAL_IO]: { min: 61, max: 70 },
-    [DeviceRangeType.ANALOG_OUTPUT]: { min: 71, max: 80 },
-    [DeviceRangeType.ANALOG_INPUT]: { min: 81, max: 90 },
-    [DeviceRangeType.OTHERS]: { min: 91, max: 100 },
-};
+export function getDeviceKindByAddress(address: number): DeviceKind | undefined {
+    return (Object.keys(DEVICE_KIND_SPECS) as DeviceKind[]).find((kind) => {
+        const range = DEVICE_KIND_SPECS[kind]?.range;
+        return !!range && address >= range.min && address <= range.max;
+    });
+}
 
-export function getDeviceRangeType(value: number): DeviceRangeType | undefined {
-    return (Object.keys(DEVICE_RANGE_TYPE_RANGES) as DeviceRangeType[])
-        .find((type) => value >= DEVICE_RANGE_TYPE_RANGES[type].min && value <= DEVICE_RANGE_TYPE_RANGES[type].max);
+// Cibles du scan : registre de découverte lu sur le premier unit id de la plage de chaque kind
+export function getDiscoveryTargets(): { kind: DeviceKind; unitId: number; register: number }[] {
+    return (Object.entries(DEVICE_KIND_SPECS) as [DeviceKind, DeviceKindSpec | undefined][])
+        .filter(([, spec]) => spec?.discoveryRegister !== undefined)
+        .map(([kind, spec]) => ({ kind, unitId: spec!.range.min, register: spec!.discoveryRegister! }));
 }
 
 export class MasterConfigModel {
@@ -130,7 +128,7 @@ export interface SlaveTemplate {
     _id: string;
     name: string;
     description?: string;
-    type: DeviceRangeType;
+    kind: DeviceKind;
     device: Pick<DeviceModel, 'name' | 'description'> & Pick<SlaveConfigModel, 'kind' | 'portConfig'>;
     comRequests: Omit<ComRequestModel, '_id' | 'deviceId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[];
 }

@@ -42,6 +42,8 @@ import { SlaveTemplate, SlaveTemplateSchema } from './schemas/slave-template.sch
 import { SlaveTemplateRepository } from './repositories/slave-template.repository';
 import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
 import { SlaveTemplateController } from './controllers/slave-template.controller';
+import { RegisterMapService } from '@process/domain/services/register-map.service';
+import { RegisterMapController } from './controllers/register-map.controller';
 import { CycleMongooseRepository } from './repositories/cycle-mongoose.repository';
 import { SequenceMongooseRepository } from './repositories/sequence-mongoose.repository';
 import { ScheduleMongooseRepository } from './repositories/schedule-mongoose.repository';
@@ -85,6 +87,7 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         AuthenticationController,
         GlobalSettingsController,
         SlaveTemplateController,
+        RegisterMapController,
         PingController
     ],
     providers: [
@@ -109,6 +112,7 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         AuthenticationService,
         GlobalSettingsService,
         SlaveTemplateService,
+        RegisterMapService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,
