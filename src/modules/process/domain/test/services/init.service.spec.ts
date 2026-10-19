@@ -128,8 +128,10 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             globalSettingsService as unknown as GlobalSettingsService,
             {} as never,
             { discover: jest.fn().mockResolvedValue([]) } as never,
+            {} as never,
             logger as never,
-            processService as unknown as ProcessService
+            processService as unknown as ProcessService,
+            { tests: jest.fn().mockResolvedValue(undefined) } as never
         );
     });
 

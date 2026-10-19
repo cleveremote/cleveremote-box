@@ -24,6 +24,7 @@ import ModbusRTU from 'modbus-serial';
 import { SynchronizeDeviceModel } from '../models/synchronize.model';
 import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 import { RegisterMapService } from './register-map.service';
+import { RegisterMapService as RegisterMapModuleService } from '@register-map/domain/services/register-map.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -51,7 +52,8 @@ export class InitService {
         private waveshareDiscoveryService: WaveshareDiscoveryService,
         private registerMapService: RegisterMapService,
         private readonly logger: Logger,
-        private readonly _processService: ProcessService
+        private readonly _processService: ProcessService,
+        private readonly registerMapModuleService: RegisterMapModuleService
     ) { }
 
 
@@ -60,49 +62,55 @@ export class InitService {
         const wrap = (name: string, fn: () => Promise<any> | void) =>
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
-        return wrap('StructureService.getStructure', () => this._loadConfiguration())
-            .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
-            //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
-            //.then(() => wrap('InitService.testBuildSlaveComRequestsJson', () => this._testBuildSlaveComRequestsJson()))
-            //.then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
-            //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
-            //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
-            .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
-            .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
-            .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
-            .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
-            .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
-            .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
-            .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
-            .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
-            .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
-            .then(() => wrap('init devices', () => this.deviceService.initAll()))
+
+         return wrap('RegisterMapService.tests', () => this.registerMapModuleService.tests())
+          
             .then(async () => {
+
+        // return wrap('StructureService.getStructure', () => this._loadConfiguration())
+        //     .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
+        //     //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+        //     //.then(() => wrap('InitService.testBuildSlaveComRequestsJson', () => this._testBuildSlaveComRequestsJson()))
+        //     //.then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
+        //     //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
+        //     //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
+        //     .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
+        //     .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
+        //     .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
+        //     .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
+        //     .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
+        //     .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
+        //     .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
+        //     .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
+        //     .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
+        //     .then(() => wrap('init devices', () => this.deviceService.initAll()))
+        //     .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.tests()))
+        //     .then(async () => {
                
-            // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.WRITE_MULTIPLE_COILS, 0, 8,1);
-            // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.READ_COILS, 0, 6); 
+//             // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.WRITE_MULTIPLE_COILS, 0, 8,1);
+//             // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.READ_COILS, 0, 6); 
 
-const request = { deviceId: '8d6f3fe2-af41-405b-9523-a0a6fb589b70', blockId: 'outputs', operationId: 'setMask',value: [1, 1, 0, 0, 0, 0, 0, 1] } ;
-this.registerMapService.execute(request);
+// const request = { deviceId: '8d6f3fe2-af41-405b-9523-a0a6fb589b70', blockId: 'outputs', operationId: 'setMask',value: [1, 1, 0, 0, 0, 0, 0, 1] } ;
+// this.registerMapService.execute(request);
 
-const request1 = { deviceId: '8d6f3fe2-af41-405b-9523-a0a6fb589b70', blockId: 'outputModes', operationId: 'setAll',value: [2, 2, 2, 2, 2, 2, 2, 2] } ;
-this.registerMapService.execute(request1);
+// const request1 = { deviceId: '8d6f3fe2-af41-405b-9523-a0a6fb589b70', blockId: 'outputModes', operationId: 'setAll',value: [2, 2, 2, 2, 2, 2, 2, 2] } ;
+// this.registerMapService.execute(request1);
 
 //             {"context":"testModbusFrame","masterDeviceId":"8d6f3fe2-af41-405b-9523-a0a6fb589b42","slaveId":62,"fn":"toggleCoil","address":0,"length":1,"tx":["3E 05 00 00 55 00 F7 95"],"rx":["3E 05 00 00 55 00 F7 95"],"result":{"address":0,"state":false}}
 // [19:53:20.737] INFO (70814): {"context":"testModbusFrame","masterDeviceId":"8d6f3fe2-af41-405b-9523-a0a6fb589b42","slaveId":62,"fn":"readCoils","address":0,"length":8,"tx":["3E 01 00 00 00 08 38 C3"],"rx":["3E 01 01 01 9C 5C"],"result":{"data":[true,false,false,false,false,false,false,false],"buffer":{"type":"Buffer","data":[1]}}}
                
-                // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
-                // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
-                const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
-                await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
-                    changes.forEach((change) => {
-                        this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
-                            .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
-                    });
-                });
+                // // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare
+                // // "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).
+                // const IO_8CH_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
+                // await this.modBusService.monitorDigitalOutputs(IO_8CH_DEVICE_ID, 500, 8, (changes) => {
+                //     changes.forEach((change) => {
+                //         this.processService.executeModuleCycleForDigitalOutput(IO_8CH_DEVICE_ID, change.channel, change.current)
+                //             .catch((error) => this.logger.warn({ error, change }, 'digital output -> module cycle mapping failed'));
+                //     });
+                // });
 
-                //  const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
-                // await this.actuatorService.execute(actuator as ActuatorModel, 50);
+                // //  const actuator = await this.actuatorRepository.get("72347bbe-1506-4bd4-a07c-e888c62aa2bb");
+                // // await this.actuatorService.execute(actuator as ActuatorModel, 50);
             })
 
             .catch((error) => {

@@ -25,6 +25,9 @@
       ],
       "@framework/*": [
         "src/common/framework/*"
+      ],
+      "@register-map/*": [
+        "src/modules/register-map/*"
       ]
       
     }

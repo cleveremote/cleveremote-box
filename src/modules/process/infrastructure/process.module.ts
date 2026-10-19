@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
 import { Cycle, CycleSchema } from './schemas/cycle.schema';
 import { Sequence, SequenceSchema } from './schemas/sequence.schema';
 import { Schedule, ScheduleSchema } from './schemas/schedule.schema';
@@ -55,6 +57,7 @@ import { DeviceModule } from '@process/domain/services/device-strategies/device.
 import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategies/forcast-sensor.strategy';
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
+import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -63,9 +66,18 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         MongooseModule.forRootAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                uri: config.get<string>('MONGO_URI')
-            })
+            useFactory: (config: ConfigService) => {
+                const uri = config.get<string>('MONGO_URI');
+                // echec rapide de chaque tentative (defaut 30s), les retries sont geres par watchMongoConnection
+                const options = { serverSelectionTimeoutMS: 5000 };
+                return {
+                    uri,
+                    ...options,
+                    // ne pas bloquer le demarrage de l'app si Mongo est indisponible
+                    lazyConnection: true,
+                    connectionFactory: (connection: Connection) => watchMongoConnection(connection, uri, options)
+                };
+            }
         }),
         MongooseModule.forFeature([
             { name: Cycle.name, schema: CycleSchema },
@@ -79,7 +91,8 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
             { name: SlaveTemplate.name, schema: SlaveTemplateSchema }
         ]),
         ActuatorModule,
-        DeviceModule
+        DeviceModule,
+        RegisterMapModule
     ],
     controllers: [
         ConfigurationController,

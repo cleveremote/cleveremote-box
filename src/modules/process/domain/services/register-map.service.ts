@@ -20,7 +20,7 @@ interface BlockOperation {
     operation: RegisterOperation;
 }
 
-export const REGISTER_MAPS_DIR = 'register-maps';
+export const REGISTER_MAPS_DIR = 'src/modules/register-map/register-maps';
 
 const READ_FUNCTIONS: ModbusFunctionName[] = [
     ModbusFunctionName.READ_COILS,
