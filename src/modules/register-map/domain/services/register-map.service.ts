@@ -3,8 +3,8 @@ import { Logger } from 'nestjs-pino';
 import { RegisterMapInputError, RegisterMapNotFoundError } from '../errors/register-map.error';
 import { ModbusConnection, ModbusTransport } from '../models/modbus-connection.model';
 import {
-    DecodedChannel, DecodedValue, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
-    RegisterOperationCommand, RegisterOperationError, RegisterOperationOutcome, RegisterRawData, RegisterRequest
+    DecodedChannel, DecodedField, DecodedValue, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
+    RegisterOperationCommand, RegisterOperationError, RegisterOperationOutcome, RegisterFunction, RegisterRawData, RegisterRequest
 } from '../models/register-map.model';
 import { RegisterValueEncoder } from '../utils/register-map.util';
 import { FormulaEvaluator, RegisterFieldDecoder } from '../utils/register-field.util';
@@ -91,16 +91,118 @@ export class RegisterMapService {
 
 
     public async tests():Promise<void>{
-      const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, unitId: 62 };
+      const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.203', port: 4196, unitId: 1 };
       const dir = join(process.cwd(), REGISTER_MAPS_DIR);
       const templates = readdirSync(dir).filter((f) => f.endsWith('.json'))
           .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate);
       const byKind = (kind: string): RegisterMapTemplate => templates.find((t) => t.kind === kind);
      
-      let io8: RegisterMapTemplate;
+      let io8: RegisterMapTemplate; 
       io8 = byKind('DIGITAL_IO_8CH');
+      let flowMeterTemplate = byKind('FLOWMETER_ULTRASONIC_V1');
+      
+      // Déverrouillage (REG0057) puis mise à l'heure du compteur
+      const wpBefore = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'writeProtection', operationId: 'read', isConfirmed: true });
+      this._printOutcome(wpBefore);
+      const unlock = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'writeProtection', operationId: 'set', value: 12345, isConfirmed: true });
+      this._printOutcome(unlock);
+      const wpAfter = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'writeProtection', operationId: 'read', isConfirmed: true });
+      this._printOutcome(wpAfter);
 
-       await this.execute(io8, CONNECTION, { blockId: 'outputs', operationId: 'toggle', channel: 3 }); 
+      const now = new Date();
+      const setDate = await this.execute(flowMeterTemplate, CONNECTION, {
+          blockId: 'calendar',
+          operationId: 'set',
+          value: {
+              second:1,
+              minute:1,
+              hour: 1,
+              day: 1,
+              month: 1,
+              year: 1,
+          },
+      });
+      this._printOutcome(setDate);
+      const checkDate = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'calendar', operationId: 'read' });
+      this._printOutcome(checkDate);
+
+      // Essai FC06 : mot de passe puis les 3 mots BCD de l'heure, un registre à la fois
+      const words = setDate.request.value as number[];
+      await this.modbusBus.execute(CONNECTION, { function: RegisterFunction.WRITE_SINGLE_REGISTER, address: 56, length: 1, value: 12345 });
+      for (let i = 0; i < words.length; i++) {
+          await this.modbusBus.execute(CONNECTION, { function: RegisterFunction.WRITE_SINGLE_REGISTER, address: 52 + i, length: 1, value: words[i] });
+          console.log(`FC06 adresse ${52 + i} = 0x${words[i].toString(16)}`);
+      }
+      const checkDate06 = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'calendar', operationId: 'read' });
+      this._printOutcome(checkDate06);
+
+
+//        //await this.execute(io8, CONNECTION, { blockId: 'outputs', operationId: 'toggle', channel: 3 }); 
+        // Tous les blocs 'fixed' du compteur ayant une opération read (ultrasonic-water-meter.json)
+        const readBlockIds = [
+            'commTest', 'units', 'waterMeter', 'heatMeter', 'instantaneous', 'totalizers', 'temperatures',
+            'weekDay', 'calendar', 'autoSave', 'writeProtection', 'keyWrite', 'menuAccess', 'currentMenu',
+            'deviceAddress', 'batchController', 'octPulses', 'errorCodes', 'sensorDiagnostics', 'signal',
+            'runtimeStats', 'extraChannels', 'floatTotals', 'tariffs', 'periodTotals', 'historyPointers',
+            'powerEvents', 'batteryVoltage', 'temperatureDifference', 'autoStorage', 'verification',
+            'pipeDiameter', 'monthlyMax', 'meteringTimes', 'dailyMax', 'mbusUserCode', 'tariffSchedule',
+        ];
+        const outcomes = new Map<string, RegisterOperationOutcome>();
+        for (const blockId of readBlockIds) {
+            const outcome = await this.execute(flowMeterTemplate, CONNECTION, { blockId, operationId: 'read', isConfirmed: true });
+            outcomes.set(blockId, outcome);
+            this._printOutcome(outcome);
+        }
+        const historyPointers = outcomes.get('historyPointers');
+        // dailyHistory / monthlyHistory sont en scope 'channel' : l'index du bloc vient de historyPointers
+        const pointers = historyPointers.value?.type === 'fields' ? historyPointers.value.fields : [];
+        const dailyPointer = Number(pointers.find((f) => f.name === 'dailyPointer')?.value ?? 0);
+        const monthlyPointer = Number(pointers.find((f) => f.name === 'monthlyPointer')?.value ?? 0);
+        const dailyHistory = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'dailyHistory', operationId: 'read', channel: 26 });
+        const monthlyHistory = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'monthlyHistory', operationId: 'read', channel: monthlyPointer % 32 });
+        this._printOutcome(dailyHistory);
+        this._printOutcome(monthlyHistory); 
+    }
+
+    // Affichage console du résultat d'une opération, élément par élément selon operation.result
+    private _printOutcome(outcome: RegisterOperationOutcome): void {
+        console.log(`\n=== ${outcome.blockId}.${outcome.operationId} : ${outcome.isOk ? 'OK' : 'ERREUR'} (${outcome.durationMs} ms)`);
+        console.log('request :', outcome.request);
+       // if (outcome.raw) console.log('raw     :', outcome.raw);
+        if (outcome.scopeFields?.length) {
+            console.log('scope   :');
+            outcome.scopeFields.forEach((f) => this._printField(f));
+        }
+        if (outcome.error) {
+            const { message, modbusCode, label } = outcome.error;
+            console.log(`error   : ${message}${modbusCode !== undefined ? ` [code ${modbusCode}${label ? ` - ${label}` : ''}]` : ''}`);
+            return;
+        }
+        const value = outcome.value;
+        switch (value?.type) {
+            case 'fields':
+                value.fields.forEach((f) => this._printField(f));
+                break;
+            case 'boolean[]':
+            case 'enum[]':
+                value.channels.forEach((c) => console.log(`  voie ${c.number} = ${c.label ?? c.value}`));
+                break;
+            case 'number':
+                console.log(`  value = ${value.value}`);
+                break;
+            case 'version':
+                console.log(`  version = ${value.text}`);
+                break;
+            default:
+                console.log('  (echo)');
+        }
+    }
+
+    private _printField(f: DecodedField): void {
+        const display = f.text ?? `${f.value}${f.unit ? ` ${f.unit}` : ''}`;
+        const flags = f.flags?.length ? ` flags=[${f.flags.join(', ')}]` : '';
+        const expected = f.isExpected === false ? ' (inattendu)' : '';
+        console.log(`  ${f.label} (${f.name}) = ${display}`); //  [raw ${f.raw}]${flags}${expected}
     }
 
     /**
@@ -117,8 +219,9 @@ export class RegisterMapService {
         const outcome: RegisterOperationOutcome = { isOk: false, blockId: command.blockId, operationId: command.operationId, request, durationMs: 0 };
         const start = Date.now();
         try {
-            const scope = await this._resolveScope(template, connection, operation);
+            const { scope, fields: scopeFields } = await this._resolveScope(template, connection, operation);
             if (Object.keys(scope).length) outcome.scope = scope;
+            if (scopeFields.length) outcome.scopeFields = scopeFields;
             const raw = await this.modbusBus.execute(connection, request);
             outcome.raw = raw || undefined;
             outcome.value = this.decodeResult(template, operation, raw, scope);
@@ -137,18 +240,20 @@ export class RegisterMapService {
         template: RegisterMapTemplate,
         connection: ModbusConnection,
         operation: RegisterOperation
-    ): Promise<Record<string, number>> {
+    ): Promise<{ scope: Record<string, number>; fields: DecodedField[] }> {
         const scope: Record<string, number> = {};
+        const fields: DecodedField[] = [];
         for (const ref of operation.scopeFrom ?? []) {
             const [blockId, operationId] = ref.split('.');
             const { operation: source } = this.findOperation(template, blockId, operationId);
             const raw = await this.modbusBus.execute(connection, this.buildRequest(template, { blockId, operationId }));
             const decoded = this.decodeResult(template, source, raw, scope);
             if (decoded.type === 'fields') {
+                fields.push(...decoded.fields);
                 decoded.fields.filter((f) => typeof f.value === 'number').forEach((f) => scope[f.name] = f.value as number);
             }
         }
-        return scope;
+        return { scope, fields };
     }
 
     // scope 'channel' : décalage = index × stride ; 'range'/'fixed' : adresse de départ du bloc

@@ -392,40 +392,5 @@
       "portNumStart": 0,
       "portCount": 8
     }
-  },
-  "comRequests": [
-    {
-      "name": "SWITCH ALL OFF",
-      "description": "SWITCH ALL OFF",
-      "type": ["DIGITAL_IO_INIT"],
-      "config": {
-        "address": 255,
-        "function": ["writeCoil"],
-        "done": true,
-        "params": { "length": 1, "value": 0 }
-      }
-    },
-    {
-      "name": "SET ALL TOGGLE MODE",
-      "description": "SET ALL TOGGLE MODE",
-      "type": ["DIGITAL_IO_INIT"],
-      "config": {
-        "address": 4096,
-        "function": ["writeRegisters"],
-        "done": true,
-        "params": { "length": 8, "value": [2, 2, 2, 2, 2, 2, 2, 2] }
-      }
-    },
-    {
-      "name": "SWITCH ALL ON",
-      "description": "SWITCH ALL ON",
-      "type": ["DIGITAL_IO_INIT"],
-      "config": {
-        "address": 255,
-        "function": ["writeCoil"],
-        "done": true,
-        "params": { "length": 1, "value": 1 }
-      }
-    }
-  ]
+  }
 }

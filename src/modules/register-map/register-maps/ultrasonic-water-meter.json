@@ -466,6 +466,7 @@
                 "offset": 6,
                 "type": "int32",
                 "unit": "unité REG1446",
+                "unitFrom": { "field": "cumulativeUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (cumulativeDecimal - 3)"
               },
               {
@@ -553,6 +554,7 @@
                 "offset": 27,
                 "type": "int32",
                 "unit": "unité REG1446",
+                "unitFrom": { "field": "cumulativeUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (cumulativeDecimal - 3)"
               },
               {
@@ -652,6 +654,7 @@
                 "offset": 6,
                 "type": "int32",
                 "unit": "unité REG1496",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "raw * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -660,6 +663,7 @@
                 "offset": 8,
                 "type": "int32",
                 "unit": "unité REG1496",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "raw * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -675,6 +679,7 @@
                 "offset": 12,
                 "type": "int32",
                 "unit": "unité REG1493",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -745,6 +750,7 @@
                 "offset": 32,
                 "type": "int32",
                 "unit": "unité REG1493",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -875,6 +881,7 @@
                 "offset": 0,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + positiveFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -889,6 +896,7 @@
                 "offset": 4,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + negativeFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -903,6 +911,7 @@
                 "offset": 8,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "(raw + positiveHeatFraction) * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -917,6 +926,7 @@
                 "offset": 12,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "(raw + negativeHeatFraction) * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -931,6 +941,7 @@
                 "offset": 16,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + netFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -945,6 +956,7 @@
                 "offset": 20,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "(raw + netHeatFraction) * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -1996,6 +2008,7 @@
                 "offset": 0,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + tariff2Fraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2010,6 +2023,7 @@
                 "offset": 4,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + tariff3Fraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2058,6 +2072,7 @@
                 "offset": 0,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + todayFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2072,6 +2087,7 @@
                 "offset": 4,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + monthFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2086,6 +2102,7 @@
                 "offset": 8,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "(raw + yearFlowFraction) * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2100,6 +2117,7 @@
                 "offset": 12,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "(raw + todayHeatFraction) * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -2114,6 +2132,7 @@
                 "offset": 16,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "(raw + monthHeatFraction) * 10 ^ (heatDecimal - 4)"
               },
               {
@@ -2329,6 +2348,7 @@
                 "offset": 2,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2350,6 +2370,7 @@
                 "offset": 10,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               }
             ]
@@ -2786,6 +2807,7 @@
                 "offset": 4,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2794,6 +2816,7 @@
                 "offset": 6,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "raw * 10 ^ (heatDecimal - 4)"
               }
             ]
@@ -2861,6 +2884,7 @@
                 "offset": 4,
                 "type": "int32",
                 "unit": "unité REG1438",
+                "unitFrom": { "field": "cumulativeFlowUnit", "enum": "cumulativeFlowUnit" },
                 "formula": "raw * 10 ^ (flowDecimal - 3)"
               },
               {
@@ -2869,6 +2893,7 @@
                 "offset": 6,
                 "type": "int32",
                 "unit": "unité REG1441",
+                "unitFrom": { "field": "heatUnit", "enum": "heatUnit" },
                 "formula": "raw * 10 ^ (heatDecimal - 4)"
               }
             ]
@@ -2880,47 +2905,5 @@
   "device": {
     "name": "COMPTEUR ULTRASONIQUE",
     "description": "Compteur d'eau / chaleur à ultrasons"
-  },
-  "comRequests": [
-    {
-      "name": "DEBIT INSTANTANE",
-      "description": "Débit instantané (REG0001-0002)",
-      "type": [
-        "COM_READ"
-      ],
-      "config": {
-        "address": 0,
-        "function": [
-          "readHoldingRegisters"
-        ],
-        "type": "float",
-        "done": false,
-        "params": {
-          "length": 2,
-          "unit": "m3/h",
-          "formula": "raw"
-        }
-      }
-    },
-    {
-      "name": "VOLUME NET CUMULE",
-      "description": "Volume net cumulé (REG0025-0028, position décimale REG1439)",
-      "type": [
-        "COM_READ"
-      ],
-      "config": {
-        "address": 24,
-        "function": [
-          "readHoldingRegisters"
-        ],
-        "type": "cumulative",
-        "done": false,
-        "params": {
-          "length": 4,
-          "unit": "m3",
-          "formula": "(N + Nf) * 10 ^ (n - 3)"
-        }
-      }
-    }
-  ]
+  }
 }

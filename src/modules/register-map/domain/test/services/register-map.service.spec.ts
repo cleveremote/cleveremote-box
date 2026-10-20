@@ -209,6 +209,19 @@ describe('RegisterMapService (module register-map)', () => {
             expect(positiveFlow && positiveFlow.value).toBeCloseTo(12345678.95, 2);
         });
 
+        it('should resolve the unit from the unit code read on the device (unitFrom)', async () => {
+            modbusBus.execute
+                .mockResolvedValueOnce([0, 1, 3, 4, 2, 1]) // units : cumulativeFlowUnit = 1 (L), heatUnit = 2 (GJ)
+                .mockResolvedValueOnce(Array.from({ length: 24 }, () => 0));
+
+            const outcome = await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+
+            const units = outcome.value.type === 'fields' ? outcome.value.fields.map((f) => f.unit) : [];
+            expect(units).toContain('L');
+            expect(units).toContain('GJ');
+            expect(units.some((u) => u?.startsWith('unité REG'))).toBe(false);
+        });
+
         it('should decode error bits, BCD date and ASCII version of the heat meter scenario', async () => {
             const words = Array.from({ length: 40 }, () => 0);
             words.splice(22, 2, 0x1001, 0x0000); // bits 0 et 12

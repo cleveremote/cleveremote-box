@@ -63,6 +63,8 @@ export interface RegisterField {
     // Nombre de mots (défaut selon le type : 1 pour 16 bits, 2 pour 32 bits, 3 pour bcdDateTime)
     words?: number;
     unit?: string;
+    // Unité lue sur l'équipement : libellé enum du code porté par `field` (champ de la lecture ou scopeFrom) ; `unit` sert de repli
+    unitFrom?: { field: string; enum: string };
     // Formule mathjs : `raw` + valeurs brutes des autres champs de la lecture + scopeFrom
     formula?: string;
     // Libellés des valeurs (int) ou des bits (bits, valeur = index du bit)
@@ -228,5 +230,7 @@ export interface RegisterOperationOutcome {
     error?: RegisterOperationError;
     // Valeurs issues des lectures scopeFrom
     scope?: Record<string, number>;
+    // Mêmes lectures scopeFrom, décodées (libellés enum, unités) pour l'affichage
+    scopeFields?: DecodedField[];
     durationMs: number;
 }

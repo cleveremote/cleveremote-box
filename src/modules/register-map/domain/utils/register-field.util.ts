@@ -85,7 +85,8 @@ export class RegisterFieldDecoder {
         evaluate: FormulaEvaluator
     ): DecodedField {
         const decoded: DecodedField = { name: field.name, label: field.label, raw, value: raw };
-        if (field.unit) decoded.unit = field.unit;
+        const unit = RegisterFieldDecoder._unit(template, field, scope);
+        if (unit) decoded.unit = unit;
         if (typeof raw === 'string') {
             if (field.type === 'bcdDateTime') decoded.text = RegisterFieldDecoder._formatDateTime(raw);
             return decoded;
@@ -94,6 +95,12 @@ export class RegisterFieldDecoder {
         RegisterFieldDecoder._label(template, field, raw, decoded);
         if (field.expected !== undefined) decoded.isExpected = Math.abs(Number(decoded.value) - field.expected) < 0.01;
         return decoded;
+    }
+
+    private static _unit(template: RegisterMapTemplate, field: RegisterField, scope: Record<string, number>): string | undefined {
+        if (!field.unitFrom) return field.unit;
+        const code = scope[field.unitFrom.field];
+        return template.enums[field.unitFrom.enum]?.find((e) => e.value === code)?.label ?? field.unit;
     }
 
     // Bits actifs (type bits) ou libellé de la valeur (enum)
