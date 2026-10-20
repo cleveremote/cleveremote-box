@@ -90,7 +90,7 @@ export class RegisterMapService {
     }
 
 
-    public async tests():Promise<void>{
+    public async testUltrasonicFlowMeter():Promise<void>{
       const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.203', port: 4196, unitId: 1 };
       const dir = join(process.cwd(), REGISTER_MAPS_DIR);
       const templates = readdirSync(dir).filter((f) => f.endsWith('.json'))
@@ -161,14 +161,67 @@ export class RegisterMapService {
         const dailyHistory = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'dailyHistory', operationId: 'read', channel: 26 });
         const monthlyHistory = await this.execute(flowMeterTemplate, CONNECTION, { blockId: 'monthlyHistory', operationId: 'read', channel: monthlyPointer % 32 });
         this._printOutcome(dailyHistory);
-        this._printOutcome(monthlyHistory); 
+        this._printOutcome(monthlyHistory);
+    }
+
+    /**
+     * Lecture de toutes les opérations 'read' du variateur Veichi SI23 (veichi-si23-inverter.json) :
+     * vues groupées puis un bloc par paramètre (F00.00 ... C02.46). Lecture seule, aucune écriture.
+     * Les valeurs lues sont comparées à block.defaultValue (valeur usine du manuel).
+     */
+    public async testInverterSi23(): Promise<void> {
+        // Variateur : unit id 1-10 (DEVICE_KIND_SPECS) ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.204', port: 4196, unitId: 1 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const inverterTemplate = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'INVERTER_VEICHI_SI23_V1');
+        if (!inverterTemplate) {
+            console.log('register map INVERTER_VEICHI_SI23_V1 introuvable');
+            return;
+        }
+
+        // Toutes les lectures 'fixed' (les blocs 'channel', ex: parameterEeprom, n'ont pas de lecture)
+        const readBlocks = inverterTemplate.registerMap
+            .filter((b) => b.operations.some((o) => o.id === 'read' && o.scope === 'fixed'));
+        const errors: string[] = [];
+        const notDefault: string[] = [];
+        for (const block of readBlocks) {
+            const outcome = await this.execute(inverterTemplate, CONNECTION, { blockId: block.id, operationId: 'read', isConfirmed: true });
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                errors.push(`${block.id} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+                continue;
+            }
+            const first = outcome.value?.type === 'fields' ? outcome.value.fields[0] : undefined;
+            if (block.defaultValue !== undefined && first && !this._isSameValue(first.value, block.defaultValue)) {
+                notDefault.push(`${block.id} ${block.label} : lu ${first.text ?? first.value}${first.unit ? ` ${first.unit}` : ''}, usine ${block.defaultValue}`);
+            }
+        }
+
+        console.log(`\n=== SI23 : ${readBlocks.length} lectures, ${readBlocks.length - errors.length} OK, ${errors.length} en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+        console.log(`\n=== SI23 : ${notDefault.length} paramètres différents de la valeur usine`);
+        notDefault.forEach((d) => console.log(`  ${d}`));
+    }
+
+    // Valeur décodée vs valeur usine : nombres à 1e-6 près (mise à l'échelle), chaînes hexa à la casse près
+    private _isSameValue(value: number | string, expected: number | string): boolean {
+        if (typeof value === 'number' && typeof expected === 'number') {
+            return Math.abs(value - expected) < 1e-6;
+        }
+        return String(value).toUpperCase() === String(expected).toUpperCase();
     }
 
     // Affichage console du résultat d'une opération, élément par élément selon operation.result
     private _printOutcome(outcome: RegisterOperationOutcome): void {
         console.log(`\n=== ${outcome.blockId}.${outcome.operationId} : ${outcome.isOk ? 'OK' : 'ERREUR'} (${outcome.durationMs} ms)`);
         console.log('request :', outcome.request);
-       // if (outcome.raw) console.log('raw     :', outcome.raw);
+        if (outcome.raw) {
+            // Mots / bits bruts reçus du bus (mots aussi en hexa)
+            const hex = outcome.raw.map((w) => (typeof w === 'number' ? `0x${w.toString(16).toUpperCase().padStart(4, '0')}` : String(w)));
+            console.log(`raw     : [${outcome.raw.join(', ')}] [${hex.join(' ')}]`);
+        }
         if (outcome.scopeFields?.length) {
             console.log('scope   :');
             outcome.scopeFields.forEach((f) => this._printField(f));
@@ -202,7 +255,7 @@ export class RegisterMapService {
         const display = f.text ?? `${f.value}${f.unit ? ` ${f.unit}` : ''}`;
         const flags = f.flags?.length ? ` flags=[${f.flags.join(', ')}]` : '';
         const expected = f.isExpected === false ? ' (inattendu)' : '';
-        console.log(`  ${f.label} (${f.name}) = ${display}`); //  [raw ${f.raw}]${flags}${expected}
+        console.log(`  ${f.label} (${f.name}) = ${display}  [raw ${f.raw}]${flags}${expected}`);
     }
 
     /**

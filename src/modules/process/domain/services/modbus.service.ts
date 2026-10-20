@@ -915,13 +915,13 @@ export class ModbusService {
                 await client.writeCoil(address, Boolean(value));
                 return;
             case ModbusFunctionName.WRITE_SINGLE_REGISTER:
-                await client.writeRegister(address, value as number);
+                await client.writeRegister(address, (value as number) & 0xffff);
                 return;
             case ModbusFunctionName.WRITE_MULTIPLE_COILS:
                 await client.writeCoils(address, value as boolean[]);
                 return;
             case ModbusFunctionName.WRITE_MULTIPLE_REGISTERS:
-                await client.writeRegisters(address, value as number[]);
+                await client.writeRegisters(address, (value as number[]).map((v) => v & 0xffff));
                 return;
             case ModbusFunctionName.CUSTOM_SINGLE_COIL:
                 await this._CustomCoil(client, unitId, address, value as number);

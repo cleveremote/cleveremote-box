@@ -90,6 +90,8 @@ export interface RegisterBlock {
     id: string;
     label: string;
     description?: string;
+    // Valeur usine (registres de paramètres), au format de la valeur décodée du 1er champ de la lecture
+    defaultValue?: number | string;
     area: RegisterArea;
     access: RegisterAccess;
     // L'opération peut couper la communication (adresse, vitesse) : confirmation exigée

@@ -91,13 +91,14 @@ export class ModbusBusService {
                 await client.writeCoil(address, Boolean(value));
                 return;
             case RegisterFunction.WRITE_SINGLE_REGISTER:
-                await client.writeRegister(address, value as number);
+                // & 0xffff : valeurs signées émises en complément à 2
+                await client.writeRegister(address, (value as number) & 0xffff);
                 return;
             case RegisterFunction.WRITE_MULTIPLE_COILS:
                 await client.writeCoils(address, value as boolean[]);
                 return;
             case RegisterFunction.WRITE_MULTIPLE_REGISTERS:
-                await client.writeRegisters(address, value as number[]);
+                await client.writeRegisters(address, (value as number[]).map((v) => v & 0xffff));
                 return;
             default:
                 throw new Error(`Fonction Modbus non supportée: ${request.function}`);
