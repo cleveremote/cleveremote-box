@@ -100,7 +100,9 @@ export interface RegisterOperation {
     function: RegisterFunction;
     fc: number;
     scope: OperationScope;
-    params?: { length?: number; formula?: string };
+    // persistence.address : décalage ajouté à l'adresse quand la commande demande une écriture persistante
+    // (ex: EEPROM du variateur SI23 = adresse + 0x1000) ; absent = écriture non persistable
+    params?: { length?: number; formula?: string; persistence?: { address: number } };
     input?: OperationInput;
     result?: OperationResult;
     // Lectures préalables ("blockId.operationId") dont les champs alimentent les formules
@@ -174,6 +176,8 @@ export interface RegisterOperationCommand {
     value?: RegisterOperationValue;
     // Requis pour les blocs `danger`
     isConfirmed?: boolean;
+    // Écriture persistante (mémorisée à la coupure) : adresse + operation.params.persistence.address
+    isPersistent?: boolean;
 }
 
 // Requête Modbus brute prête à émettre

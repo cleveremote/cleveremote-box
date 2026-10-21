@@ -54,7 +54,7 @@ export class RegisterMapService {
         }
         const request: RegisterRequest = {
             function: operation.function,
-            address: block.address.start + this._channelOffset(block, operation, command.channel),
+            address: block.address.start + this._channelOffset(block, operation, command.channel) + this._persistenceOffset(block, operation, command),
             length: operation.params?.length ?? 1
         };
         if (!READ_FUNCTIONS.includes(operation.function)) {
@@ -205,6 +205,185 @@ export class RegisterMapService {
         notDefault.forEach((d) => console.log(`  ${d}`));
     }
 
+    /**
+     * Test du capteur de pression / niveau RS485 (pressure-level-transmitter.json) : toutes les lectures,
+     * comparaison à la valeur usine et cohérence mesure entière / flottante. Lecture seule, aucune écriture.
+     */
+    public async testPressureSensor(): Promise<void> {
+        // Capteur : unit id usine 1 (plage PRESSURE_V1 : 21-30) ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.201', port: 4196, unitId: 1 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const pressureTemplate = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'PRESSURE_V1');
+        if (!pressureTemplate) {
+            console.log('register map PRESSURE_V1 introuvable');
+            return;
+        }
+
+        const readBlocks = pressureTemplate.registerMap
+            .filter((b) => b.operations.some((o) => o.id === 'read' && o.scope === 'fixed'));
+        const outcomes = new Map<string, RegisterOperationOutcome>();
+        const errors: string[] = [];
+        const notDefault: string[] = [];
+        for (const block of readBlocks) {
+            const outcome = await this.execute(pressureTemplate, CONNECTION, { blockId: block.id, operationId: 'read', isConfirmed: true });
+            outcomes.set(block.id, outcome);
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                errors.push(`${block.id} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+                continue;
+            }
+            const first = outcome.value?.type === 'fields' ? outcome.value.fields[0] : undefined;
+            if (block.defaultValue !== undefined && first && !this._isSameValue(first.raw, block.defaultValue)) {
+                notDefault.push(`${block.id} ${block.label} : lu ${first.text ?? first.value}, usine ${block.defaultValue}`);
+            }
+        }
+
+        // La mesure entière (0x0004, mise à l'échelle par decimalPoint) et la flottante (0x0016) doivent concorder
+        const fieldOf = (blockId: string, name: string): DecodedField | undefined => {
+            const value = outcomes.get(blockId)?.value;
+            return value?.type === 'fields' ? value.fields.find((f) => f.name === name) : undefined;
+        };
+        const pv = fieldOf('pv', 'pv');
+        const pvFloat = fieldOf('pvFloat', 'pvFloat');
+        if (pv && pvFloat) {
+            const gap = Math.abs(Number(pv.value) - Number(pvFloat.value));
+            console.log(`\n=== Mesure : entière ${pv.value} / flottante ${pvFloat.value} ${pv.unit ?? ''} (écart ${gap})`);
+        }
+
+        console.log(`\n=== Capteur pression : ${readBlocks.length} lectures, ${readBlocks.length - errors.length} OK, ${errors.length} en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+        console.log(`\n=== Capteur pression : ${notDefault.length} paramètres différents de la valeur usine`);
+        notDefault.forEach((d) => console.log(`  ${d}`)); 
+    }
+
+    /**
+     * Test du capteur de sol Xidibei XDB1001-7 (xidibei-xdb1001-7-soil-sensor.json) : toutes les lectures,
+     * comparaison à la valeur usine, cohérence vue groupée / blocs unitaires et diagnostic des adresses NPK.
+     * Lecture seule, aucune écriture.
+     */
+    public async testSoilSensor(): Promise<void> {
+        // Capteur : unit id usine 1 (plage EC_METER_V1 : 31-40), série 4800 8N1 ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.202', port: 4196, unitId: 1 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const soilTemplate = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'EC_METER_V1');
+        if (!soilTemplate) {
+            console.log('register map EC_METER_V1 introuvable'); 
+            return;
+        }
+
+        const readBlocks = soilTemplate.registerMap
+            .filter((b) => b.operations.some((o) => o.id === 'read' && o.scope === 'fixed'));
+        const outcomes = new Map<string, RegisterOperationOutcome>();
+        const errors: string[] = [];
+        const notDefault: string[] = [];
+        for (const block of readBlocks) {
+            const outcome = await this.execute(soilTemplate, CONNECTION, { blockId: block.id, operationId: 'read', isConfirmed: true });
+            outcomes.set(block.id, outcome);
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                errors.push(`${block.id} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+                continue;
+            }
+            const first = outcome.value?.type === 'fields' ? outcome.value.fields[0] : undefined;
+            if (block.defaultValue !== undefined && first && !this._isSameValue(first.raw, block.defaultValue)) {
+                notDefault.push(`${block.id} ${block.label} : lu ${first.text ?? first.value}, usine ${block.defaultValue}`);
+            }
+        }
+
+        const fieldOf = (blockId: string, name: string): DecodedField | undefined => {
+            const value = outcomes.get(blockId)?.value;
+            return value?.type === 'fields' ? value.fields.find((f) => f.name === name) : undefined;
+        };
+
+        // La vue groupée (0x0000-0x0003) et les blocs unitaires doivent concorder (lectures successives : faible écart possible)
+        console.log('\n=== Capteur sol : vue groupée / blocs unitaires');
+        for (const name of ['moisture', 'temperature', 'conductivity', 'ph']) {
+            const grouped = fieldOf('monitoring', name);
+            const single = fieldOf(name, name);
+            if (grouped && single) {
+                console.log(`  ${name} : groupé ${grouped.value} / unitaire ${single.value} ${single.unit ?? ''}`);
+            }
+        }
+
+        // Doc incohérente pour P et K : 0x0007/0x0008 (colonne hexa) ou 0x0005/0x0006 (colonne PLC)
+        const scan = outcomes.get('nutrientsScan');
+        console.log('\n=== Capteur sol : diagnostic adresses NPK');
+        if (scan?.isOk && scan.value?.type === 'fields') {
+            scan.value.fields.forEach((f) => console.log(`  ${f.label} = ${f.value}`));
+        } else {
+            console.log(`  0x0004-0x0008 illisible (${scan?.error?.label ?? scan?.error?.message}) : 0x0005/0x0006 probablement absents, adresses hexa retenues`);
+        }
+
+        console.log(`\n=== Capteur sol : ${readBlocks.length} lectures, ${readBlocks.length - errors.length} OK, ${errors.length} en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+        console.log(`\n=== Capteur sol : ${notDefault.length} paramètres différents de la valeur usine`);
+        notDefault.forEach((d) => console.log(`  ${d}`));
+    }
+
+    /**
+     * Test de la sonde température / humidité ComWinTop CWT-TH (comwintop-cwt-th-sensor.json) : toutes les lectures,
+     * comparaison à la valeur usine et cohérence vues groupées / blocs unitaires. Lecture seule, aucune écriture.
+     */
+    public async testTemperatureMoistureSensor(): Promise<void> {
+        // Sonde : unit id usine 1 (plage TEMPERATURE_MOISTURE_V1 : 51-60), série 4800 8N1 ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.202', port: 4196, unitId: 1 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const thTemplate = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'TEMPERATURE_MOISTURE_V1');
+        if (!thTemplate) {
+            console.log('register map TEMPERATURE_MOISTURE_V1 introuvable');
+            return;
+        }
+
+        const readBlocks = thTemplate.registerMap
+            .filter((b) => b.operations.some((o) => o.id === 'read' && o.scope === 'fixed'));
+        const outcomes = new Map<string, RegisterOperationOutcome>();
+        const errors: string[] = [];
+        const notDefault: string[] = [];
+        for (const block of readBlocks) {
+            const outcome = await this.execute(thTemplate, CONNECTION, { blockId: block.id, operationId: 'read', isConfirmed: true });
+            outcomes.set(block.id, outcome);
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                errors.push(`${block.id} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+                continue;
+            }
+            const first = outcome.value?.type === 'fields' ? outcome.value.fields[0] : undefined;
+            if (block.defaultValue !== undefined && first && !this._isSameValue(first.raw, block.defaultValue)) {
+                notDefault.push(`${block.id} ${block.label} : lu ${first.text ?? first.value}${first.unit ? ` ${first.unit}` : ''}, usine ${block.defaultValue}`);
+            }
+        }
+
+        const fieldOf = (blockId: string, name: string): DecodedField | undefined => {
+            const value = outcomes.get(blockId)?.value;
+            return value?.type === 'fields' ? value.fields.find((f) => f.name === name) : undefined;
+        };
+
+        // Les vues groupées et les blocs unitaires doivent concorder (lectures successives : faible écart possible sur les mesures)
+        console.log('\n=== Sonde T/H : vues groupées / blocs unitaires');
+        const pairs: [string, string][] = [
+            ['monitoring', 'humidity'], ['monitoring', 'temperature'],
+            ['calibration', 'temperatureCalibration'], ['calibration', 'humidityCalibration'],
+        ];
+        for (const [groupId, name] of pairs) {
+            const grouped = fieldOf(groupId, name);
+            const single = fieldOf(name, name);
+            if (grouped && single) {
+                console.log(`  ${name} : groupé ${grouped.value} / unitaire ${single.value} ${single.unit ?? ''}`);
+            }
+        }
+
+        console.log(`\n=== Sonde T/H : ${readBlocks.length} lectures, ${readBlocks.length - errors.length} OK, ${errors.length} en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+        console.log(`\n=== Sonde T/H : ${notDefault.length} paramètres différents de la valeur usine`);
+        notDefault.forEach((d) => console.log(`  ${d}`));
+    }
+
     // Valeur décodée vs valeur usine : nombres à 1e-6 près (mise à l'échelle), chaînes hexa à la casse près
     private _isSameValue(value: number | string, expected: number | string): boolean {
         if (typeof value === 'number' && typeof expected === 'number') {
@@ -307,6 +486,18 @@ export class RegisterMapService {
             }
         }
         return { scope, fields };
+    }
+
+    // Écriture persistante demandée : décalage déclaré par l'opération (lève si l'opération ne le prévoit pas)
+    private _persistenceOffset(block: RegisterBlock, operation: RegisterOperation, command: RegisterOperationCommand): number {
+        if (!command.isPersistent) {
+            return 0;
+        }
+        const offset = operation.params?.persistence?.address;
+        if (offset === undefined) {
+            throw new RegisterMapInputError(`${block.id}.${operation.id} : écriture persistante non prévue par le template`);
+        }
+        return offset;
     }
 
     // scope 'channel' : décalage = index × stride ; 'range'/'fixed' : adresse de départ du bloc

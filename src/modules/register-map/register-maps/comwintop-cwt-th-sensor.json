@@ -1,0 +1,563 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; tous les registres sont des mots 16 bits ; adresses de la doc en hexa (0x07D0 → 2000, 0x0050 → 80), aucun décalage",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'enum' : enum[].value ; 'number' : entier brut, négatif émis en complément à 2",
+    "functionCodes": "La doc indique 0x30 / 0x60 : coquille pour 0x03 (lecture) / 0x06 (écriture), confirmée par les trames d'exemple",
+    "scale": "Humidité, température et calibrations transmises × 10 (formule raw / 10)",
+    "temperature": "Température signée en complément à 2 (0xFF9F = -97 → -9.7 °C)",
+    "calibration": "Offsets de calibration (0x0050 / 0x0051) : signés, saisis bruts en 0.1 °C / 0.1 %RH ; valeur usine 0 supposée (non précisée par la doc)",
+    "addressQuery": "Adresse 0xFF (255) acceptée en requête quand l'adresse est perdue : un seul capteur sur le bus, il répond avec son adresse réelle (ce n'est pas un broadcast Modbus)",
+    "defaultValue": "Valeur usine du paramètre, au format de la valeur décodée du 1er champ (code enum ou nombre)",
+    "views": "Blocs groupés (monitoring, calibration) : lecture des registres consécutifs en une trame, mêmes champs que les blocs unitaires",
+    "danger": "true : l'opération peut couper la communication (confirmation requise)"
+  },
+  "_id": "2ac6bb5e-93aa-48a3-9327-e434943fb446",
+  "name": "CAPTEUR TEMPÉRATURE / HUMIDITÉ CWT-TH",
+  "description": "Sonde étanche température / humidité RS485 - Modbus RTU (FC 03/06)",
+  "kind": "TEMPERATURE_MOISTURE_V1",
+  "hardware": {
+    "manufacturer": "ComWinTop",
+    "model": "CWT-TH01S ... CWT-TH05S (sonde température / humidité RS485)",
+    "documentation": "temperature_moisture.pdf",
+    "serial": {
+      "baudRate": 4800,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1,
+      "baudRates": [
+        2400,
+        4800,
+        9600
+      ],
+      "parities": [
+        "none"
+      ],
+      "note": "Vitesse réglable au registre 0x07D1 ; parité non réglable"
+    },
+    "unitId": {
+      "default": 1,
+      "min": 1,
+      "max": 254
+    },
+    "discoveryRegister": 2000,
+    "exceptionCodes": "modbusException",
+    "functionCodes": [
+      3,
+      6
+    ],
+    "registerNumbering": "Adresses de la doc en hexa (0xNNNN) ; adresse PLC 4xxxx = registre + 40001"
+  },
+  "enums": {
+    "modbusException": [
+      {
+        "value": 1,
+        "label": "Illegal function"
+      },
+      {
+        "value": 2,
+        "label": "Illegal data address"
+      },
+      {
+        "value": 3,
+        "label": "Illegal data value"
+      }
+    ],
+    "baudRate": [
+      {
+        "value": 0,
+        "label": "2400"
+      },
+      {
+        "value": 1,
+        "label": "4800"
+      },
+      {
+        "value": 2,
+        "label": "9600"
+      }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "monitoring",
+      "label": "Humidité et température (0x0000-0x0001)",
+      "description": "Les deux mesures en une seule lecture",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 0,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les mesures",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "humidity",
+                "label": "Humidité relative",
+                "offset": 0,
+                "type": "uint16",
+                "unit": "%RH",
+                "formula": "raw / 10"
+              },
+              {
+                "name": "temperature",
+                "label": "Température",
+                "offset": 1,
+                "type": "int16",
+                "unit": "°C",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire 0x0000-0x0001 (2 registres)",
+          "frame": "01 03 00 00 00 02 C4 0B"
+        },
+        {
+          "label": "Réponse 48.6 %RH / -9.7 °C",
+          "frame": "01 03 04 01 E6 FF 9F 1B A0"
+        }
+      ]
+    },
+    {
+      "id": "humidity",
+      "label": "Humidité",
+      "description": "0-100 %RH (× 10)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 0,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'humidité",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "humidity",
+                "label": "Humidité relative",
+                "offset": 0,
+                "type": "uint16",
+                "unit": "%RH",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire l'humidité (0x0000)",
+          "frame": "01 03 00 00 00 01 84 0A"
+        },
+        {
+          "label": "Outil constructeur, adresse 3 : 0x02CB = 71.5 %RH",
+          "frame": "03 03 02 02 CB 81 73"
+        }
+      ]
+    },
+    {
+      "id": "temperature",
+      "label": "Température",
+      "description": "-30 à 80 °C (-40 à 120 °C pour les versions -H), × 10, complément à 2 sous 0 °C",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 1,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la température",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "temperature",
+                "label": "Température",
+                "offset": 0,
+                "type": "int16",
+                "unit": "°C",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire la température (0x0001)",
+          "frame": "01 03 00 01 00 01 D5 CA"
+        }
+      ]
+    },
+    {
+      "id": "calibration",
+      "label": "Calibrations (0x0050-0x0051)",
+      "description": "Offsets de calibration température et humidité en une seule lecture",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 80,
+        "count": 2
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les calibrations",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 2
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "temperatureCalibration",
+                "label": "Calibration température",
+                "offset": 0,
+                "type": "int16",
+                "unit": "°C",
+                "formula": "raw / 10"
+              },
+              {
+                "name": "humidityCalibration",
+                "label": "Calibration humidité",
+                "offset": 1,
+                "type": "int16",
+                "unit": "%RH",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire 0x0050-0x0051 (2 registres)",
+          "frame": "01 03 00 50 00 02 C4 1A"
+        }
+      ]
+    },
+    {
+      "id": "temperatureCalibration",
+      "label": "Calibration température",
+      "description": "Offset ajouté à la température, signé, brut en 0.1 °C ; usine 0 supposé",
+      "defaultValue": 0,
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 80,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la calibration",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "temperatureCalibration",
+                "label": "Calibration température",
+                "offset": 0,
+                "type": "int16",
+                "unit": "°C",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Écrire la calibration (0.1 °C)",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": -32768,
+            "max": 32767,
+            "default": 0,
+            "scale": 10,
+            "unit": "°C"
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire la calibration température (0x0050)",
+          "frame": "01 03 00 50 00 01 84 1B"
+        },
+        {
+          "label": "Remettre la calibration température à 0",
+          "frame": "01 06 00 50 00 00 89 DB"
+        }
+      ]
+    },
+    {
+      "id": "humidityCalibration",
+      "label": "Calibration humidité",
+      "description": "Offset ajouté à l'humidité, signé, brut en 0.1 %RH ; usine 0 supposé",
+      "defaultValue": 0,
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 81,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la calibration",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "humidityCalibration",
+                "label": "Calibration humidité",
+                "offset": 0,
+                "type": "int16",
+                "unit": "%RH",
+                "formula": "raw / 10"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Écrire la calibration (0.1 %RH)",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": -32768,
+            "max": 32767,
+            "default": 0,
+            "scale": 10,
+            "unit": "%RH"
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire la calibration humidité (0x0051)",
+          "frame": "01 03 00 51 00 01 D5 DB"
+        },
+        {
+          "label": "Remettre la calibration humidité à 0",
+          "frame": "01 06 00 51 00 00 D8 1B"
+        }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse Modbus",
+      "description": "Registre de découverte (0x07D0). Le capteur répond avec l'ancienne adresse puis bascule ; adresse perdue : interroger en 0xFF avec un seul capteur sur le bus",
+      "defaultValue": 1,
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 2000,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "deviceAddress",
+                "label": "Adresse",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 1,
+            "max": 254,
+            "default": 1
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire l'adresse (0x07D0)",
+          "frame": "01 03 07 D0 00 01 84 87"
+        },
+        {
+          "label": "Interroger l'adresse inconnue (0xFF)",
+          "frame": "FF 03 07 D0 00 01 91 59"
+        },
+        {
+          "label": "Réponse : adresse 1",
+          "frame": "FF 03 02 00 01 50 50"
+        },
+        {
+          "label": "Passer de l'adresse 1 à 2",
+          "frame": "01 06 07 D0 00 02 08 86"
+        }
+      ]
+    },
+    {
+      "id": "baudRate",
+      "label": "Vitesse de communication",
+      "description": "Le capteur répond à l'ancienne vitesse puis bascule",
+      "defaultValue": 1,
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 2001,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la vitesse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "baudRate",
+                "label": "Vitesse",
+                "offset": 0,
+                "type": "uint16",
+                "enum": "baudRate"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer la vitesse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "enum",
+            "enum": "baudRate"
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire la vitesse (0x07D1)",
+          "frame": "01 03 07 D1 00 01 D5 47"
+        },
+        {
+          "label": "Passer à 9600",
+          "frame": "01 06 07 D1 00 02 59 46"
+        }
+      ]
+    }
+  ]
+}

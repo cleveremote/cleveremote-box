@@ -1,6 +1,6 @@
 import { RegisterMapInputError } from '../errors/register-map.error';
 import {
-    CompositeField, RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation,
+    CompositeField, READ_FUNCTIONS, RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation,
     RegisterOperationValue, RegisterRequest
 } from '../models/register-map.model';
 import { RegisterFieldDecoder } from './register-field.util';
@@ -41,6 +41,7 @@ export class RegisterMapValidator {
             RegisterMapValidator._validateComposite(op, where, errors);
             RegisterMapValidator._validateFields(op, where, errors);
             RegisterMapValidator._validateScopeFrom(template, op, where, errors);
+            RegisterMapValidator._validatePersistence(op, where, errors);
         }
     }
 
@@ -71,6 +72,13 @@ export class RegisterMapValidator {
             if (field.offset + RegisterFieldDecoder.wordCount(field) > length) errors.push(`${where}.${field.name}: dépasse params.length`);
             if (field.formula && !RegisterFieldDecoder.isNumeric(field)) errors.push(`${where}.${field.name}: formule sur un champ texte`);
         }
+    }
+
+    private static _validatePersistence(op: RegisterOperation, where: string, errors: string[]): void {
+        const persistence = op.params?.persistence;
+        if (!persistence) return;
+        if (READ_FUNCTIONS.includes(op.function)) errors.push(`${where}: persistence sur une lecture`);
+        if (!Number.isInteger(persistence.address) || persistence.address <= 0) errors.push(`${where}: persistence.address doit être un entier > 0`);
     }
 
     private static _validateScopeFrom(template: RegisterMapTemplate, op: RegisterOperation, where: string, errors: string[]): void {

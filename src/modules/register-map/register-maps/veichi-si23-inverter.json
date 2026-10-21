@@ -6,7 +6,8 @@
     "address": "scope 'channel' : block.address.start + index × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
     "parameterBlocks": "Un bloc par No. du manuel, id = code du paramètre (ex : F00.02, C00.01) ; nom des champs = code en minuscules (f00_02) pour les formules",
     "parameterAddress": "Fgg.ii → gg × 256 + ii (ex : F13.01 → 0x0D01 = 3329) ; C00.ii → 0x2100 + ii, C01.ii → 0x2200 + ii, C02.ii → 0x2300 + ii",
-    "commandAddress": "Commandes RS485 en 0x2000-0x201A (la doc donne aussi 0x3000-0x301A, équivalent non utilisé ici)",
+    "commandAddress": "Commandes RS485 en 0x2000-0x201A ; la doc donne aussi 0x3000-0x301A, utilisé pour les écritures persistantes",
+    "persistence": "Écriture avec isPersistent=true : adresse + params.persistence.address (0x1000 = EEPROM, convention de ModbusService._applyInverterConfig ; à vérifier sur l'appareil). Sans isPersistent : RAM, perdu à la coupure ; ne pas écrire en boucle en EEPROM",
     "length": "operation.params.length si présent, sinon 1",
     "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : entier brut (affiché × scale en unit), négatif émis en complément à 2",
     "scale": "Résolution déduite de la plage du manuel (0.01 Hz, 0.1 A, 0.1 V...) : formule en lecture, scale en écriture",
@@ -1506,6 +1507,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -1580,6 +1586,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -1610,6 +1621,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -2000,
@@ -1640,6 +1656,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -1670,6 +1691,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -1700,6 +1726,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -1730,6 +1761,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -3764,6 +3800,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "controlMode"
@@ -3817,6 +3858,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "runChannel"
@@ -3870,6 +3916,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "frequencySource"
@@ -3923,6 +3974,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "frequencySource"
@@ -3976,6 +4032,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "channelBReference"
@@ -4029,6 +4090,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "frequencySourceSelection"
@@ -4081,6 +4147,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4137,6 +4208,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4195,6 +4271,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4252,6 +4333,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "upperFrequencySource"
@@ -4306,6 +4392,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4364,6 +4455,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4421,6 +4517,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "lowerFrequencyMode"
@@ -4474,6 +4575,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -4530,6 +4636,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -4585,6 +4696,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4640,6 +4756,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "gpModel"
@@ -4694,6 +4815,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "parameterInit"
@@ -4747,6 +4873,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "startMode"
@@ -4801,6 +4932,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4859,6 +4995,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4917,6 +5058,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -4975,6 +5121,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5033,6 +5184,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5091,6 +5247,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5149,6 +5310,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5206,6 +5372,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "stopMode"
@@ -5260,6 +5431,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5318,6 +5494,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5376,6 +5557,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5434,6 +5620,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5490,6 +5681,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5546,6 +5742,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5604,6 +5805,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5662,6 +5868,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5720,6 +5931,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -5778,6 +5994,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -5836,6 +6057,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -5894,6 +6120,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -5952,6 +6183,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6010,6 +6246,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6068,6 +6309,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6126,6 +6372,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6184,6 +6435,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6242,6 +6498,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6300,6 +6561,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6358,6 +6624,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6415,6 +6686,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -6469,6 +6745,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6527,6 +6808,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6585,6 +6871,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6643,6 +6934,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -6701,6 +6997,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6759,6 +7060,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6817,6 +7123,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6875,6 +7186,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -6932,6 +7248,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -6985,6 +7306,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7038,6 +7364,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7091,6 +7422,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7144,6 +7480,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7197,6 +7538,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7250,6 +7596,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7303,6 +7654,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7356,6 +7712,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7409,6 +7770,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -7461,6 +7827,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7515,6 +7886,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7569,6 +7945,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7625,6 +8006,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7683,6 +8069,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7741,6 +8132,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7799,6 +8195,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7857,6 +8258,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7915,6 +8321,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -7973,6 +8384,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8031,6 +8447,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8089,6 +8510,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8147,6 +8573,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8204,6 +8635,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "terminalMode"
@@ -8256,6 +8692,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8311,6 +8752,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "counterInput"
@@ -8363,6 +8809,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8418,6 +8869,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "pulSource"
@@ -8472,6 +8928,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8530,6 +8991,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8588,6 +9054,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8646,6 +9117,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8704,6 +9180,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8762,6 +9243,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -8819,6 +9305,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "upDownMode"
@@ -8873,6 +9364,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -8930,6 +9426,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "timerUnit"
@@ -8982,6 +9483,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9036,6 +9542,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9090,6 +9601,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9144,6 +9660,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9199,6 +9720,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -9252,6 +9778,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -9305,6 +9836,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -9358,6 +9894,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -9412,6 +9953,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9470,6 +10016,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9528,6 +10079,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9586,6 +10142,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9644,6 +10205,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9702,6 +10268,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9760,6 +10331,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9818,6 +10394,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9876,6 +10457,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -9933,6 +10519,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -9986,6 +10577,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -10039,6 +10635,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -10092,6 +10693,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -10144,6 +10750,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10198,6 +10809,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10253,6 +10869,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -10306,6 +10927,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -10359,6 +10985,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -10412,6 +11043,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "outputFunction"
@@ -10466,6 +11102,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10524,6 +11165,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10582,6 +11228,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10640,6 +11291,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10698,6 +11354,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10756,6 +11417,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -10000,
@@ -10814,6 +11480,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10872,6 +11543,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -10000,
@@ -10930,6 +11606,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -10988,6 +11669,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11046,6 +11732,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -10000,
@@ -11104,6 +11795,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11162,6 +11858,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -10000,
@@ -11220,6 +11921,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11278,6 +11984,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11335,6 +12046,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -11389,6 +12105,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11447,6 +12168,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11504,6 +12230,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "inputFunction"
@@ -11558,6 +12289,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11616,6 +12352,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11672,6 +12413,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11726,6 +12472,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11782,6 +12533,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11840,6 +12596,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11898,6 +12659,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -11956,6 +12722,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12014,6 +12785,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12072,6 +12848,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12130,6 +12911,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12188,6 +12974,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12246,6 +13037,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12304,6 +13100,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12362,6 +13163,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12420,6 +13226,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12478,6 +13289,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12536,6 +13352,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12594,6 +13415,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12652,6 +13478,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12708,6 +13539,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12763,6 +13599,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "aoSource"
@@ -12816,6 +13657,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "aoSource"
@@ -12870,6 +13716,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -12928,6 +13779,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -100,
@@ -12986,6 +13842,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13044,6 +13905,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13102,6 +13968,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13160,6 +14031,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13218,6 +14094,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -100,
@@ -13276,6 +14157,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13333,6 +14219,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "keyLock"
@@ -13386,6 +14277,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13441,6 +14337,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "paramCopy"
@@ -13493,6 +14394,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13548,6 +14454,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "revJog"
@@ -13601,6 +14512,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "stopKey"
@@ -13653,6 +14569,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13707,6 +14628,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13761,6 +14687,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13815,6 +14746,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13869,6 +14805,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13923,6 +14864,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -13977,6 +14923,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14031,6 +14982,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14085,6 +15041,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14139,6 +15100,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14193,6 +15159,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14247,6 +15218,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14303,6 +15279,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14361,6 +15342,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14417,6 +15403,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14472,6 +15463,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "fanControl"
@@ -14525,6 +15521,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "dynamicBraking"
@@ -14579,6 +15580,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1150,
@@ -14636,6 +15642,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 7,
@@ -14691,6 +15702,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -14784,6 +15800,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 2,
@@ -14839,6 +15860,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -14895,6 +15921,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -14950,6 +15981,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15004,6 +16040,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15059,6 +16100,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15115,6 +16161,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15171,6 +16222,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15227,6 +16283,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15283,6 +16344,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15339,6 +16405,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15395,6 +16466,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15451,6 +16527,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15507,6 +16588,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15562,6 +16648,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -15617,6 +16708,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -15674,6 +16770,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "selfTuning"
@@ -15726,6 +16827,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -15780,6 +16886,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -15834,6 +16945,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -15890,6 +17006,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 100,
@@ -15946,6 +17067,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 2,
@@ -16000,6 +17126,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16054,6 +17185,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16110,6 +17246,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16166,6 +17307,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16221,6 +17367,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16278,6 +17429,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16336,6 +17492,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16394,6 +17555,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16451,6 +17617,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16508,6 +17679,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16566,6 +17742,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16624,6 +17805,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16682,6 +17868,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16740,6 +17931,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -16797,6 +17993,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16853,6 +18054,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16909,6 +18115,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -16965,6 +18176,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -17022,6 +18238,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17079,6 +18300,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -17133,6 +18359,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17191,6 +18422,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17249,6 +18485,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17307,6 +18548,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17365,6 +18611,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17422,6 +18673,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "vcEnergySaving"
@@ -17476,6 +18732,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17534,6 +18795,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17592,6 +18858,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17650,6 +18921,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17708,6 +18984,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17766,6 +19047,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17824,6 +19110,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17882,6 +19173,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17940,6 +19236,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -17998,6 +19299,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18056,6 +19362,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18113,6 +19424,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "torqueSpeed"
@@ -18166,6 +19482,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "torqueSource"
@@ -18220,6 +19541,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18278,6 +19604,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18336,6 +19667,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -20000,
@@ -18394,6 +19730,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18452,6 +19793,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -20000,
@@ -18510,6 +19856,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18568,6 +19919,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18626,6 +19982,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18683,6 +20044,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "speedLimitSource"
@@ -18736,6 +20102,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "speedLimitSource"
@@ -18790,6 +20161,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18848,6 +20224,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -18905,6 +20286,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "vfCurve"
@@ -18959,6 +20345,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19017,6 +20408,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19075,6 +20471,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19133,6 +20534,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19191,6 +20597,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19249,6 +20660,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19307,6 +20723,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19365,6 +20786,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19423,6 +20849,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19481,6 +20912,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19539,6 +20975,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 250,
@@ -19597,6 +21038,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19655,6 +21101,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19713,6 +21164,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19771,6 +21227,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19829,6 +21290,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19887,6 +21353,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -19944,6 +21415,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -19998,6 +21474,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20056,6 +21537,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 200,
@@ -20114,6 +21600,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20172,6 +21663,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20229,6 +21725,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "ocSuppression"
@@ -20283,6 +21784,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20341,6 +21847,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20397,6 +21908,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20451,6 +21967,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20505,6 +22026,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 340,
@@ -20561,6 +22087,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20618,6 +22149,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -20670,6 +22206,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 180,
@@ -20726,6 +22267,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20782,6 +22328,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 160,
@@ -20838,6 +22389,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20894,6 +22450,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -20948,6 +22509,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21004,6 +22570,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21060,6 +22631,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21116,6 +22692,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21174,6 +22755,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21232,6 +22818,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21290,6 +22881,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21346,6 +22942,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21402,6 +23003,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21460,6 +23066,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21516,6 +23127,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21572,6 +23188,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21630,6 +23251,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21686,6 +23312,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21742,6 +23373,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21800,6 +23436,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21857,6 +23498,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -21910,6 +23556,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -21966,6 +23617,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 100,
@@ -22022,6 +23678,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22077,6 +23738,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22133,6 +23799,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -22190,6 +23861,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "pidSource"
@@ -22244,6 +23920,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22302,6 +23983,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22359,6 +24045,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "pidSource"
@@ -22413,6 +24104,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22470,6 +24166,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22526,6 +24227,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22581,6 +24287,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22637,6 +24348,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22695,6 +24411,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22753,6 +24474,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22810,6 +24536,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22867,6 +24598,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22925,6 +24661,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -22982,6 +24723,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23039,6 +24785,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23097,6 +24848,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23154,6 +24910,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "pidSwitch"
@@ -23208,6 +24969,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23266,6 +25032,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23324,6 +25095,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23382,6 +25158,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23440,6 +25221,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": -1000,
@@ -23498,6 +25284,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23556,6 +25347,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23613,6 +25409,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "pidWireBreak"
@@ -23667,6 +25468,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23725,6 +25531,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23782,6 +25593,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -23836,6 +25652,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23894,6 +25715,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -23952,6 +25778,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24010,6 +25841,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24068,6 +25904,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24126,6 +25967,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24184,6 +26030,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24242,6 +26093,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24300,6 +26156,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24358,6 +26219,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24416,6 +26282,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24474,6 +26345,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24532,6 +26408,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24590,6 +26471,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24648,6 +26534,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24706,6 +26597,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24764,6 +26660,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24822,6 +26723,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24880,6 +26786,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24936,6 +26847,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -24992,6 +26908,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25050,6 +26971,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25108,6 +27034,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25166,6 +27097,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25224,6 +27160,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25282,6 +27223,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25340,6 +27286,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25398,6 +27349,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25456,6 +27412,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25514,6 +27475,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25572,6 +27538,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25630,6 +27601,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25688,6 +27664,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25746,6 +27727,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25804,6 +27790,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25860,6 +27851,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25914,6 +27910,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -25968,6 +27969,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26022,6 +28028,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26076,6 +28087,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26130,6 +28146,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26184,6 +28205,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26238,6 +28264,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26292,6 +28323,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26346,6 +28382,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26400,6 +28441,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26454,6 +28500,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26508,6 +28559,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26562,6 +28618,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26616,6 +28677,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26671,6 +28737,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "invalidValid"
@@ -26724,6 +28795,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "swingAmplitude"
@@ -26778,6 +28854,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26836,6 +28917,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26894,6 +28980,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -26952,6 +29043,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27009,6 +29105,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27064,6 +29165,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -27119,6 +29225,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27175,6 +29286,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "dataFormat"
@@ -27228,6 +29344,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27284,6 +29405,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27341,6 +29467,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -27398,6 +29529,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "commFaultAction"
@@ -27451,6 +29587,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "writeResponse"
@@ -27503,6 +29644,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27559,6 +29705,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "rs485Port"
@@ -27611,6 +29762,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27666,6 +29822,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "expansionUpdate"
@@ -27719,6 +29880,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "expansionUpdate"
@@ -27771,6 +29937,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27825,6 +29996,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27879,6 +30055,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27933,6 +30114,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -27987,6 +30173,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28041,6 +30232,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28095,6 +30291,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28149,6 +30350,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28203,6 +30409,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28336,6 +30547,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 700,
@@ -28394,6 +30610,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 200,
@@ -28452,6 +30673,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 200,
@@ -28510,6 +30736,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -28568,6 +30799,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -28624,6 +30860,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28678,6 +30919,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28734,6 +30980,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 1,
@@ -28791,6 +31042,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28847,6 +31103,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28904,6 +31165,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -28962,6 +31228,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29020,6 +31291,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29078,6 +31354,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29136,6 +31417,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29194,6 +31480,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29252,6 +31543,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29310,6 +31606,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29368,6 +31669,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29426,6 +31732,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29484,6 +31795,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29542,6 +31858,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29600,6 +31921,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29656,6 +31982,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29712,6 +32043,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29770,6 +32106,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29826,6 +32167,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29882,6 +32228,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29940,6 +32291,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -29998,6 +32354,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30056,6 +32417,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30114,6 +32480,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30172,6 +32543,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30230,6 +32606,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30288,6 +32669,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30346,6 +32732,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30404,6 +32795,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30462,6 +32858,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30520,6 +32921,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30578,6 +32984,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30636,6 +33047,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30694,6 +33110,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30750,6 +33171,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30806,6 +33232,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 30,
@@ -30864,6 +33295,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 800,
@@ -30922,6 +33358,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -30978,6 +33419,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31032,6 +33478,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31087,6 +33538,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31143,6 +33599,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31200,6 +33661,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31257,6 +33723,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31313,6 +33784,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31368,6 +33844,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31424,6 +33905,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31481,6 +33967,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31537,6 +34028,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31593,6 +34089,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "enum",
             "enum": "acDcMode"
@@ -31646,6 +34147,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31702,6 +34208,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31758,6 +34269,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31814,6 +34330,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31869,6 +34390,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -31924,6 +34450,11 @@
           "function": "writeRegister",
           "fc": 6,
           "scope": "fixed",
+          "params": {
+            "persistence": {
+              "address": 4096
+            }
+          },
           "input": {
             "type": "number",
             "min": 0,
@@ -35104,36 +37635,6 @@
                 "unit": "min"
               }
             ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "parameterEeprom",
-      "label": "Écriture de paramètre en EEPROM",
-      "description": "channel = adresse du paramètre (Fgg.ii → gg × 256 + ii) ; adresse + 0x1000 = écriture mémorisée (convention de ModbusService._applyInverterConfig, absente du manuel) ; usure EEPROM : ne pas écrire en boucle",
-      "area": "holdingRegister",
-      "access": "w",
-      "danger": true,
-      "address": {
-        "start": 4096,
-        "count": 3840,
-        "stride": 1
-      },
-      "operations": [
-        {
-          "id": "set",
-          "label": "Écrire en EEPROM",
-          "function": "writeRegister",
-          "fc": 6,
-          "scope": "channel",
-          "input": {
-            "type": "number",
-            "min": 0,
-            "max": 65535
-          },
-          "result": {
-            "type": "echo"
           }
         }
       ]
