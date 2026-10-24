@@ -108,6 +108,9 @@ export class RegisterValueEncoder {
                 return RegisterValueEncoder._checkArray(value, input.length, where)
                     .map((v) => RegisterValueEncoder.checkEnumValue(entries, v, where));
             }
+            case 'number[]':
+                return RegisterValueEncoder._checkArray(value, input.length, where)
+                    .map((v) => RegisterValueEncoder._checkRange(v, input.min, input.max, where));
             case 'composite':
                 return RegisterValueEncoder._encodeComposite(template, input.fields, value, where);
         }

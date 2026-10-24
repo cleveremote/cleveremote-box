@@ -61,6 +61,8 @@ export type OperationInput =
     | { type: 'number'; min: number; max: number; default?: number; scale?: number; unit?: string }
     | { type: 'boolean[]'; length: number }
     | { type: 'enum[]'; enum: string; length: number }
+    // Une valeur par voie, chacune dans [min, max] (ex: consignes analogiques en mV, writeRegisters)
+    | { type: 'number[]'; length: number; min: number; max: number; unit?: string }
     // `encode` n'est que documentaire : l'encodage réel se fait par octet (cf. CompositeField.byte)
     // Champs répartis par octet (et par mot si `word` > 0 : la valeur devient un tableau de mots)
     | { type: 'composite'; encode?: string; fields: CompositeField[] };

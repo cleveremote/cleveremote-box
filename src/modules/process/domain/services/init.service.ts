@@ -63,11 +63,14 @@ export class InitService {
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
 
-         return wrap('RegisterMapService.tests', () => this.registerMapModuleService.testUltrasonicFlowMeter()) //
+         return wrap('RegisterMapService.tests', () => null)
+            //wrap('RegisterMapService.tests', () => this.registerMapModuleService.testUltrasonicFlowMeter()) //
             //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testInverterSi23() ))
-            .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testPressureSensor() ))
+            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testPressureSensor() ))
             //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testSoilSensor() ))
             //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testTemperatureMoistureSensor() ))
+            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testIo8Channel() ))
+            // .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testAnalogOutput8Channel() ))
             .then(async () => { 
 
         // return wrap('StructureService.getStructure', () => this._loadConfiguration())

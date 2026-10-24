@@ -384,6 +384,410 @@ export class RegisterMapService {
         notDefault.forEach((d) => console.log(`  ${d}`));
     }
 
+    /**
+     * Test de toutes les opérations du module Waveshare Modbus RTU IO 8CH (waveshare-modbus-rtu-io-8ch.json) :
+     * lectures, pilotage des sorties (unitaire, masque, toggle, toutes, flash ON/OFF), modes de contrôle,
+     * puis réécriture à l'identique de l'adresse et des paramètres UART. Chaque écriture est vérifiée par relecture.
+     * ATTENTION : les sorties commutent réellement ; états et modes initiaux restaurés en fin de test.
+     */
+    public async testIo8Channel(): Promise<void> {
+        // Module : unit id 61-70 (DEVICE_KIND_SPECS), série 9600 8N1 ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, unitId: 62 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const io8 = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'DIGITAL_IO_8CH');
+        if (!io8) {
+            console.log('register map DIGITAL_IO_8CH introuvable');
+            return;
+        }
+
+        const count = io8.hardware.channels?.outputs ?? 8;
+        const errors: string[] = [];
+        const checks: string[] = [];
+        const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+        const run = async (command: RegisterOperationCommand): Promise<RegisterOperationOutcome> => {
+            const outcome = await this.execute(io8, CONNECTION, { isConfirmed: true, ...command });
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                const channel = command.channel !== undefined ? ` voie ${command.channel}` : '';
+                errors.push(`${command.blockId}.${command.operationId}${channel} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+            }
+            return outcome;
+        };
+        const readChannels = async (blockId: string): Promise<(number | boolean)[] | undefined> => {
+            const value = (await run({ blockId, operationId: 'read' })).value;
+            return value?.type === 'boolean[]' || value?.type === 'enum[]' ? value.channels.map((c) => c.value) : undefined;
+        };
+        // Relecture des sorties (ou des modes) et comparaison à l'état attendu
+        const expectChannels = async (label: string, blockId: string, expected: (number | boolean)[]): Promise<void> => {
+            const actual = await readChannels(blockId);
+            const isOk = !!actual && expected.every((v, i) => Number(v) === Number(actual[i]));
+            const show = (values: (number | boolean)[]): string => values.map(Number).join('');
+            checks.push(`${isOk ? 'OK    ' : 'ECHEC '} ${label} : attendu ${show(expected)}, lu ${actual ? show(actual) : '-'}`);
+        };
+        const fill = <T>(value: T): T[] => Array.from({ length: count }, () => value);
+
+        // Identification et état initial (restauré en fin de test)
+        await run({ blockId: 'version', operationId: 'read' });
+        const address = await run({ blockId: 'deviceAddress', operationId: 'read' });
+        await run({ blockId: 'inputs', operationId: 'read' });
+        const initialOutputs = await readChannels('outputs');
+        const initialModes = await readChannels('outputModes');
+
+        // Mode Normal : en Linkage / Toggle / Edge, les entrées modifieraient les sorties pendant le test
+        await run({ blockId: 'outputModes', operationId: 'setAll', value: fill(0) });
+        await expectChannels('outputModes.setAll Normal', 'outputModes', fill(0));
+
+        // allOutputs : ON, OFF, TOGGLE
+        await run({ blockId: 'allOutputs', operationId: 'set', value: 1 });
+        await expectChannels('allOutputs.set ON', 'outputs', fill(true));
+        await run({ blockId: 'allOutputs', operationId: 'set', value: 0 });
+        await expectChannels('allOutputs.set OFF', 'outputs', fill(false));
+        await run({ blockId: 'allOutputs', operationId: 'toggle' });
+        await expectChannels('allOutputs.toggle', 'outputs', fill(true));
+        await run({ blockId: 'allOutputs', operationId: 'set', value: 0 });
+
+        // outputs.set / outputs.toggle voie par voie (une seule sortie active à la fois)
+        for (let channel = 0; channel < count; channel++) {
+            const only = fill(false).map((_, i) => i === channel);
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: 1 });
+            await expectChannels(`outputs.set CH${channel + 1} ON`, 'outputs', only);
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: 0 });
+            await expectChannels(`outputs.set CH${channel + 1} OFF`, 'outputs', fill(false));
+            await run({ blockId: 'outputs', operationId: 'toggle', channel });
+            await expectChannels(`outputs.toggle CH${channel + 1} (OFF -> ON)`, 'outputs', only);
+            await run({ blockId: 'outputs', operationId: 'toggle', channel });
+            await expectChannels(`outputs.toggle CH${channel + 1} (ON -> OFF)`, 'outputs', fill(false));
+        }
+
+        // outputs.setMask puis outputs.toggleRange (inversion du masque)
+        const mask = fill(false).map((_, i) => i % 2 === 0);
+        await run({ blockId: 'outputs', operationId: 'setMask', value: mask });
+        await expectChannels('outputs.setMask 10101010', 'outputs', mask);
+        await run({ blockId: 'outputs', operationId: 'toggleRange' });
+        await expectChannels('outputs.toggleRange', 'outputs', mask.map((v) => !v));
+        await run({ blockId: 'outputs', operationId: 'setMask', value: fill(false) });
+        await expectChannels('outputs.setMask 00000000', 'outputs', fill(false));
+
+        // flashOn / flashOff : 7 × 100 ms, relecture pendant puis après l'impulsion
+        for (let channel = 0; channel < count; channel++) {
+            const only = fill(false).map((_, i) => i === channel);
+            await run({ blockId: 'flashOn', operationId: 'pulse', channel, value: 7 });
+            await expectChannels(`flashOn.pulse CH${channel + 1} pendant`, 'outputs', only);
+            await wait(1200);
+            await expectChannels(`flashOn.pulse CH${channel + 1} après`, 'outputs', fill(false));
+
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: 1 });
+            await run({ blockId: 'flashOff', operationId: 'pulse', channel, value: 7 });
+            await expectChannels(`flashOff.pulse CH${channel + 1} pendant`, 'outputs', fill(false));
+            await wait(1200);
+            await expectChannels(`flashOff.pulse CH${channel + 1} après`, 'outputs', only);
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: 0 });
+        }
+
+        // outputModes.set : chaque mode sur chaque voie, puis setAll avec un mode différent par voie
+        const modes = io8.enums.outputMode.map((e) => e.value);
+        for (let channel = 0; channel < count; channel++) {
+            for (const mode of modes) {
+                await run({ blockId: 'outputModes', operationId: 'set', channel, value: mode });
+                await expectChannels(`outputModes.set CH${channel + 1} = ${mode}`, 'outputModes', fill(0).map((_, i) => (i === channel ? mode : 0)));
+            }
+            await run({ blockId: 'outputModes', operationId: 'set', channel, value: 0 });
+        }
+        const mixedModes = fill(0).map((_, i) => modes[i % modes.length]);
+        await run({ blockId: 'outputModes', operationId: 'setAll', value: mixedModes });
+        await expectChannels(`outputModes.setAll ${mixedModes.join('')}`, 'outputModes', mixedModes);
+
+        // Opérations sensibles réécrites à l'identique : adresse courante, UART 9600 N (hardware.serial)
+        const currentAddress = address.value?.type === 'number' ? address.value.value : undefined;
+        if (currentAddress !== undefined) {
+            await run({ blockId: 'deviceAddress', operationId: 'set', value: currentAddress });
+            const after = await run({ blockId: 'deviceAddress', operationId: 'read' });
+            const readBack = after.value?.type === 'number' ? after.value.value : undefined;
+            checks.push(`${readBack === currentAddress ? 'OK    ' : 'ECHEC '} deviceAddress.set ${currentAddress} : lu ${readBack ?? '-'}`);
+        } else {
+            checks.push('ECHEC  deviceAddress.set : adresse courante illisible, écriture non tentée');
+        }
+        await run({ blockId: 'uart', operationId: 'set', value: { parity: 0, baudRate: 1 } });
+        const version = await run({ blockId: 'version', operationId: 'read' });
+        checks.push(`${version.isOk ? 'OK    ' : 'ECHEC '} uart.set 9600 N : communication ${version.isOk ? 'maintenue' : 'perdue'}`);
+
+        // Restauration : modes d'abord (sinon Linkage écraserait les sorties), puis sorties
+        if (initialModes) {
+            await run({ blockId: 'outputModes', operationId: 'setAll', value: initialModes });
+        }
+        if (initialOutputs) {
+            await run({ blockId: 'outputs', operationId: 'setMask', value: initialOutputs });
+        }
+
+        const failed = checks.filter((c) => c.startsWith('ECHEC'));
+        console.log(`\n=== IO 8CH : ${checks.length} vérifications, ${checks.length - failed.length} OK, ${failed.length} en échec`);
+        checks.forEach((c) => console.log(`  ${c}`));
+        console.log(`\n=== IO 8CH : ${errors.length} opérations en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+    }
+
+    /**
+     * Test de toutes les opérations du module Waveshare Modbus RTU Analog Input 8CH (waveshare-modbus-rtu-analog-input-8ch.json) :
+     * lectures (groupée / voie par voie), chaque type de plage sur les 8 voies (setAll) puis voie par voie (set),
+     * réécriture à l'identique de l'adresse et des paramètres UART. Chaque écriture est vérifiée par relecture.
+     * Les cavaliers tension / courant étant matériels, seules les bornes des mesures sont contrôlées.
+     * Types de plage initiaux restaurés en fin de test.
+     */
+    public async testAnalogInput8Channel(): Promise<void> {
+        // Module : unit id 81-90 (DEVICE_KIND_SPECS), série 9600 8N1 ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, unitId: 81 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const ai8 = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'ANALOG_INPUT_8CH');
+        if (!ai8) {
+            console.log('register map ANALOG_INPUT_8CH introuvable');
+            return;
+        }
+
+        const count = ai8.hardware.channels?.inputs ?? 8;
+        const errors: string[] = [];
+        const checks: string[] = [];
+        const infos: string[] = [];
+        const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+        const run = async (command: RegisterOperationCommand): Promise<RegisterOperationOutcome> => {
+            const outcome = await this.execute(ai8, CONNECTION, { isConfirmed: true, ...command });
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                const channel = command.channel !== undefined ? ` voie ${command.channel}` : '';
+                errors.push(`${command.blockId}.${command.operationId}${channel} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+            }
+            return outcome;
+        };
+        const fieldsOf = (outcome: RegisterOperationOutcome): DecodedField[] => (outcome.value?.type === 'fields' ? outcome.value.fields : []);
+        const check = (label: string, isOk: boolean): void => {
+            checks.push(`${isOk ? 'OK    ' : 'ECHEC '} ${label}`);
+        };
+        const readRanges = async (): Promise<number[] | undefined> => {
+            const fields = fieldsOf(await run({ blockId: 'inputRanges', operationId: 'read' }));
+            return fields.length ? fields.map((f) => Number(f.raw)) : undefined;
+        };
+        // Relecture des types de plage et comparaison à l'état attendu
+        const expectRanges = async (label: string, expected: number[]): Promise<void> => {
+            const actual = await readRanges();
+            const isOk = !!actual && expected.every((v, i) => v === actual[i]);
+            check(`${label} : attendu ${expected.join('')}, lu ${actual ? actual.join('') : '-'}`, isOk);
+        };
+        const fill = <T>(value: T): T[] => Array.from({ length: count }, () => value);
+        const codes = ai8.enums.inputRange.map((e) => e.value);
+        const rangeLabel = (code: number): string => ai8.enums.inputRange.find((e) => e.value === code)?.label ?? String(code);
+        const rangeUnit = (code: number): string | undefined => ai8.enums.inputRangeUnit.find((e) => e.value === code)?.label;
+        // Valeur maximale par type de plage (bornes de la version B 0-10 V, qui couvrent la version A 0-5 V)
+        const maxByRange: Record<number, number> = { 0: 10000, 1: 10000, 2: 20000, 3: 20000, 4: 4095 };
+
+        // Identification et état initial (types de plage restaurés en fin de test)
+        await run({ blockId: 'version', operationId: 'read' });
+        const address = await run({ blockId: 'deviceAddress', operationId: 'read' });
+        const uart = fieldsOf(await run({ blockId: 'uart', operationId: 'read' }));
+        const initialRanges = await readRanges();
+
+        // Lecture groupée / voie par voie : lectures successives, faible écart possible sur des signaux vivants
+        const grouped = fieldsOf(await run({ blockId: 'inputs', operationId: 'read' }));
+        for (let channel = 0; channel < count; channel++) {
+            const single = await run({ blockId: 'inputs', operationId: 'readChannel', channel });
+            const value = single.value?.type === 'number' ? single.value.value : '-';
+            const field = grouped[channel];
+            infos.push(`CH${channel + 1} : groupé ${field?.value ?? '-'} / unitaire ${value} ${field?.unit ?? ''}`);
+        }
+
+        // Chaque type de plage sur les 8 voies : relecture des plages, unité appliquée et mesures dans les bornes
+        for (const code of codes) {
+            await run({ blockId: 'inputRanges', operationId: 'setAll', value: fill(code) });
+            await expectRanges(`inputRanges.setAll ${rangeLabel(code)}`, fill(code));
+            // Laisse le module convertir avec la nouvelle plage
+            await wait(500);
+            const fields = fieldsOf(await run({ blockId: 'inputs', operationId: 'read' }));
+            const values = fields.map((f) => Number(f.value));
+            const isInRange = fields.length === count && values.every((v) => v <= maxByRange[code]);
+            const isUnitOk = fields.every((f) => f.unit === rangeUnit(code));
+            check(`inputs.read en ${rangeLabel(code)} : [${values.join(' ')}] ${fields[0]?.unit ?? ''} (max ${maxByRange[code]}${isUnitOk ? '' : ', unité incorrecte'})`, isInRange && isUnitOk);
+        }
+
+        // inputRanges.set : chaque type de plage sur chaque voie, les autres voies restant sur la plage de base
+        const base = codes[0];
+        await run({ blockId: 'inputRanges', operationId: 'setAll', value: fill(base) });
+        for (let channel = 0; channel < count; channel++) {
+            for (const code of codes.filter((c) => c !== base)) {
+                await run({ blockId: 'inputRanges', operationId: 'set', channel, value: code });
+                await expectRanges(`inputRanges.set CH${channel + 1} = ${rangeLabel(code)}`, fill(base).map((_, i) => (i === channel ? code : base)));
+            }
+            await run({ blockId: 'inputRanges', operationId: 'set', channel, value: base });
+        }
+
+        // Opérations sensibles réécrites à l'identique : adresse et paramètres UART courants
+        const currentAddress = address.value?.type === 'number' ? address.value.value : undefined;
+        if (currentAddress !== undefined) {
+            await run({ blockId: 'deviceAddress', operationId: 'set', value: currentAddress });
+            const after = await run({ blockId: 'deviceAddress', operationId: 'read' });
+            const readBack = after.value?.type === 'number' ? after.value.value : undefined;
+            check(`deviceAddress.set ${currentAddress} : lu ${readBack ?? '-'}`, readBack === currentAddress);
+        } else {
+            check('deviceAddress.set : adresse courante illisible, écriture non tentée', false);
+        }
+        const parity = uart.find((f) => f.name === 'parity')?.value;
+        const baudRate = uart.find((f) => f.name === 'baudRate')?.value;
+        if (typeof parity === 'number' && typeof baudRate === 'number') {
+            const setting = `${ai8.enums.baudRate.find((e) => e.value === baudRate)?.label ?? baudRate} ${ai8.enums.parity.find((e) => e.value === parity)?.label ?? parity}`;
+            await run({ blockId: 'uart', operationId: 'set', value: { parity, baudRate } });
+            const version = await run({ blockId: 'version', operationId: 'read' });
+            check(`uart.set ${setting} : communication ${version.isOk ? 'maintenue' : 'perdue'}`, version.isOk);
+        } else {
+            check('uart.set : paramètres UART courants illisibles, écriture non tentée', false);
+        }
+
+        // Restauration des types de plage initiaux (codes hors enum : non réécrits)
+        if (initialRanges?.every((c) => codes.includes(c))) {
+            await run({ blockId: 'inputRanges', operationId: 'setAll', value: initialRanges });
+            await expectRanges('inputRanges restauration', initialRanges);
+        }
+
+        console.log('\n=== AI 8CH : lecture groupée / voie par voie');
+        infos.forEach((i) => console.log(`  ${i}`));
+        const failed = checks.filter((c) => c.startsWith('ECHEC'));
+        console.log(`\n=== AI 8CH : ${checks.length} vérifications, ${checks.length - failed.length} OK, ${failed.length} en échec`);
+        checks.forEach((c) => console.log(`  ${c}`));
+        console.log(`\n=== AI 8CH : ${errors.length} opérations en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+    }
+
+    /**
+     * Test de toutes les opérations du module Waveshare Modbus RTU Analog Output 8CH (B) (waveshare-modbus-rtu-analog-output-8ch-b.json) :
+     * lectures (groupée / voie par voie), consignes sur les 8 voies (setAll) puis voie par voie (set), refus des consignes
+     * hors plage, réécriture à l'identique de l'adresse et des paramètres UART. Chaque écriture est vérifiée par relecture.
+     * ATTENTION : les sorties délivrent réellement jusqu'à `maxMv` ; consignes initiales restaurées en fin de test.
+     */
+    public async testAnalogOutput8Channel(): Promise<void> {
+        // Module : unit id 71-80 (DEVICE_KIND_SPECS), série 9600 8N1 ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, unitId: 2 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const ao8 = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'ANALOG_OUTPUT_8CH');
+        if (!ao8) {
+            console.log('register map ANALOG_OUTPUT_8CH introuvable');
+            return;
+        }
+
+        const count = ao8.hardware.channels?.outputs ?? 8;
+        const errors: string[] = [];
+        const checks: string[] = [];
+        const run = async (command: RegisterOperationCommand): Promise<RegisterOperationOutcome> => {
+            const outcome = await this.execute(ao8, CONNECTION, { isConfirmed: true, ...command });
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                const channel = command.channel !== undefined ? ` voie ${command.channel}` : '';
+                errors.push(`${command.blockId}.${command.operationId}${channel} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+            }
+            return outcome;
+        };
+        const fieldsOf = (outcome: RegisterOperationOutcome): DecodedField[] => (outcome.value?.type === 'fields' ? outcome.value.fields : []);
+        const check = (label: string, isOk: boolean): void => {
+            checks.push(`${isOk ? 'OK    ' : 'ECHEC '} ${label}`);
+        };
+        const readOutputs = async (): Promise<number[] | undefined> => {
+            const fields = fieldsOf(await run({ blockId: 'outputs', operationId: 'read' }));
+            return fields.length ? fields.map((f) => Number(f.raw)) : undefined;
+        };
+        // Relecture des consignes et comparaison à l'état attendu
+        const expectOutputs = async (label: string, expected: number[]): Promise<void> => {
+            const actual = await readOutputs();
+            const isOk = !!actual && expected.every((v, i) => v === actual[i]);
+            check(`${label} : attendu [${expected.join(' ')}], lu [${actual ? actual.join(' ') : '-'}] mV`, isOk);
+        };
+        // Saisie hors plage : doit être refusée par le template avant toute émission sur le bus
+        const expectRejected = (label: string, command: RegisterOperationCommand): void => {
+            try {
+                this.buildRequest(ao8, { isConfirmed: true, ...command });
+                check(`${label} : refus attendu, requête construite`, false);
+            } catch (err) {
+                check(`${label} : refusé (${err.message})`, err instanceof RegisterMapInputError);
+            }
+        };
+        const fill = <T>(value: T): T[] => Array.from({ length: count }, () => value);
+        const setInput = this.findOperation(ao8, 'outputs', 'set').operation.input;
+        // Consigne max des essais (plage du template, 10 V) : la réduire si un équipement est raccordé aux sorties
+        const maxMv = setInput?.type === 'number' ? setInput.max : 10000;
+        const minMv = setInput?.type === 'number' ? setInput.min : 0;
+
+        // Identification et état initial (consignes restaurées en fin de test)
+        await run({ blockId: 'version', operationId: 'read' });
+        const address = await run({ blockId: 'deviceAddress', operationId: 'read' });
+        const uart = fieldsOf(await run({ blockId: 'uart', operationId: 'read' }));
+        const initialOutputs = await readOutputs();
+
+        // outputs.setAll : bornes, mi-plage et rampe (valeur différente par voie), relecture groupée
+        const ramp = fill(0).map((_, i) => Math.round(minMv + ((maxMv - minMv) * (i + 1)) / count));
+        const patterns: [string, number[]][] = [
+            ['min', fill(minMv)], ['max', fill(maxMv)], ['mi-plage', fill(Math.round((minMv + maxMv) / 2))], ['rampe', ramp]
+        ];
+        for (const [label, values] of patterns) {
+            await run({ blockId: 'outputs', operationId: 'setAll', value: values });
+            await expectOutputs(`outputs.setAll ${label}`, values);
+        }
+
+        // outputs.readChannel : chaque voie doit relire la consigne de la rampe
+        for (let channel = 0; channel < count; channel++) {
+            const single = await run({ blockId: 'outputs', operationId: 'readChannel', channel });
+            const value = single.value?.type === 'number' ? single.value.value : undefined;
+            check(`outputs.readChannel CH${channel + 1} : attendu ${ramp[channel]}, lu ${value ?? '-'} mV`, value === ramp[channel]);
+        }
+
+        // outputs.set : une voie à la fois (consigne propre à la voie), les autres restant au min
+        await run({ blockId: 'outputs', operationId: 'setAll', value: fill(minMv) });
+        for (let channel = 0; channel < count; channel++) {
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: ramp[channel] });
+            await expectOutputs(`outputs.set CH${channel + 1} = ${ramp[channel]} mV`, fill(minMv).map((v, i) => (i === channel ? ramp[channel] : v)));
+            await run({ blockId: 'outputs', operationId: 'set', channel, value: minMv });
+        }
+
+        // Saisies hors plage : refusées par le template
+        expectRejected(`outputs.set ${maxMv + 1} mV`, { blockId: 'outputs', operationId: 'set', channel: 0, value: maxMv + 1 });
+        expectRejected(`outputs.set ${minMv - 1} mV`, { blockId: 'outputs', operationId: 'set', channel: 0, value: minMv - 1 });
+        expectRejected(`outputs.set CH${count + 1}`, { blockId: 'outputs', operationId: 'set', channel: count, value: minMv });
+        expectRejected(`outputs.setAll ${count - 1} valeurs`, { blockId: 'outputs', operationId: 'setAll', value: fill(minMv).slice(1) });
+        expectRejected(`outputs.setAll avec ${maxMv + 1} mV`, { blockId: 'outputs', operationId: 'setAll', value: fill(minMv).map((v, i) => (i === 0 ? maxMv + 1 : v)) });
+
+        // Opérations sensibles réécrites à l'identique : adresse et paramètres UART courants
+        const currentAddress = address.value?.type === 'number' ? address.value.value : undefined;
+        if (currentAddress !== undefined) {
+            await run({ blockId: 'deviceAddress', operationId: 'set', value: currentAddress });
+            const after = await run({ blockId: 'deviceAddress', operationId: 'read' });
+            const readBack = after.value?.type === 'number' ? after.value.value : undefined;
+            check(`deviceAddress.set ${currentAddress} : lu ${readBack ?? '-'}`, readBack === currentAddress);
+        } else {
+            check('deviceAddress.set : adresse courante illisible, écriture non tentée', false);
+        }
+        const parity = uart.find((f) => f.name === 'parity')?.value;
+        const baudRate = uart.find((f) => f.name === 'baudRate')?.value;
+        if (typeof parity === 'number' && typeof baudRate === 'number') {
+            const setting = `${ao8.enums.baudRate.find((e) => e.value === baudRate)?.label ?? baudRate} ${ao8.enums.parity.find((e) => e.value === parity)?.label ?? parity}`;
+            await run({ blockId: 'uart', operationId: 'set', value: { parity, baudRate } });
+            const version = await run({ blockId: 'version', operationId: 'read' });
+            check(`uart.set ${setting} : communication ${version.isOk ? 'maintenue' : 'perdue'}`, version.isOk);
+        } else {
+            check('uart.set : paramètres UART courants illisibles, écriture non tentée', false);
+        }
+
+        // Restauration des consignes initiales (hors plage : non réécrites, sorties laissées au min)
+        if (initialOutputs?.every((v) => v >= minMv && v <= maxMv)) {
+            await run({ blockId: 'outputs', operationId: 'setAll', value: initialOutputs });
+            await expectOutputs('outputs restauration', initialOutputs);
+        }
+
+        const failed = checks.filter((c) => c.startsWith('ECHEC'));
+        console.log(`\n=== AO 8CH : ${checks.length} vérifications, ${checks.length - failed.length} OK, ${failed.length} en échec`);
+        checks.forEach((c) => console.log(`  ${c}`));
+        console.log(`\n=== AO 8CH : ${errors.length} opérations en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+    }
+
     // Valeur décodée vs valeur usine : nombres à 1e-6 près (mise à l'échelle), chaînes hexa à la casse près
     private _isSameValue(value: number | string, expected: number | string): boolean {
         if (typeof value === 'number' && typeof expected === 'number') {

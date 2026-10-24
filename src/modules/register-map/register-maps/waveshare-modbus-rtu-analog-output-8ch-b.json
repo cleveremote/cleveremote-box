@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; le champ 'hex' n'est qu'affichage (valeur réellement émise sur le bus)",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'channel' : block.address.start + index voie (0-based) × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : saisie brute ; 'number[]' : tableau de saisies brutes ; 'composite' : input.encode",
+    "channelLabel": "libellé voie = hardware.channels.labelStart + index",
+    "outputUnit": "Version (B) : sortie tension 0-10 V, consigne en mV (0-10000). Version standard : sortie courant 0-20 mA (non couverte par ce template)",
+    "supply": "Alimentation du module supérieure à la tension de sortie (ex: ≥ 15 V pour 10 V), 100 mA max par voie",
+    "linkage": "Doc Waveshare : un mode Linkage (registre non documenté) peut bloquer le pilotage Modbus des sorties",
+    "danger": "true : l'opération peut couper la communication avec le module (confirmation requise)"
+  },
+  "_id": "f13f5891-e77a-4640-b76d-2f37a18dd465",
+  "name": "WAVESHARE MODBUS RTU ANALOG OUTPUT 8CH (B)",
+  "description": "Waveshare Modbus RTU Analog Output 8CH (B) - 8 sorties analogiques tension 0-10 V",
+  "kind": "ANALOG_OUTPUT_8CH",
+  "hardware": {
+    "manufacturer": "Waveshare",
+    "model": "Modbus RTU Analog Output 8CH (B)",
+    "protocolVersion": "V2",
+    "documentation": "https://www.waveshare.com/wiki/Modbus_RTU_Analog_Output_8CH_(B)",
+    "channels": {
+      "outputs": 8,
+      "labelStart": 1
+    },
+    "serial": {
+      "baudRate": 9600,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1
+    },
+    "unitId": {
+      "default": 1,
+      "min": 1,
+      "max": 255,
+      "broadcast": 0
+    },
+    "discoveryRegister": 16384,
+    "exceptionCodes": "modbusException",
+    "functionCodes": [3, 6, 16]
+  },
+  "enums": {
+    "baudRate": [
+      { "value": 0, "hex": "0x00", "label": "4800" },
+      { "value": 1, "hex": "0x01", "label": "9600" },
+      { "value": 2, "hex": "0x02", "label": "19200" },
+      { "value": 3, "hex": "0x03", "label": "38400" },
+      { "value": 4, "hex": "0x04", "label": "57600" },
+      { "value": 5, "hex": "0x05", "label": "115200" },
+      { "value": 6, "hex": "0x06", "label": "128000" },
+      { "value": 7, "hex": "0x07", "label": "256000" }
+    ],
+    "parity": [
+      { "value": 0, "hex": "0x00", "label": "None" },
+      { "value": 1, "hex": "0x01", "label": "Even", "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte" },
+      { "value": 2, "hex": "0x02", "label": "Odd", "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte" }
+    ],
+    "modbusException": [
+      { "value": 1, "hex": "0x01", "label": "Illegal function" },
+      { "value": 2, "hex": "0x02", "label": "Illegal data address" },
+      { "value": 3, "hex": "0x03", "label": "Illegal data value" },
+      { "value": 4, "hex": "0x04", "label": "Server failure" },
+      { "value": 5, "hex": "0x05", "label": "Acknowledge" },
+      { "value": 6, "hex": "0x06", "label": "Device busy" }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "outputs",
+      "label": "Sorties analogiques 1~8",
+      "description": "Consigne de tension en mV (0-10000)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": { "start": 0, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les 8 consignes",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "result": {
+            "type": "fields",
+            "fields": [
+              { "name": "ch1", "label": "Sortie 1", "offset": 0, "type": "uint16", "unit": "mV" },
+              { "name": "ch2", "label": "Sortie 2", "offset": 1, "type": "uint16", "unit": "mV" },
+              { "name": "ch3", "label": "Sortie 3", "offset": 2, "type": "uint16", "unit": "mV" },
+              { "name": "ch4", "label": "Sortie 4", "offset": 3, "type": "uint16", "unit": "mV" },
+              { "name": "ch5", "label": "Sortie 5", "offset": 4, "type": "uint16", "unit": "mV" },
+              { "name": "ch6", "label": "Sortie 6", "offset": 5, "type": "uint16", "unit": "mV" },
+              { "name": "ch7", "label": "Sortie 7", "offset": 6, "type": "uint16", "unit": "mV" },
+              { "name": "ch8", "label": "Sortie 8", "offset": 7, "type": "uint16", "unit": "mV" }
+            ]
+          }
+        },
+        {
+          "id": "readChannel",
+          "label": "Lire une consigne",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "channel",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": { "type": "number" }
+        },
+        {
+          "id": "set",
+          "label": "Définir la tension d'une sortie",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "channel",
+          "input": { "type": "number", "min": 0, "max": 10000, "default": 0, "unit": "mV" },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "setAll",
+          "label": "Définir les tensions des 8 sorties",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "number[]", "length": 8, "min": 0, "max": 10000, "unit": "mV" },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "CH1 = 1 V", "frame": "01 06 00 00 03 E8 89 74" },
+        { "label": "CH2 = 5 V", "frame": "01 06 00 01 13 88 D5 5C" },
+        { "label": "CH1-8 = 1 V", "frame": "01 10 00 00 00 08 10 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 3C 05" },
+        { "label": "Réponse CH1-8", "frame": "01 10 00 00 00 08 C1 CF" },
+        { "label": "CH3-5 = 2 V", "frame": "01 10 00 02 00 03 06 07 D0 07 D0 07 D0 84 0E" },
+        { "label": "Lire CH1-8", "frame": "01 03 00 00 00 08 44 0C" },
+        { "label": "Réponse CH1-8 = 1 V", "frame": "01 03 10 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 03 E8 C1 91" },
+        { "label": "Lire CH1", "frame": "01 03 00 00 00 01 84 0A" },
+        { "label": "Lire CH2", "frame": "01 03 00 01 00 01 D5 CA" },
+        { "label": "Lire CH3-5", "frame": "01 03 00 02 00 03 A4 0B" }
+      ]
+    },
+    {
+      "id": "uart",
+      "label": "Paramètres UART",
+      "description": "Octet haut : parité, octet bas : code vitesse",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 8192, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire vitesse et parité",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": {
+            "type": "fields",
+            "fields": [
+              { "name": "parity", "label": "Parité (code)", "offset": 0, "type": "uint16", "formula": "floor(raw / 256)", "description": "Octet haut, cf. enum parity" },
+              { "name": "baudRate", "label": "Vitesse (code)", "offset": 0, "type": "uint16", "formula": "mod(raw, 256)", "description": "Octet bas, cf. enum baudRate" }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Définir vitesse et parité",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "composite",
+            "encode": "(parity << 8) | baudRate",
+            "fields": [
+              { "name": "parity", "enum": "parity", "byte": "high", "default": 0 },
+              { "name": "baudRate", "enum": "baudRate", "byte": "low", "default": 1 }
+            ]
+          },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "4800 N (broadcast)", "frame": "00 06 20 00 00 00 83 DB" },
+        { "label": "9600 N (broadcast)", "frame": "00 06 20 00 00 01 42 1B" },
+        { "label": "115200 N (broadcast)", "frame": "00 06 20 00 00 05 43 D8" }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse du module",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 16384, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": { "type": "number" }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": { "type": "number", "min": 1, "max": 255, "default": 1 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire l'adresse (broadcast)", "frame": "00 03 40 00 00 01 90 1B" },
+        { "label": "Réponse adresse = 1", "frame": "01 03 02 00 01 79 84" },
+        { "label": "Réponse adresse = 2", "frame": "02 03 02 00 02 7D 85" },
+        { "label": "Adresse -> 1", "frame": "00 06 40 00 00 01 5C 1B" },
+        { "label": "Adresse -> 2", "frame": "00 06 40 00 00 02 1C 1A" },
+        { "label": "Adresse -> 3", "frame": "00 06 40 00 00 03 DD DA" }
+      ]
+    },
+    {
+      "id": "version",
+      "label": "Version logicielle",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": { "start": 32768, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la version",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1, "formula": "raw / 100" },
+          "input": { "type": "none" },
+          "result": { "type": "version", "prefix": "V", "decimals": 2 }
+        }
+      ],
+      "examples": [
+        { "label": "Lire version (broadcast)", "frame": "00 03 80 00 00 01 AC 1B" },
+        { "label": "Réponse V1.00", "frame": "01 03 02 00 64 B9 AF" }
+      ]
+    }
+  ],
+  "device": {
+    "name": "8/AO ANALOG OUTPUTS",
+    "description": "8/AO ANALOG OUTPUTS",
+    "portConfig": {
+      "portNumStart": 0,
+      "portCount": 8
+    }
+  }
+}
