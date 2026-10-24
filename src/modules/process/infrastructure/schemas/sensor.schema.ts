@@ -19,6 +19,14 @@ export class SensorConfig {
     @Prop()
     public comRequestId?: string;
 
+    // COM register map (DeviceCommand), prioritaire sur comRequestId
+    @Prop()
+    public commandId?: string;
+
+    // nom du champ decode a retenir (racine ou enfant)
+    @Prop()
+    public field?: string;
+
     // CHILD COM (sensor avec parentId)
     @Prop()
     public code?: number;

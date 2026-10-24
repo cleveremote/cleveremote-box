@@ -16,16 +16,36 @@ function CreateComSensorModel(): SensorModel {
 describe('ComSensorStrategy', () => {
     let modbusService: { execute: jest.Mock };
     let comRequestRepository: { get: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock };
     let strategy: ComSensorStrategy;
 
     beforeEach(() => {
         modbusService = { execute: jest.fn() };
         comRequestRepository = { get: jest.fn().mockResolvedValue({ name: 'request-1', config: { params: { unit: '°C' } } }) };
-        strategy = new ComSensorStrategy(modbusService as never, comRequestRepository as never);
+        deviceCommandService = { execute: jest.fn() };
+        strategy = new ComSensorStrategy(modbusService as never, comRequestRepository as never, deviceCommandService as never);
     });
 
     it('should have the COM type', () => {
         expect(strategy.type).toEqual(SensorType.COM);
+    });
+
+    it('should read through the DeviceCommand and keep only the configured field when commandId is set', async () => {
+        const sensor = CreateComSensorModel();
+        Object.assign(sensor.config, { commandId: 'cmd-1', field: 'pv' });
+        deviceCommandService.execute.mockResolvedValue({
+            isOk: true, blockId: 'pv', operationId: 'read', request: {}, durationMs: 1,
+            value: { type: 'fields', fields: [
+                { name: 'pv', label: 'Mesure', raw: 1234, value: 12.34, unit: 'bar' },
+                { name: 'unit', label: 'Unité', raw: 1, value: 1 }
+            ] }
+        });
+
+        const result = await strategy.read(sensor);
+
+        expect(deviceCommandService.execute).toHaveBeenCalledWith('cmd-1');
+        expect(comRequestRepository.get).not.toHaveBeenCalled();
+        expect(result).toEqual([{ value: 12.34, isFormated: true, unit: 'bar', name: 'pv' }]);
     });
 
     it('should read holding registers and map each value to a ReadResultItem', async () => {

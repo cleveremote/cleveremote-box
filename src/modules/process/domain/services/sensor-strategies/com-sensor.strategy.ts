@@ -6,6 +6,8 @@ import { ReadResult, SensorStrategy } from './sensor-strategy.interface';
 import { ModbusService } from '../modbus.service';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestConfigModel, ComRequestModel, ModbusExecuteResult, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { DeviceCommandService } from '../device-command.service';
+import { outcomeValues } from '@process/domain/utils/device-command.util';
 
 @Injectable()
 export class ComSensorStrategy implements SensorStrategy {
@@ -13,11 +15,17 @@ export class ComSensorStrategy implements SensorStrategy {
 
     public constructor(
         private modbusService: ModbusService,
-        private comRequestRepository: ComRequestRepository
+        private comRequestRepository: ComRequestRepository,
+        private deviceCommandService: DeviceCommandService
     ) { }
 
     public async read(sensor: SensorModel): Promise<ReadResult> {
-        const { comRequestId } = sensor.config as ComSensorConfigModel;
+        const { comRequestId, commandId, field } = sensor.config as ComSensorConfigModel;
+        if (commandId) {
+            // register map : valeurs déjà décodées (formules, unités) ; name = champ, pour les sensors enfants (config.field)
+            const outcome = await this.deviceCommandService.execute(commandId);
+            return outcomeValues(outcome, field).map(({ name, value, unit }) => ({ value, isFormated: true, unit: unit ?? '', name }));
+        }
         const comRequestData: ComRequestModel = await this.comRequestRepository.get(comRequestId) as ComRequestModel;
 
         const config = sensor.config as ComSensorConfigModel

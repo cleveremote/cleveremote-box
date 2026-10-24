@@ -8,6 +8,7 @@ import {
 } from '@process/infrastructure/schemas/actuator.schema';
 import { Device, DeviceSchema } from '@process/infrastructure/schemas/device.schema';
 import { ComRequest, ComRequestSchema } from '@process/infrastructure/schemas/comrequest.schema';
+import { DeviceCommand, DeviceCommandSchema } from '@process/infrastructure/schemas/device-command.schema';
 import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequence.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
@@ -17,6 +18,10 @@ import { DeviceMongooseRepository } from '@process/infrastructure/repositories/d
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { SequenceMongooseRepository } from '@process/infrastructure/repositories/sequence-mongoose.repository';
 import { ComRequestkMongooseRepository } from '@process/infrastructure/repositories/com-request-mongoose.repository';
+import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
+import { DeviceCommandMongooseRepository } from '@process/infrastructure/repositories/device-command-mongoose.repository';
+import { DeviceCommandService } from '@process/domain/services/device-command.service';
+import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { ModbusService } from '@process/domain/services/modbus.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { ActuatorService } from '../actuator.service';
@@ -39,8 +44,10 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             },
             { name: Device.name, schema: DeviceSchema },
             { name: ComRequest.name, schema: ComRequestSchema },
+            { name: DeviceCommand.name, schema: DeviceCommandSchema },
             { name: Sequence.name, schema: SequenceSchema }
-        ])
+        ]),
+        RegisterMapModule
     ],
     providers: [
         ActuatorService,
@@ -50,6 +57,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         DeviceMongooseRepository,
         ComRequestRepository,
         ComRequestkMongooseRepository,
+        DeviceCommandRepository,
+        DeviceCommandMongooseRepository,
+        DeviceCommandService,
         SequenceMongooseRepository,
         ModbusService,
         WaveshareDiscoveryService,
@@ -62,6 +72,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             inject: [RpiActuatorStrategy, ComActuatorStrategy, CtrlActuatorStrategy]
         }
     ],
-    exports: [ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, ModbusService, WaveshareDiscoveryService, CtrlActuatorStrategy]
+    exports: [
+        ActuatorService, ActuatorRepository, DeviceRepository, ComRequestRepository, DeviceCommandRepository, DeviceCommandService,
+        ModbusService, WaveshareDiscoveryService, CtrlActuatorStrategy
+    ]
 })
 export class ActuatorModule { }

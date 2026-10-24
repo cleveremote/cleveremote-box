@@ -33,11 +33,14 @@ export class SensorMapper {
             config.code = sensor.config.code;
             config.scale = sensor.config.scale;
             config.unit = sensor.config.unit;
+            config.field = sensor.config.field;
             return config;
         }
         const config = new ComSensorConfigModel();
         config.cronPattern = sensor.config.cronPattern;
         config.comRequestId = sensor.config.comRequestId;
+        config.commandId = sensor.config.commandId;
+        config.field = sensor.config.field;
         return config;
     }
 
@@ -55,10 +58,10 @@ export class SensorMapper {
             sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData };
         } else if (sensor.parentId) {
             const config = model.config as ComSensorConfigModel;
-            sensor.config = { code: config.code, scale: config.scale, unit: config.unit };
+            sensor.config = { code: config.code, scale: config.scale, unit: config.unit, field: config.field };
         } else {
             const config = model.config as ComSensorConfigModel;
-            sensor.config = { cronPattern: config.cronPattern, comRequestId: config.comRequestId };
+            sensor.config = { cronPattern: config.cronPattern, comRequestId: config.comRequestId, commandId: config.commandId, field: config.field };
         }
         return sensor;
     }

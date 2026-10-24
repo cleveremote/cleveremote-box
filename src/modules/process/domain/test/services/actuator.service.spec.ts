@@ -57,7 +57,7 @@ describe('ActuatorService', () => {
                     config: { address: 5, function: [], params: { value: 0 } }
                 }))
             };
-            const strategies = [new RpiActuatorStrategy(logger as never), new ComActuatorStrategy(modBusService as never, comRequestRepository as never)];
+            const strategies = [new RpiActuatorStrategy(logger as never), new ComActuatorStrategy(modBusService as never, comRequestRepository as never, {} as never)];
             service = new ActuatorService(logger as never, {} as never, strategies);
         });
 
@@ -126,7 +126,7 @@ describe('ActuatorService', () => {
                 actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
                 connection, CreateLoggerMock() as never
             ), { removeModuleConfigsByModuleId: jest.fn() } as never);
-            service = new ActuatorService(CreateLoggerMock() as never, actuatorRepository, [new RpiActuatorStrategy(CreateLoggerMock() as never), new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never)]);
+            service = new ActuatorService(CreateLoggerMock() as never, actuatorRepository, [new RpiActuatorStrategy(CreateLoggerMock() as never), new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never, {} as never)]);
         }, 120000);
 
         afterAll(async () => {

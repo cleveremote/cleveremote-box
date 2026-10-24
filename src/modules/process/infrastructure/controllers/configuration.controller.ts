@@ -12,7 +12,7 @@ import { EventQueryDTO } from '../dto/event-query.dto';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { ComRequestDTO, CycleSynchronizeDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { ComRequestDTO, CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
 import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
@@ -23,6 +23,8 @@ import { DeviceModel } from '@process/domain/models/device.model';
 import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { DeviceSynchronizeUC } from '@process/use-cases/device-synchronize.uc';
 import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
+import { DeviceCommandSynchronizeUC } from '@process/use-cases/device-command-synchronize.uc';
+import { DeviceCommandModel } from '@process/domain/models/device-command.model';
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
 import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.uc';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
@@ -93,6 +95,15 @@ export class ConfigurationController {
         const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
         const input = comRequestDTOs.map(ComRequestDTO.mapToComRequestModel);
         return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/device-command'])
+    public async synchroniseDeviceCommand(
+        @Payload(new ParseArrayPipe({ items: DeviceCommandDTO, exceptionFactory: validationExceptionFactory }))
+            deviceCommandDTOs: DeviceCommandDTO[]
+    ): Promise<DeviceCommandModel[]> {
+        const uc = new DeviceCommandSynchronizeUC(this._synchronizeService);
+        return uc.execute(deviceCommandDTOs.map(DeviceCommandDTO.mapToDeviceCommandModel));
     }
 
     @MessagePattern(['box/synchronize/cycle'])

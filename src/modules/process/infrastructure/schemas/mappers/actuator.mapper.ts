@@ -34,7 +34,9 @@ export class ActuatorMapper {
             config.deviceId = comConfig.deviceId;
             config.actions = (comConfig.actions ?? []).map((action) => ({
                 comRequestId: action.comRequestId,
-                portNumber: action.portNumber
+                portNumber: action.portNumber,
+                commandId: action.commandId,
+                channel: action.channel
             }));
             model.config = config;
         } else {
@@ -44,7 +46,9 @@ export class ActuatorMapper {
             config.channel = ctrlConfig.channel;
             config.actions = (ctrlConfig.actions ?? []).map((action) => ({
                 comRequestId: action.comRequestId,
-                portNumber: action.portNumber
+                portNumber: action.portNumber,
+                commandId: action.commandId,
+                channel: action.channel
             }));
             config.flowMeterId = ctrlConfig.flowMeterId;
             config.maxFlowRate = ctrlConfig.maxFlowRate;

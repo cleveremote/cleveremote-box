@@ -10,7 +10,7 @@ import { ComActuatorStrategy } from '@process/domain/services/actuator-strategie
 
 const logger = { warn: jest.fn() } as any;
 const rpiActuatorStrategy = new RpiActuatorStrategy(logger);
-const actuatorService = new ActuatorService(logger, {} as any, [rpiActuatorStrategy, new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never)]);
+const actuatorService = new ActuatorService(logger, {} as any, [rpiActuatorStrategy, new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never, {} as never)]);
 
 async function createActuator(id: string, portNum: number, direction: GPIODirection): Promise<ActuatorModel & { config: RpiActuatorConfigModel }> {
     const actuator = new ActuatorModel();

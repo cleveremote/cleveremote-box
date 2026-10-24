@@ -25,11 +25,22 @@ import { SynchronizeDeviceModel } from '../models/synchronize.model';
 import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 import { RegisterMapService } from './register-map.service';
 import { RegisterMapService as RegisterMapModuleService } from '@register-map/domain/services/register-map.service';
+import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
+import { DeviceCommandService } from './device-command.service';
+import { ComSensorStrategy } from './sensor-strategies/com-sensor.strategy';
+import { DeviceCommandModel } from '../models/device-command.model';
+import { ActuatorType, ComActuatorConfigModel } from '../models/actuator.model';
+import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
+import { SensorType } from '../interfaces/sensor.interface';
+import { outcomeValues } from '../utils/device-command.util';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
 const DEFAULT_VALVE_TYPE = 'PROPORTIONAL';
 const TEST_SLAVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b60';
+// TODO: adapter aux slaves reels (kind DIGITAL_IO_8CH et PRESSURE_V1) pour _testDeviceCommands
+const IO8_TEST_SLAVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b70';
+const PRESSURE_TEST_SLAVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
 
 @Injectable()
 export class InitService {
@@ -53,7 +64,10 @@ export class InitService {
         private registerMapService: RegisterMapService,
         private readonly logger: Logger,
         private readonly _processService: ProcessService,
-        private readonly registerMapModuleService: RegisterMapModuleService
+        private readonly registerMapModuleService: RegisterMapModuleService,
+        private readonly deviceCommandRepository: DeviceCommandRepository,
+        private readonly deviceCommandService: DeviceCommandService,
+        private readonly comSensorStrategy: ComSensorStrategy
     ) { }
 
 
@@ -63,35 +77,35 @@ export class InitService {
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
 
-         return wrap('RegisterMapService.tests', () => null)
-            //wrap('RegisterMapService.tests', () => this.registerMapModuleService.testUltrasonicFlowMeter()) //
-            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testInverterSi23() ))
-            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testPressureSensor() ))
-            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testSoilSensor() ))
-            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testTemperatureMoistureSensor() ))
-            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testIo8Channel() ))
-            // .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testAnalogOutput8Channel() ))
-            .then(async () => { 
+        //  return wrap('RegisterMapService.tests', () => null)
+        //     //wrap('InitService.testDeviceCommands', () => this._testDeviceCommands())
+        //     //wrap('RegisterMapService.tests', () => this.registerMapModuleService.testUltrasonicFlowMeter()) //
+        //     //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testInverterSi23() ))
+        //     //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testPressureSensor() ))
+        //     //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testSoilSensor() ))
+        //     //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testTemperatureMoistureSensor() ))
+        //     //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testIo8Channel() ))
+        //     // .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testAnalogOutput8Channel() ))
+        //     .then(async () => { 
 
-        // return wrap('StructureService.getStructure', () => this._loadConfiguration())
-        //     .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
-        //     //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
-        //     //.then(() => wrap('InitService.testBuildSlaveComRequestsJson', () => this._testBuildSlaveComRequestsJson()))
-        //     //.then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
-        //     //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
-        //     //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
-        //     .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
-        //     .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
-        //     .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
-        //     .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
-        //     .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
-        //     .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
-        //     .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
-        //     .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
-        //     .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
-        //     .then(() => wrap('init devices', () => this.deviceService.initAll()))
-        //     .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.tests()))
-        //     .then(async () => {
+        return wrap('StructureService.getStructure', () => this._loadConfiguration())
+            .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
+            //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
+            //.then(() => wrap('InitService.testBuildSlaveComRequestsJson', () => this._testBuildSlaveComRequestsJson()))
+            .then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
+            //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
+            //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
+            .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
+            .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
+            .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
+            .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
+            .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
+            .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
+            .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
+            .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
+            .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
+            .then(() => wrap('init devices', () => this.deviceService.initAll()))
+            .then(async () => {
                
 //             // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.WRITE_MULTIPLE_COILS, 0, 8,1);
 //             // this.testModbusFrame('8d6f3fe2-af41-405b-9523-a0a6fb589b42', 62, ModbusFunctionName.READ_COILS, 0, 6); 
@@ -163,6 +177,36 @@ export class InitService {
         //await this.ctrlActuatorStrategy.testSetDeviceAddress(DEFAULT_VALVE_DEVICE_ID, 2);
         await this.ctrlActuatorStrategy.testStepOutput(DEFAULT_VALVE_DEVICE_ID, AO1_CHANNEL);
 
+    }
+
+    /**
+     * TEST - DeviceCommand (register map) de bout en bout : enregistre en base les commandes IO8
+     * outputs.set / outputs.read et pression pv.read, pilote un actuator COM { commandId, channel: 2 }
+     * ON puis OFF (via ActuatorService, comme un cycle) avec relecture des sorties, puis lit un sensor
+     * COM { commandId, field: 'pv' }. ATTENTION : la sortie CH3 de l'IO8 commute réellement.
+     */
+    private async _testDeviceCommands(io8SlaveId = IO8_TEST_SLAVE_DEVICE_ID, pressureSlaveId = PRESSURE_TEST_SLAVE_DEVICE_ID): Promise<void> {
+        const save = (_id: string, deviceId: string, name: string, blockId: string, operationId: string): Promise<DeviceCommandModel> =>
+            this.deviceCommandRepository.save(Object.assign(new DeviceCommandModel(), { _id, deviceId, name, blockId, operationId }));
+        const setOutput = await save('d3c0a000-0000-4000-8000-000000000001', io8SlaveId, 'IO8 sortie', 'outputs', 'set');
+        const readOutputs = await save('d3c0a000-0000-4000-8000-000000000002', io8SlaveId, 'IO8 lecture sorties', 'outputs', 'read');
+        const readPressure = await save('d3c0a000-0000-4000-8000-000000000003', pressureSlaveId, 'Pression', 'pv', 'read');
+
+        const actuator = Object.assign(new ActuatorModel(), {
+            _id: 'test-device-command', name: 'IO8 CH3 (DeviceCommand)', type: ActuatorType.COM,
+            config: Object.assign(new ComActuatorConfigModel(), { deviceId: io8SlaveId, actions: [{ commandId: setOutput._id, channel: 2 }] })
+        });
+        for (const action of [1, 0]) {
+            await this.actuatorService.execute(actuator, action);
+            const states = outcomeValues(await this.deviceCommandService.execute(readOutputs)).map((v) => v.value).join('');
+            this.logger.log({ action, states }, 'DeviceCommand test : IO8 outputs (CH1..CH8)');
+        }
+
+        const sensor = Object.assign(new SensorModel(), {
+            _id: 'test-device-command', name: 'Pression (DeviceCommand)', type: SensorType.COM,
+            config: Object.assign(new ComSensorConfigModel(), { commandId: readPressure._id, field: 'pv' })
+        });
+        this.logger.log({ result: await this.comSensorStrategy.read(sensor) }, 'DeviceCommand test : sensor pression');
     }
 
     /**

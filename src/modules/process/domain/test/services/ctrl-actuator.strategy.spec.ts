@@ -107,6 +107,7 @@ function CreateComRequestModel(): ComRequestModel {
 describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
     let deviceRepository: { get: jest.Mock };
     let comRequestRepository: { get: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock; numberRange: jest.Mock };
     let modBusService: { execute: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let strategy: CtrlActuatorStrategy;
@@ -126,6 +127,7 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
             ))
         };
         comRequestRepository = { get: jest.fn().mockResolvedValue(CreateComRequestModel()) };
+        deviceCommandService = { execute: jest.fn().mockResolvedValue({ isOk: true }), numberRange: jest.fn().mockResolvedValue({ min: 0, max: 10000 }) };
         modBusService = { execute: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
         strategy = new CtrlActuatorStrategy(
@@ -133,7 +135,8 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
             comRequestRepository as unknown as ComRequestRepository,
             modBusService as unknown as ModbusService,
             { refreshMasterAddress: jest.fn().mockResolvedValue(false) } as never,
-            logger as never
+            logger as never,
+            deviceCommandService as never
         );
     });
 
@@ -229,6 +232,19 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
                 expect.objectContaining({ _id: 'ao8ch-write-channel' }),
                 expect.objectContaining({ address: 2, params: expect.objectContaining({ value: 20000 }) })
             );
+        });
+
+        it('should write through the DeviceCommand, scaling the opening onto the template input range, when the action has a commandId', async () => {
+            const valve = CreateValveModel({
+                minOpening: 100, maxOpening: 100,
+                actions: [{ commandId: 'ao8ch-outputs-set', channel: 2 }]
+            });
+
+            await strategy.setFlowRate(valve, 50);
+
+            expect(deviceCommandService.numberRange).toHaveBeenCalledWith('ao8ch-outputs-set');
+            expect(deviceCommandService.execute).toHaveBeenCalledWith('ao8ch-outputs-set', { channel: 2, value: 10000 });
+            expect(modBusService.execute).not.toHaveBeenCalled();
         });
     });
 

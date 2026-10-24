@@ -12,6 +12,7 @@ import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/c
 import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
+import { DeviceCommandService } from '../device-command.service';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -45,7 +46,8 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         private comRequestRepository: ComRequestRepository,
         private modbusService: ModbusService,
         private waveshareDiscoveryService: WaveshareDiscoveryService,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private deviceCommandService: DeviceCommandService
     ) { }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -100,7 +102,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
                 valve.config.maxOpening,
                 Math.max(valve.config.minOpening, valve.config.openingPercent + error * (valve.config.kP / 10))
             );
-            await this._writeOpeningViaComRequest(valve.config.actions[0], this._openingToMilliAmps(valve.config.openingPercent));
+            await this._writeOpening(valve.config.actions[0], valve.config.openingPercent);
         }
 
         const outputCurrentMa = this._openingToMilliAmps(valve.config.openingPercent);
@@ -133,6 +135,20 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     private _toClampedMicroAmps(milliAmps: number): number {
         const clampedMa = Math.min(Math.max(milliAmps, MIN_OUTPUT_MA), MAX_OUTPUT_MA);
         return Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
+    }
+
+    // DeviceCommand (register map) : l'ouverture est projetee sur la plage de saisie du template
+    // (ex: AO8CH B outputs.set 0-10000 mV) ; sinon ancien chemin ComRequest en 4-20mA.
+    private async _writeOpening(action: ActuatorActionConfig, openingPercent: number): Promise<void> {
+        if (!action.commandId) {
+            return this._writeOpeningViaComRequest(action, this._openingToMilliAmps(openingPercent));
+        }
+        const range = await this.deviceCommandService.numberRange(action.commandId);
+        if (!range) {
+            throw new Error(`CtrlActuatorStrategy: DeviceCommand ${action.commandId} sans saisie numérique`);
+        }
+        const value = Math.round(range.min + (openingPercent / 100) * (range.max - range.min));
+        await this.deviceCommandService.execute(action.commandId, { channel: action.channel, value });
     }
 
     // route l'ecriture via ModbusTaskService (meme chemin que ComActuatorStrategy.execute) plutot

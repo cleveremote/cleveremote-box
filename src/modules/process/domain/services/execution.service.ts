@@ -19,6 +19,7 @@ import { ComActuatorConfigModel } from '../models/actuator.model';
 import { ComRequestType } from '../interfaces/com-request.interface';
 import { ComRequestConfigModel, ComRequestModel } from '../models/com-request.model';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
+import { DeviceCommandService } from './device-command.service';
 import { ModuleTimingConfig } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
@@ -63,7 +64,8 @@ export class ProcessService {
         private comRequestRepository: ComRequestRepository,
         @Inject(forwardRef(() => TriggerService)) private triggerService: TriggerService,
         @Inject(forwardRef(() => ScheduleService)) private scheduleService: ScheduleService,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private deviceCommandService: DeviceCommandService
     ) {
 
     }
@@ -233,12 +235,16 @@ export class ProcessService {
         if (alreadyInRequestedState) return;
 
         // la direction OUTPUT n'est plus stockee sur ComActuatorActionConfig : elle est deduite du
-        // ComRequestModel associe (type DIGITAL_OUTPUT), recupere via comRequestId.
+        // ComRequestModel associe (type DIGITAL_OUTPUT), recupere via comRequestId, ou du bloc de
+        // coils vise par le DeviceCommand (commandId).
         const comRequests = await this.comRequestRepository.get() as ComRequestModel[];
-        const isDigitalOutput = candidates.some((a) => {
-            const comRequestId = (a.config as ComActuatorConfigModel).actions?.[0]?.comRequestId;
-            return comRequests.find((comRequest) => comRequest._id === comRequestId)?.type?.includes(ComRequestType.DIGITAL_OUTPUT);
-        });
+        const isDigitalOutput = (await Promise.all(candidates.map(async (a) => {
+            const action = (a.config as ComActuatorConfigModel).actions?.[0];
+            if (action?.commandId) {
+                return this.deviceCommandService.isDigitalOutput(action.commandId);
+            }
+            return comRequests.find((comRequest) => comRequest._id === action?.comRequestId)?.type?.includes(ComRequestType.DIGITAL_OUTPUT);
+        }))).some(Boolean);
         if (!isDigitalOutput) return;
 
         const moduleProcess = new ProcessModel();

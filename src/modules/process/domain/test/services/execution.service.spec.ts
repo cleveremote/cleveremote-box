@@ -234,7 +234,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             comRequestRepository as never,
             triggerService as never,
             scheduleService as never,
-            logger as never
+            logger as never,
+            { isDigitalOutput: jest.fn() } as never
         );
     });
 

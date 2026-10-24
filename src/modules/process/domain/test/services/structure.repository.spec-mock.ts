@@ -115,6 +115,6 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
 // pour les tests d'execution qui resolvent des ActuatorModel (type RPI) deja configures (fake GPIO).
 export function createActuatorServiceMock(actuatorRegistry: Map<string, IActuatorModule>): ActuatorService {
     const actuatorRepository = { findByIds: (ids: string[]) => Promise.resolve(ids.map((id) => actuatorRegistry.get(id)).filter(Boolean)) };
-    const strategies = [new RpiActuatorStrategy(createLoggerMock() as never), new ComActuatorStrategy(undefined as never, undefined as never)];
+    const strategies = [new RpiActuatorStrategy(createLoggerMock() as never), new ComActuatorStrategy(undefined as never, undefined as never, {} as never)];
     return new ActuatorService(createLoggerMock() as never, actuatorRepository as any, strategies as any);
 }

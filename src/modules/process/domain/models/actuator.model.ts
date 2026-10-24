@@ -17,8 +17,11 @@ export class RpiActuatorConfigModel {
 }
 
 export class ActuatorActionConfig {
-    public comRequestId: string;
-    public portNumber: number;
+    public comRequestId?: string;
+    public portNumber?: number;
+    // DeviceCommand (register map) : prioritaire sur comRequestId ; channel = voie (0-based) surchargée
+    public commandId?: string;
+    public channel?: number;
 }
 
 export class ActuatorConfigModel {

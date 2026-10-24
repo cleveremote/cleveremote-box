@@ -20,6 +20,7 @@ import {
     SynchronizeCycleModel,
     SynchronizeDeviceModel,
     SynchronizeComRequestModel,
+    SynchronizeDeviceCommandModel,
     SynchronizeActuatorModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
@@ -31,6 +32,7 @@ import { Type } from 'class-transformer';
 import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
+import { RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
 @ValidatorConstraint({ name: 'condition-value', async: false })
 export class IsConditionValue implements ValidatorConstraintInterface {
@@ -695,11 +697,18 @@ export class SensorConfigDTO {
     @IsEnum(forcastDataName)
     public forcastData?: forcastDataName;
 
-    // COM
-    @ValidateIf(o => o.type === SensorType.COM)
+    // COM : comRequestId (ancien) ou commandId (register map)
+    @ValidateIf(o => o.type === SensorType.COM && !o.commandId)
     @IsString()
     @IsNotEmpty()
     public comRequestId?: string;
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    public commandId?: string;
+    @IsOptional()
+    @IsString()
+    public field?: string;
 
     // CHILD COM (sensor avec parentId)
     @IsOptional()
@@ -828,12 +837,25 @@ export class ValveSynchronizeDTO {
 }
 
 export class ComActuatorActionConfigDTO {
+    // ancien chemin ComRequest
+    @ValidateIf(o => !o.commandId)
     @IsString()
     @IsNotEmpty()
-    public comRequestId: string;
+    public comRequestId?: string;
 
+    @ValidateIf(o => !o.commandId)
     @IsNumber()
-    public digitalPort: number;
+    public digitalPort?: number;
+
+    // DeviceCommand (register map), prioritaire sur comRequestId
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    public commandId?: string;
+
+    @IsOptional()
+    @IsNumber()
+    public channel?: number;
 }
 
 export class ActuatorConfigDTO {
@@ -1037,6 +1059,13 @@ export class DeviceSynchronizeDTO {
     @Type(() => ComRequestDTO)
     public comRequests?: ComRequestDTO[];
 
+    // commandes register map imbriquees appartenant a ce device (leur deviceId sera ecrase cote serveur).
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => DeviceCommandDTO)
+    public deviceCommands?: DeviceCommandDTO[];
+
     // --- Méthode de mapping vers le modèle principal ---
     public static mapToDeviceModel(dto: DeviceSynchronizeDTO): SynchronizeDeviceModel {
         const model = new SynchronizeDeviceModel();
@@ -1052,6 +1081,7 @@ export class DeviceSynchronizeDTO {
         // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
         model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);
         model.comrequests = dto.comRequests?.map(ComRequestDTO.mapToComRequestModel);
+        model.devicecommands = dto.deviceCommands?.map(DeviceCommandDTO.mapToDeviceCommandModel);
         return model;
     }
 }
@@ -1114,3 +1144,75 @@ export class ComRequestDTO {
     }
 }
 
+export class DeviceCommandDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant unique de la commande' })
+    public _id: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Slave cible (son kind désigne la register map)' })
+    public deviceId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Nom lisible de la commande' })
+    public name: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: 'Description de la commande', required: false })
+    public description?: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant du bloc (registerMap[].id)' })
+    public blockId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant de l\'opération (registerMap[].operations[].id)' })
+    public operationId: string;
+
+    @IsOptional()
+    @IsNumber()
+    @ApiProperty({ description: 'Voie par défaut, 0-based (scope channel)', required: false })
+    public channel?: number;
+
+    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée à l'exécution par le template
+    @IsOptional()
+    @ApiProperty({ description: 'Valeur par défaut (selon operation.input)', required: false })
+    public value?: RegisterOperationValue;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: 'Écriture persistante', required: false })
+    public isPersistent?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
+    public isConfirmed?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToDeviceCommandModel(dto: DeviceCommandDTO): SynchronizeDeviceCommandModel {
+        const model = new SynchronizeDeviceCommandModel();
+        model._id = dto._id;
+        model.deviceId = dto.deviceId;
+        model.name = dto.name;
+        model.description = dto.description;
+        model.blockId = dto.blockId;
+        model.operationId = dto.operationId;
+        model.channel = dto.channel;
+        model.value = dto.value;
+        model.isPersistent = dto.isPersistent;
+        model.isConfirmed = dto.isConfirmed;
+        model.delete = dto.delete ?? false;
+        return model;
+    }
+}

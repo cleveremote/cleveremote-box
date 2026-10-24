@@ -7,6 +7,7 @@ import {
     SynchronizeActuatorModel,
     SynchronizeComRequestModel,
     SynchronizeCycleModel,
+    SynchronizeDeviceCommandModel,
     SynchronizeDeviceModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
@@ -28,6 +29,8 @@ import { DeviceModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ComRequestModel } from '../models/com-request.model';
+import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
+import { DeviceCommandModel } from '../models/device-command.model';
 import { SensorService } from './sensor.service';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
@@ -47,7 +50,8 @@ export class SynchronizeService {
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private deviceCommandRepository: DeviceCommandRepository
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -125,7 +129,7 @@ export class SynchronizeService {
 
     // cascade recursive : sauvegarde le device puis, uniquement si le champ correspondant est
     // explicitement fourni (undefined = non fourni = pas touche, retro-compat clients non migres),
-    // remplace completement ses comrequests et/ou ses devices slaves imbriques.
+    // remplace completement ses comrequests, ses commandes register map et/ou ses devices slaves imbriques.
     private async _synchronizeDeviceTree(model: SynchronizeDeviceModel): Promise<DeviceModel> {
         if (model.delete) {
             await this.deviceRepository.delete(model._id);
@@ -135,6 +139,9 @@ export class SynchronizeService {
 
         if (model.comrequests !== undefined) {
             await this.modbusTaskRepository.replaceForDevice(device._id, model.comrequests);
+        }
+        if (model.devicecommands !== undefined) {
+            await this.deviceCommandRepository.replaceForDevice(device._id, model.devicecommands);
         }
         if (model.devices !== undefined) {
             await this._replaceChildDevices(device._id, model.devices);
@@ -166,6 +173,12 @@ export class SynchronizeService {
         const modbusTasks = await this.modbusTaskRepository.saveMany(modbusTaskModels);
         await this.configurationService.getStructure();
         return modbusTasks;
+    }
+
+    public async synchronizeDeviceCommandList(models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
+        const commands = await this.deviceCommandRepository.saveMany(models);
+        await this.configurationService.getStructure();
+        return commands;
     }
 
     public async synchronizeTrigger(trigerModel: SynchronizeTriggerModel): Promise<TriggerModel> {

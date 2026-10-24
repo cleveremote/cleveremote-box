@@ -2,6 +2,7 @@ import { ConditionModel } from './condition.model';
 import { CycleModel } from './cycle.model';
 import { DeviceModel } from './device.model';
 import { ComRequestModel } from './com-request.model';
+import { DeviceCommandModel } from './device-command.model';
 import { ActuatorModel } from './actuator.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
@@ -40,9 +41,15 @@ export class SynchronizeDeviceModel extends DeviceModel {
     // recursive via box/synchronize/device ; undefined = non fourni, ne cascade pas (retro-compat).
     public devices?: SynchronizeDeviceModel[];
     public comrequests?: SynchronizeComRequestModel[];
+    // commandes register map imbriquees : meme regle que comrequests (undefined = pas touche)
+    public devicecommands?: SynchronizeDeviceCommandModel[];
 }
 
 export class SynchronizeComRequestModel extends ComRequestModel {
+    public delete?: boolean = false;
+}
+
+export class SynchronizeDeviceCommandModel extends DeviceCommandModel {
     public delete?: boolean = false;
 }
 

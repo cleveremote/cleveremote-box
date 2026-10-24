@@ -16,12 +16,14 @@ function CreateActuatorComModel(): ActuatorModel {
 describe('ComActuatorStrategy', () => {
     let modBusService: { execute: jest.Mock };
     let comRequestRepository: { get: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock };
     let strategy: ComActuatorStrategy;
 
     beforeEach(() => {
         modBusService = { execute: jest.fn() };
         comRequestRepository = { get: jest.fn() };
-        strategy = new ComActuatorStrategy(modBusService as never, comRequestRepository as never);
+        deviceCommandService = { execute: jest.fn().mockResolvedValue({ isOk: true }) };
+        strategy = new ComActuatorStrategy(modBusService as never, comRequestRepository as never, deviceCommandService as never);
     });
 
     it('should have the COM type', () => {
@@ -43,6 +45,17 @@ describe('ComActuatorStrategy', () => {
             address: 1,
             params: expect.objectContaining({ value: 1 })
         }));
+    });
+
+    it('should execute the DeviceCommand with the action channel and value when the action has a commandId', async () => {
+        const actuator = CreateActuatorComModel();
+        (actuator.config as ComActuatorConfigModel).actions = [{ commandId: 'cmd-1', channel: 3 }];
+
+        await strategy.execute(actuator, 1);
+
+        expect(deviceCommandService.execute).toHaveBeenCalledWith('cmd-1', { channel: 3, value: 1 });
+        expect(comRequestRepository.get).not.toHaveBeenCalled();
+        expect(modBusService.execute).not.toHaveBeenCalled();
     });
 
     it('should throw NotImplementedError on read', () => {

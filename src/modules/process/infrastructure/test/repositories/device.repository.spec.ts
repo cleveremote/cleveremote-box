@@ -11,6 +11,7 @@ describe('DeviceRepository', () => {
     let modbusService: { resetSlaveAddress: jest.Mock };
     let actuatorRepository: { deleteForDevice: jest.Mock };
     let comRequestRepository: { deleteForDevice: jest.Mock };
+    let deviceCommandRepository: { deleteForDevice: jest.Mock };
     let repository: DeviceRepository;
 
     beforeEach(() => {
@@ -18,10 +19,12 @@ describe('DeviceRepository', () => {
         modbusService = { resetSlaveAddress: jest.fn() };
         actuatorRepository = { deleteForDevice: jest.fn() };
         comRequestRepository = { deleteForDevice: jest.fn() };
+        deviceCommandRepository = { deleteForDevice: jest.fn() };
         repository = new DeviceRepository(
             mongooseRepository as never as DeviceMongooseRepository,
             actuatorRepository as never as ActuatorRepository,
             comRequestRepository as never as ComRequestRepository,
+            deviceCommandRepository as never,
             modbusService as never,
             { warn: jest.fn(), error: jest.fn() } as never
         );
@@ -150,6 +153,7 @@ describe('DeviceRepository', () => {
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
             expect(comRequestRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
+            expect(deviceCommandRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
             expect(mongooseRepository.create).toHaveBeenCalled();
             expect(result).toEqual(['final']);
         });

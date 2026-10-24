@@ -8,6 +8,7 @@ import { ModbusService } from '@process/domain/services/modbus.service';
 import { DeviceMongooseRepository } from './device-mongoose.repository';
 import { ActuatorRepository } from './actuator.repository';
 import { ComRequestRepository } from './com-request.repository';
+import { DeviceCommandRepository } from './device-command.repository';
 
 @Injectable()
 export class DeviceRepository {
@@ -16,6 +17,7 @@ export class DeviceRepository {
         private deviceMongooseRepository: DeviceMongooseRepository,
         private actuatorRepository: ActuatorRepository,
         private comRequestRepository: ComRequestRepository,
+        private deviceCommandRepository: DeviceCommandRepository,
         @Inject(forwardRef(() => ModbusService)) private modbusService: ModbusService,
         private readonly logger: Logger
     ) { }
@@ -31,7 +33,7 @@ export class DeviceRepository {
     }
 
     // cascade : soft-supprime les slaves (config.masterDeviceId), puis les actionneurs et
-    // comrequests rattaches, avant le device lui-meme. Chaque slave concerne est d'abord remis sur
+    // comrequests / commandes rattaches, avant le device lui-meme. Chaque slave concerne est d'abord remis sur
     // l'adresse d'origine de sa plage (cf ModbusService.resetSlaveAddress) : tous les resets sont
     // faits avant toute suppression, et un echec de reset annule la suppression (exception propagee).
     public async delete(id: string): Promise<boolean> {
@@ -52,6 +54,7 @@ export class DeviceRepository {
     private async _softDelete(id: string): Promise<boolean> {
         await this.actuatorRepository.deleteForDevice(id);
         await this.comRequestRepository.deleteForDevice(id);
+        await this.deviceCommandRepository.deleteForDevice(id);
         return this.deviceMongooseRepository.delete(id);
     }
 
