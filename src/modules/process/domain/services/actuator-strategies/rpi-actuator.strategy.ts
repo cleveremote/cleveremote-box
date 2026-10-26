@@ -22,7 +22,19 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
 
     public constructor(private readonly logger: Logger) { }
 
-    public async configure(actuator: ActuatorModel): Promise<void> {
+    public async reset(actuator: ActuatorModel): Promise<void> {
+        const config = actuator.config as RpiActuatorConfigModel;
+        if (!config.instance) {
+            await this.init(actuator);
+        }
+        if (config.instance.direction() !== GPIODirection.OUT) {
+            throw new NotSwitchError();
+        }
+        config.instance.writeSync(0);
+        actuator.status = ModuleStatus.OFF;
+    }
+
+    public async init(actuator: ActuatorModel): Promise<void> {
         const config = actuator.config as RpiActuatorConfigModel;
         if (config.instance) {
             config.instance.unexport();
@@ -46,9 +58,9 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
         }
     }
 
-    public async execute(actuator: ActuatorModel, action: number): Promise<void> {
+    public async set(actuator: ActuatorModel, action: number): Promise<void> {
         if (!(actuator.config as RpiActuatorConfigModel).instance) {
-            await this.configure(actuator);
+            await this.init(actuator);
         }
         const config = actuator.config as RpiActuatorConfigModel;
         if (config.instance.direction() === GPIODirection.OUT) {
@@ -60,7 +72,7 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
         }
     }
 
-    public read(actuator: ActuatorModel): number {
+    public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as RpiActuatorConfigModel).instance.readSync();
     }
 

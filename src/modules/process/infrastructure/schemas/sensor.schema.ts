@@ -15,13 +15,13 @@ export class SensorConfig {
     @Prop({ enum: forcastDataName })
     public forcastData?: forcastDataName;
 
-    // COM
-    @Prop()
-    public comRequestId?: string;
-
-    // COM register map (DeviceCommand), prioritaire sur comRequestId
+    // COM : DeviceCommand (register map)
     @Prop()
     public commandId?: string;
+
+    // COM : slave sur lequel la commande est lue
+    @Prop()
+    public deviceId?: string;
 
     // nom du champ decode a retenir (racine ou enfant)
     @Prop()

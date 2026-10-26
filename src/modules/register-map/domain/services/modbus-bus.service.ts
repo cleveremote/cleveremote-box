@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
-import { ModbusConnection, ModbusTransport } from '../models/modbus-connection.model';
+import { ModbusConnection, ModbusScanResponse, ModbusScanTarget, ModbusTransport } from '../models/modbus-connection.model';
 import { RegisterFunction, RegisterRawData, RegisterRequest } from '../models/register-map.model';
 
 const UNREACHABLE_CODES = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH'];
@@ -30,6 +30,35 @@ export class ModbusBusService {
             } finally {
                 client.close(() => this.logger.debug({ unitId: connection.unitId }, 'register request connection closed'));
             }
+        });
+    }
+
+    /**
+     * Envoie chaque requête à son unit id sur une seule connexion (ex: découverte de modules).
+     * Une cible muette ou en erreur est ignorée : seules les réponses sont renvoyées.
+     * Le timeout (court, de préférence) est celui de `connection`.
+     */
+    public scan(connection: ModbusConnection, targets: ModbusScanTarget[]): Promise<ModbusScanResponse[]> {
+        if (targets.length === 0) {
+            return Promise.resolve([]);
+        }
+        return this.runExclusive(async () => {
+            const client = new ModbusRTU();
+            await this._connect(client, connection);
+            const responses: ModbusScanResponse[] = [];
+            try {
+                for (const target of targets) {
+                    try {
+                        client.setID(target.unitId);
+                        responses.push({ ...target, data: await this._run(client, target.unitId, target.request) });
+                    } catch {
+                        // cas nominal : rien ne répond à cet unit id / registre
+                    }
+                }
+            } finally {
+                client.close(() => this.logger.debug({ targets: targets.length }, 'scan connection closed'));
+            }
+            return responses;
         });
     }
 

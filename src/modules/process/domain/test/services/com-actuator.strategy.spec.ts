@@ -1,106 +1,92 @@
-import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
-import { ComActuatorConfigModel, ActuatorModel } from '@process/domain/models/actuator.model';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
+import { ActuatorActionConfig, ComActuatorConfigModel, ActuatorModel } from '@process/domain/models/actuator.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { ComActuatorStrategy } from '@process/domain/services/actuator-strategies/com-actuator.strategy';
 
-function CreateActuatorComModel(): ActuatorModel {
+function CreateActuatorComModel(actions: ActuatorActionConfig[] = [{ commandId: 'cmd-set', channel: 3 }]): ActuatorModel {
     const actuator = new ActuatorModel();
+    actuator._id = 'actuator-1';
     actuator.type = ActuatorType.COM;
     actuator.config = new ComActuatorConfigModel();
     actuator.config.deviceId = 'com-1';
-    actuator.config.actions = [{ comRequestId: 'req-1', portNumber: 1 }];
+    actuator.config.actions = actions;
     return actuator;
 }
 
 describe('ComActuatorStrategy', () => {
-    let modBusService: { execute: jest.Mock };
-    let comRequestRepository: { get: jest.Mock };
-    let deviceCommandService: { execute: jest.Mock };
+    // usages des commandes référencées par les actions de l'actionneur
+    const commandTypes: Record<string, DeviceCommandType[]> = {
+        'cmd-set': [DeviceCommandType.SET],
+        'cmd-read': [DeviceCommandType.READ],
+        'cmd-init-reset': [DeviceCommandType.INIT, DeviceCommandType.RESET],
+    };
+    let deviceCommandService: { execute: jest.Mock; actionsOfType: jest.Mock; runActions: jest.Mock };
     let strategy: ComActuatorStrategy;
 
     beforeEach(() => {
-        modBusService = { execute: jest.fn() };
-        comRequestRepository = { get: jest.fn() };
-        deviceCommandService = { execute: jest.fn().mockResolvedValue({ isOk: true }) };
-        strategy = new ComActuatorStrategy(modBusService as never, comRequestRepository as never, deviceCommandService as never);
+        deviceCommandService = {
+            execute: jest.fn().mockResolvedValue({ isOk: true, blockId: 'outputs', operationId: 'read', value: { type: 'number', value: 1 } }),
+            actionsOfType: jest.fn((actions: ActuatorActionConfig[], type: DeviceCommandType) => Promise.resolve(actions
+                .filter((action) => commandTypes[action.commandId]?.includes(type))
+                .map((action) => ({ action, command: { _id: action.commandId, types: commandTypes[action.commandId] } })))),
+            runActions: jest.fn().mockResolvedValue([])
+        };
+        strategy = new ComActuatorStrategy(deviceCommandService as never);
     });
 
     it('should have the COM type', () => {
         expect(strategy.type).toEqual(ActuatorType.COM);
     });
 
-    it('should fetch the com request behind the first action and delegate execution to the modbus task service', async () => {
+    it('should run the set commands of its actions with the action as value', async () => {
         const actuator = CreateActuatorComModel();
-        const comRequest = Object.assign(new ComRequestModel(), {
-            _id: 'com-request-1',
-            config: { address: 5, function: [], params: { value: 0 } }
+
+        await strategy.set(actuator, 1);
+
+        expect(deviceCommandService.runActions).toHaveBeenCalledWith('com-1', (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.SET, 1);
+    });
+
+    it('should run the init commands of its actions on init', async () => {
+        const actuator = CreateActuatorComModel([{ commandId: 'cmd-set', channel: 3 }, { commandId: 'cmd-init-reset', channel: 3 }]);
+
+        await expect(strategy.init(actuator)).resolves.toBeUndefined();
+
+        expect(deviceCommandService.runActions).toHaveBeenCalledWith('com-1', (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.INIT);
+    });
+
+    describe('reset', () => {
+        it('should run the reset commands of its actions when it has some', async () => {
+            const actuator = CreateActuatorComModel([{ commandId: 'cmd-set', channel: 3 }, { commandId: 'cmd-init-reset', channel: 3 }]);
+
+            await strategy.reset(actuator);
+
+            expect(deviceCommandService.runActions).toHaveBeenCalledTimes(1);
+            expect(deviceCommandService.runActions).toHaveBeenCalledWith('com-1', (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.RESET);
         });
-        comRequestRepository.get.mockResolvedValue(comRequest);
 
-        await strategy.execute(actuator, 1);
+        it('should fall back to set 0 when it has no reset command', async () => {
+            const actuator = CreateActuatorComModel();
 
-        expect(comRequestRepository.get).toHaveBeenCalledWith('req-1');
-        expect(modBusService.execute).toHaveBeenCalledWith(comRequest, expect.objectContaining({
-            address: 1,
-            params: expect.objectContaining({ value: 1 })
-        }));
-    });
+            await strategy.reset(actuator);
 
-    it('should execute the DeviceCommand with the action channel and value when the action has a commandId', async () => {
-        const actuator = CreateActuatorComModel();
-        (actuator.config as ComActuatorConfigModel).actions = [{ commandId: 'cmd-1', channel: 3 }];
-
-        await strategy.execute(actuator, 1);
-
-        expect(deviceCommandService.execute).toHaveBeenCalledWith('cmd-1', { channel: 3, value: 1 });
-        expect(comRequestRepository.get).not.toHaveBeenCalled();
-        expect(modBusService.execute).not.toHaveBeenCalled();
-    });
-
-    it('should throw NotImplementedError on read', () => {
-        const actuator = CreateActuatorComModel();
-
-        expect(() => strategy.read(actuator)).toThrow(NotImplementedError);
-    });
-
-    it('should resolve without doing anything on configure', async () => {
-        const actuator = CreateActuatorComModel();
-
-        await expect(strategy.configure(actuator)).resolves.toBeUndefined();
-    });
-
-    it('should use the explicit portNumber/action of 0 rather than falling back to the existing com request address/value', async () => {
-        const actuator = CreateActuatorComModel();
-        (actuator.config as ComActuatorConfigModel).actions = [{ comRequestId: 'req-1', portNumber: 0 }];
-        const comRequest = Object.assign(new ComRequestModel(), {
-            _id: 'com-request-1',
-            config: { address: 5, function: [], params: { value: 9 } }
+            expect(deviceCommandService.runActions).toHaveBeenCalledTimes(1);
+            expect(deviceCommandService.runActions).toHaveBeenCalledWith('com-1', (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.SET, 0);
         });
-        comRequestRepository.get.mockResolvedValue(comRequest);
-
-        await strategy.execute(actuator, 0);
-
-        expect(modBusService.execute).toHaveBeenCalledWith(comRequest, expect.objectContaining({
-            address: 0,
-            params: expect.objectContaining({ value: 0 })
-        }));
     });
 
-    it('should still resolve params.value when the existing com request config has no params at all', async () => {
-        const actuator = CreateActuatorComModel();
-        (actuator.config as ComActuatorConfigModel).actions = [{ comRequestId: 'req-1', portNumber: 0 }];
-        const comRequest = Object.assign(new ComRequestModel(), {
-            _id: 'com-request-1',
-            config: { address: 5, function: [], params: undefined }
+    describe('read', () => {
+        it('should execute the read command of its actions on its channel and return the value', async () => {
+            const actuator = CreateActuatorComModel([{ commandId: 'cmd-set', channel: 3 }, { commandId: 'cmd-read', channel: 3 }]);
+
+            await expect(strategy.read(actuator)).resolves.toEqual(1);
+
+            expect(deviceCommandService.execute).toHaveBeenCalledTimes(1);
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'cmd-read' }), 'com-1', { channel: 3 });
         });
-        comRequestRepository.get.mockResolvedValue(comRequest);
 
-        await strategy.execute(actuator, 0);
-
-        expect(modBusService.execute).toHaveBeenCalledWith(comRequest, expect.objectContaining({
-            address: 0,
-            params: expect.objectContaining({ value: 0 })
-        }));
+        it('should reject when it has no read command', async () => {
+            await expect(strategy.read(CreateActuatorComModel())).rejects.toThrow('sans commande read');
+            expect(deviceCommandService.execute).not.toHaveBeenCalled();
+        });
     });
 });

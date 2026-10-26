@@ -36,11 +36,11 @@ describe('SensorModel', () => {
         sensor.name = 'com sensor';
         sensor.config = new ComSensorConfigModel();
         sensor.config.cronPattern = '*/30 * * * * *';
-        sensor.config.comRequestId = 'request-1';
+        sensor.config.commandId = 'command-1';
 
         expect(sensor.type).toEqual(SensorType.COM);
         expect(sensor.config.cronPattern).toEqual('*/30 * * * * *');
-        expect(sensor.config.comRequestId).toEqual('request-1');
+        expect(sensor.config.commandId).toEqual('command-1');
     });
 
     it('should hold child-specific config fields (code, scale, unit) when parentId is set', () => {

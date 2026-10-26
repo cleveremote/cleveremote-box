@@ -12,17 +12,15 @@ import { EventQueryDTO } from '../dto/event-query.dto';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { ComRequestDTO, CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
 import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { DeviceModel } from '@process/domain/models/device.model';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
+import { DeviceModel, DeviceWithCommands } from '@process/domain/models/device.model';
 import { DeviceSynchronizeUC } from '@process/use-cases/device-synchronize.uc';
-import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
 import { DeviceCommandSynchronizeUC } from '@process/use-cases/device-command-synchronize.uc';
 import { DeviceCommandModel } from '@process/domain/models/device-command.model';
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
@@ -82,19 +80,9 @@ export class ConfigurationController {
     @MessagePattern(['box/discover/device'])
     public async discoverDevice(
         @Payload() discoverDeviceDTO: DiscoverDeviceDTO
-    ): Promise<DeviceModel[]> {
+    ): Promise<DeviceModel[] | DeviceWithCommands[]> {
         const uc = new DeviceDiscoverUC(this._configurationService,this._waveshareDiscoveryService);
         return uc.execute(discoverDeviceDTO.masterId);
-    }
-
-    @MessagePattern(['box/synchronize/comrequest'])
-    public async synchroniseComRequest(
-        @Payload(new ParseArrayPipe({ items: ComRequestDTO, exceptionFactory: validationExceptionFactory }))
-            comRequestDTOs: ComRequestDTO[]
-    ): Promise<ComRequestModel[]> {
-        const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
-        const input = comRequestDTOs.map(ComRequestDTO.mapToComRequestModel);
-        return uc.execute(input);
     }
 
     @MessagePattern(['box/synchronize/device-command'])

@@ -88,7 +88,7 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
     const cycleRepository = { get: jest.fn().mockResolvedValue(structure.cycles) };
     const sensorRepository = { get: jest.fn().mockResolvedValue(structure.sensors) };
     const deviceRepository = { get: jest.fn().mockResolvedValue(structure.devices) };
-    const modbusTaskRepository = { get: jest.fn().mockResolvedValue(structure.modbusTasks) };
+    const deviceCommandRepository = { get: jest.fn().mockResolvedValue(structure.deviceCommands) };
     const valueRepository = {
         getValues: jest.fn().mockResolvedValue([]),
         getLastValue: jest.fn().mockResolvedValue(null),
@@ -99,13 +99,16 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
 
     const structureService = new StructureService(
         cycleRepository as any,
+        {} as any,
         sensorRepository as any,
         deviceRepository as any,
-        modbusTaskRepository as any,
+        deviceCommandRepository as any,
+        {} as any,
         valueRepository as any,
         actuatorRepository as any,
         {} as any,
-        logger as any
+        logger as any,
+        { withParams: (commands: unknown) => Promise.resolve(commands) } as any
     );
 
     return { structureService, structureRepository, actuatorRegistry: structureRepository.actuatorRegistry, cycleRepository, logger };
@@ -115,6 +118,6 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
 // pour les tests d'execution qui resolvent des ActuatorModel (type RPI) deja configures (fake GPIO).
 export function createActuatorServiceMock(actuatorRegistry: Map<string, IActuatorModule>): ActuatorService {
     const actuatorRepository = { findByIds: (ids: string[]) => Promise.resolve(ids.map((id) => actuatorRegistry.get(id)).filter(Boolean)) };
-    const strategies = [new RpiActuatorStrategy(createLoggerMock() as never), new ComActuatorStrategy(undefined as never, undefined as never, {} as never)];
+    const strategies = [new RpiActuatorStrategy(createLoggerMock() as never), new ComActuatorStrategy(undefined as never)];
     return new ActuatorService(createLoggerMock() as never, actuatorRepository as any, strategies as any);
 }

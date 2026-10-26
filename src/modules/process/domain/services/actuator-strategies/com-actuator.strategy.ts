@@ -1,47 +1,53 @@
 import { Injectable } from '@nestjs/common';
-import { NotImplementedError } from '../../errors/not-implemented.error';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel, ActuatorModel } from '../../models/actuator.model';
+import { DeviceCommandType } from '../../models/device-command.model';
+import { outcomeValues } from '../../utils/device-command.util';
 import { ActuatorStrategy } from './actuator-strategy.interface';
-import { ModbusService } from '../modbus.service';
-import { ComRequestConfigModel, ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
 import { DeviceCommandService } from '../device-command.service';
 
+// Chaque appel n'exécute que les actions dont la commande porte son usage (init, set, read, reset).
+// Erreur Modbus/réseau : loggée par RegisterMapService, non levée.
 @Injectable()
 export class ComActuatorStrategy implements ActuatorStrategy {
     public readonly type = ActuatorType.COM;
 
-    public constructor(
-        private modbusService: ModbusService,
-        private comRequestRepository: ComRequestRepository,
-        private deviceCommandService: DeviceCommandService
-    ) { }
+    public constructor(private deviceCommandService: DeviceCommandService) { }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public async configure(actuator: ActuatorModel): Promise<void> {
-        // rien a configurer cote box : l'actionneur COM est pilote par un module distant
+    public async init(actuator: ActuatorModel): Promise<void> {
+        await this.deviceCommandService.runActions(this._deviceId(actuator), this._actions(actuator), DeviceCommandType.INIT);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public async execute(actuator: ActuatorModel, action: number): Promise<void> {
-        const { actions } = actuator.config as ComActuatorConfigModel;
-        if (actions[0].commandId) {
-            // register map : `action` est la valeur saisie de l'opération (ex: outputs.set 0/1), validée par le template.
-            // Erreur Modbus/réseau : loggée par RegisterMapService, non levée (même comportement que le chemin ComRequest)
-            await this.deviceCommandService.execute(actions[0].commandId, { channel: actions[0].channel, value: action });
-            return;
+    // `action` est la valeur saisie de l'opération (ex: outputs.set 0/1), validée par le template.
+    public async set(actuator: ActuatorModel, action: number): Promise<void> {
+        await this.deviceCommandService.runActions(this._deviceId(actuator), this._actions(actuator), DeviceCommandType.SET, action);
+    }
+
+    public async read(actuator: ActuatorModel): Promise<number> {
+        const [read] = await this.deviceCommandService.actionsOfType(this._actions(actuator), DeviceCommandType.READ);
+        if (!read) {
+            throw new Error(`ComActuatorStrategy: actuator ${actuator._id} sans commande read`);
         }
-        const comRequestData: ComRequestModel = await this.comRequestRepository.get(actions[0].comRequestId) as ComRequestModel;
-        const overrideParams: ComRequestConfigModel = { address: actions[0].portNumber, params: { value: action } };
-        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
-
+        const outcome = await this.deviceCommandService.execute(read.command, this._deviceId(actuator), { channel: read.action.channel });
+        return outcomeValues(outcome)[0]?.value;
     }
 
-    public read(actuator: ActuatorModel): number {
-        const { deviceId } = actuator.config as ComActuatorConfigModel;
-        throw new NotImplementedError(`ComActuatorStrategy.read is not implemented yet (deviceId: ${deviceId})`);
+    // commandes reset de l'actionneur ; à défaut, coupure par set 0
+    public async reset(actuator: ActuatorModel): Promise<void> {
+        const actions = this._actions(actuator);
+        if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
+            return this.set(actuator, 0);
+        }
+        await this.deviceCommandService.runActions(this._deviceId(actuator), actions, DeviceCommandType.RESET);
+    }
+
+    // slave sur lequel les commandes (partagées par son modèle) sont exécutées
+    private _deviceId(actuator: ActuatorModel): string {
+        return (actuator.config as ComActuatorConfigModel).deviceId;
+    }
+
+    private _actions(actuator: ActuatorModel): ComActuatorConfigModel['actions'] {
+        return (actuator.config as ComActuatorConfigModel).actions;
     }
 
 }

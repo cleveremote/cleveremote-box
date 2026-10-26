@@ -34,7 +34,7 @@ describe('ExecutionModel model', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(pump);
+        await rpiActuatorStrategy.init(pump);
         expect(pump.config.instance).toBeDefined();
 
         const valve1 = CreateActuatorRpiModel();
@@ -43,7 +43,7 @@ describe('ExecutionModel model', () => {
         valve1.name = '26';
         valve1.config.direction = GPIODirection.OUT;
         valve1.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve1);
+        await rpiActuatorStrategy.init(valve1);
         expect(valve1.config.instance).toBeDefined();
 
         const valve2 = CreateActuatorRpiModel();
@@ -52,7 +52,7 @@ describe('ExecutionModel model', () => {
         valve2.name = '19';
         valve2.config.direction = GPIODirection.OUT;
         valve2.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve2);
+        await rpiActuatorStrategy.init(valve2);
         expect(valve2.config.instance).toBeDefined();
 
         const valve3 = CreateActuatorRpiModel();
@@ -61,7 +61,7 @@ describe('ExecutionModel model', () => {
         valve3.name = '21';
         valve3.config.direction = GPIODirection.OUT;
         valve3.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve3);
+        await rpiActuatorStrategy.init(valve3);
         expect(valve3.config.instance).toBeDefined();
 
         const valve4 = CreateActuatorRpiModel();
@@ -70,7 +70,7 @@ describe('ExecutionModel model', () => {
         valve4.name = '20';
         valve4.config.direction = GPIODirection.OUT;
         valve4.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve4);
+        await rpiActuatorStrategy.init(valve4);
         expect(valve4.config.instance).toBeDefined();
 
         const irrigationSecteur1 = new SequenceModel();

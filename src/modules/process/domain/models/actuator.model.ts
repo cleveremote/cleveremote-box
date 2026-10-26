@@ -17,14 +17,14 @@ export class RpiActuatorConfigModel {
 }
 
 export class ActuatorActionConfig {
-    public comRequestId?: string;
-    public portNumber?: number;
-    // DeviceCommand (register map) : prioritaire sur comRequestId ; channel = voie (0-based) surchargée
-    public commandId?: string;
+    // DeviceCommand (register map) exécutée avec la valeur de l'action
+    public commandId: string;
+    // Voie (0-based) qui surcharge celle de la commande
     public channel?: number;
 }
 
 export class ActuatorConfigModel {
+    // Slave sur lequel les actions sont exécutées
     public deviceId: string;
     public actions: ActuatorActionConfig[];
 }

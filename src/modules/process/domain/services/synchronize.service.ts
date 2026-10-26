@@ -5,7 +5,6 @@ import { Logger } from 'nestjs-pino';
 import { CycleModel } from '../models/cycle.model';
 import {
     SynchronizeActuatorModel,
-    SynchronizeComRequestModel,
     SynchronizeCycleModel,
     SynchronizeDeviceCommandModel,
     SynchronizeDeviceModel,
@@ -27,10 +26,9 @@ import { SequenceRepository } from '@process/infrastructure/repositories/sequenc
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { DeviceModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ComRequestModel } from '../models/com-request.model';
 import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
 import { DeviceCommandModel } from '../models/device-command.model';
+import { DeviceCommandService } from './device-command.service';
 import { SensorService } from './sensor.service';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
@@ -39,7 +37,6 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 export class SynchronizeService {
     public constructor(
         private deviceRepository: DeviceRepository,
-        private modbusTaskRepository: ComRequestRepository,
         private cycleRepository: CycleRepository,
         private sequenceRepository: SequenceRepository,
         private triggerRepository: TriggerRepository,
@@ -51,7 +48,8 @@ export class SynchronizeService {
         private triggerService: TriggerService,
         private sensorService: SensorService,
         private readonly logger: Logger,
-        private deviceCommandRepository: DeviceCommandRepository
+        private deviceCommandRepository: DeviceCommandRepository,
+        private deviceCommandService: DeviceCommandService
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -62,16 +60,15 @@ export class SynchronizeService {
             // structureModel.cycles proviennent de StructureSynchronizeDTO.mapToStructureModel(), donc
             // reellement des SynchronizeCycleModel (avec sequences: SynchronizeSequenceModel[])
             cycles: structureModel.cycles as SynchronizeCycleModel[],
-            sensors: structureModel.sensors,
-            modbusTasks: structureModel.modbusTasks
+            sensors: structureModel.sensors
         };
         structureModel.cycles = [];
         structureModel.sensors = [];
-        structureModel.modbusTasks = [];
         const data = new StructureModel();
         data.cycles = await this.cycleRepository.replaceAll(incoming.cycles);
         data.sensors = await this.sensorRepository.replaceAll(incoming.sensors ?? []);
-        data.modbusTasks = await this.modbusTaskRepository.replaceAll(incoming.modbusTasks ?? []);
+        // les commandes se synchronisent par device (box/synchronize/device, box/synchronize/device-command)
+        data.deviceCommands = await this.deviceCommandService.withParams(await this.deviceCommandRepository.get() as DeviceCommandModel[]);
         this.configurationService.structure = data;
 
         return data;
@@ -127,9 +124,9 @@ export class SynchronizeService {
         return this.deviceRepository.get() as Promise<DeviceModel[]>;
     }
 
-    // cascade recursive : sauvegarde le device puis, uniquement si le champ correspondant est
-    // explicitement fourni (undefined = non fourni = pas touche, retro-compat clients non migres),
-    // remplace completement ses comrequests, ses commandes register map et/ou ses devices slaves imbriques.
+    // cascade recursive : sauvegarde le device puis, uniquement si le champ est explicitement fourni
+    // (undefined = non fourni = pas touche, retro-compat clients non migres), remplace completement ses
+    // devices slaves imbriques. Les commandes register map appartiennent au modele, pas au device.
     private async _synchronizeDeviceTree(model: SynchronizeDeviceModel): Promise<DeviceModel> {
         if (model.delete) {
             await this.deviceRepository.delete(model._id);
@@ -137,12 +134,6 @@ export class SynchronizeService {
         }
         const device = await this.deviceRepository.save(model);
 
-        if (model.comrequests !== undefined) {
-            await this.modbusTaskRepository.replaceForDevice(device._id, model.comrequests);
-        }
-        if (model.devicecommands !== undefined) {
-            await this.deviceCommandRepository.replaceForDevice(device._id, model.devicecommands);
-        }
         if (model.devices !== undefined) {
             await this._replaceChildDevices(device._id, model.devices);
         }
@@ -169,14 +160,8 @@ export class SynchronizeService {
         return saved;
     }
 
-    public async synchronizeModbusTaskList(modbusTaskModels: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
-        const modbusTasks = await this.modbusTaskRepository.saveMany(modbusTaskModels);
-        await this.configurationService.getStructure();
-        return modbusTasks;
-    }
-
     public async synchronizeDeviceCommandList(models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
-        const commands = await this.deviceCommandRepository.saveMany(models);
+        const commands = await this.deviceCommandRepository.saveMany(await this.deviceCommandService.withParams(models));
         await this.configurationService.getStructure();
         return commands;
     }

@@ -101,6 +101,40 @@ describe('ModbusBusService', () => {
         expect(mockClients[0].close).toHaveBeenCalled();
     });
 
+    describe('scan', () => {
+        const read = { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0x4000, length: 1 };
+
+        it('should query every target on a single connection and return only the responders', async () => {
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn()
+                    .mockRejectedValueOnce(Object.assign(new Error('Timed out'), { errno: 'ETIMEDOUT' }))
+                    .mockResolvedValueOnce({ data: [62] })
+            }));
+
+            const responses = await service.scan({ ...TCP, timeout: 200 }, [{ unitId: 1, request: read }, { unitId: 61, request: read }]);
+
+            expect(mockClients).toHaveLength(1);
+            expect(mockClients[0].setTimeout).toHaveBeenCalledWith(200);
+            expect(mockClients[0].setID.mock.calls.slice(1)).toEqual([[1], [61]]);
+            expect(responses).toEqual([{ unitId: 61, request: read, data: [62] }]);
+            expect(mockClients[0].close).toHaveBeenCalled();
+        });
+
+        it('should propagate connection errors', async () => {
+            const refused = Object.assign(new Error('refused'), { code: 'ECONNREFUSED' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                connectTCP: jest.fn().mockRejectedValue(refused)
+            }));
+
+            await expect(service.scan(TCP, [{ unitId: 1, request: read }])).rejects.toBe(refused);
+        });
+
+        it('should not open any connection without targets', async () => {
+            await expect(service.scan(TCP, [])).resolves.toEqual([]);
+            expect(mockClients).toHaveLength(0);
+        });
+    });
+
     it('should run transactions one at a time', async () => {
         const events: string[] = [];
         const slow = (name: string): Promise<string> => service.runExclusive(async () => {

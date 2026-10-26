@@ -22,6 +22,8 @@ export class DeviceMapper {
         // 'INVERTER' : ancienne valeur de DeviceKind encore présente en base
         const kind = device.config.kind ?? device.kind;
         config.kind = (kind as string) === 'INVERTER' ? DeviceKind.INVERTER_VEICHI_SI23_V1 : kind;
+        config.modelId = device.config.modelId;
+        config.initDoneCommandIds = device.config.initDoneCommandIds && [...device.config.initDoneCommandIds];
         if (device.config.portConfig) {
             config.portConfig = { portNumStart: device.config.portConfig.portNumStart, portCount: device.config.portConfig.portCount };
         }
@@ -60,7 +62,14 @@ export class DeviceMapper {
             };
         } else {
             const config = model.config as SlaveConfigModel;
-            device.config = { slaveId: config.slaveId, masterDeviceId: config.masterDeviceId, kind: config.kind, portConfig: config.portConfig };
+            device.config = {
+                slaveId: config.slaveId,
+                masterDeviceId: config.masterDeviceId,
+                kind: config.kind,
+                modelId: config.modelId,
+                initDoneCommandIds: config.initDoneCommandIds,
+                portConfig: config.portConfig
+            };
         }
         return device;
     }

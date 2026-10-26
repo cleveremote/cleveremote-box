@@ -50,6 +50,14 @@ export class DeviceConfig {
     @Prop({ enum: DeviceKind })
     public kind?: DeviceKind;
 
+    // modele (SlaveTemplate) dont le slave partage les DeviceCommand
+    @Prop()
+    public modelId?: string;
+
+    // DeviceCommand init du modele deja appliquees sur ce slave
+    @Prop({ type: [String], default: undefined })
+    public initDoneCommandIds?: string[];
+
     @Prop({ type: PortConfigSchema })
     public portConfig?: PortConfig;
 }

@@ -3,10 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
-import { Cycle, CycleSchema } from './schemas/cycle.schema';
-import { Sequence, SequenceSchema } from './schemas/sequence.schema';
-import { Schedule, ScheduleSchema } from './schemas/schedule.schema';
-import { Trigger, TriggerSchema } from './schemas/trigger.schema';
 import { Sensor, SensorSchema } from './schemas/sensor.schema';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
@@ -23,10 +19,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { CycleRepository } from './repositories/cycle.repository';
-import { SequenceRepository } from './repositories/sequence.repository';
-import { TriggerRepository } from './repositories/trigger.repository';
-import { ScheduleRepository } from './repositories/schedule.repository';
 import { SensorRepository } from './repositories/sensor.repository';
 import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
@@ -40,16 +32,9 @@ import { EventMongooseRepository } from './repositories/event-mongoose.repositor
 import { HttpModule } from '@nestjs/axios';
 import { BleService } from '@process/domain/services/ble.service';
 import { PingController } from './controllers/ping.controller';
-import { SlaveTemplate, SlaveTemplateSchema } from './schemas/slave-template.schema';
-import { SlaveTemplateRepository } from './repositories/slave-template.repository';
 import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
 import { SlaveTemplateController } from './controllers/slave-template.controller';
-import { RegisterMapService } from '@process/domain/services/register-map.service';
 import { RegisterMapController } from './controllers/register-map.controller';
-import { CycleMongooseRepository } from './repositories/cycle-mongoose.repository';
-import { SequenceMongooseRepository } from './repositories/sequence-mongoose.repository';
-import { ScheduleMongooseRepository } from './repositories/schedule-mongoose.repository';
-import { TriggerMongooseRepository } from './repositories/trigger-mongoose.repository';
 import { SensorMongooseRepository } from './repositories/sensor-mongoose.repository';
 import { CycleGroupService } from '@process/domain/services/cycle-group.service';
 import { ActuatorModule } from '@process/domain/services/actuator-strategies/actuator.module';
@@ -80,15 +65,10 @@ import { RegisterMapModule } from '@register-map/infrastructure/register-map.mod
             }
         }),
         MongooseModule.forFeature([
-            { name: Cycle.name, schema: CycleSchema },
-            { name: Sequence.name, schema: SequenceSchema },
-            { name: Schedule.name, schema: ScheduleSchema },
-            { name: Trigger.name, schema: TriggerSchema },
             { name: Sensor.name, schema: SensorSchema },
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema },
-            { name: GlobalSettings.name, schema: GlobalSettingsSchema },
-            { name: SlaveTemplate.name, schema: SlaveTemplateSchema }
+            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
         ]),
         ActuatorModule,
         DeviceModule,
@@ -107,25 +87,15 @@ import { RegisterMapModule } from '@register-map/infrastructure/register-map.mod
         //----Repositories------//
         AuthenticationRepository,
         GlobalSettingsRepository,
-        SlaveTemplateRepository,
-        CycleRepository,
-        SequenceRepository,
-        TriggerRepository,
-        ScheduleRepository,
         SensorRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
-        CycleMongooseRepository,
-        SequenceMongooseRepository,
-        ScheduleMongooseRepository,
-        TriggerMongooseRepository,
         SensorMongooseRepository,
         //---------------------//
         AuthenticationService,
         GlobalSettingsService,
         SlaveTemplateService,
-        RegisterMapService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,

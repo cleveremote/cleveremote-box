@@ -23,7 +23,6 @@ export class SlaveTemplate {
     @Prop({ type: SchemaTypes.Mixed, required: true })
     public device: Record<string, unknown>;
 
-    @Prop({ type: [SchemaTypes.Mixed], default: [] })
-    public comRequests: Record<string, unknown>[];
+    // les DeviceCommand du modèle sont dans la collection devicecommands (modelId)
 }
 export const SlaveTemplateSchema = SchemaFactory.createForClass(SlaveTemplate);

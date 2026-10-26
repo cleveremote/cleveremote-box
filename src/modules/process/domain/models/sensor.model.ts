@@ -1,12 +1,13 @@
 import { SensorType } from '../interfaces/sensor.interface';
 
-// tous les champs sont optionnels : un sensor COM "racine" utilise cronPattern/comRequestId (ou
-// commandId), un sensor enfant (parentId renseigne) utilise code/scale/unit (ou field) - la valeur
-// est alors extraite de la lecture du sensor parent, pas lue via son propre cron.
+// tous les champs sont optionnels : un sensor COM "racine" utilise cronPattern/commandId, un sensor
+// enfant (parentId renseigne) utilise code/scale/unit (ou field) - la valeur est alors extraite de la
+// lecture du sensor parent, pas lue via son propre cron.
 export class ComSensorConfigModel {
-    public comRequestId?: string;
-    // DeviceCommand (register map) : prioritaire sur comRequestId
+    // DeviceCommand (register map) lue à chaque tick
     public commandId?: string;
+    // Slave sur lequel la commande est lue
+    public deviceId?: string;
     // Nom du champ décodé à retenir (lecture à plusieurs champs, ou sensor enfant)
     public field?: string;
     public cronPattern?: string;
@@ -38,7 +39,7 @@ export class SensorModel {
     public display?: boolean = true;
 
     // relation auto-referencee : un sensor enfant (parentId renseigne) remplit
-    // code/scale/unit sur ComSensorConfigModel plutot que cronPattern/comRequestId.
+    // code/scale/unit/field sur ComSensorConfigModel plutot que cronPattern/commandId.
     public parentId?: string | null = null;
 
     public value?: number;

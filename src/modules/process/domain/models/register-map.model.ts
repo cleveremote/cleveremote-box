@@ -1,4 +1,4 @@
-import { ModbusFunctionName } from './com-request.model';
+import { ModbusFunctionName } from './modbus.model';
 import { SlaveTemplate } from './device.model';
 
 // Modélisation des fichiers register-maps/*.json : table de registres complète d'un module,

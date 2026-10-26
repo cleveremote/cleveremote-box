@@ -1,6 +1,6 @@
 // Waveshare "Modbus RTU Analog Output 8CH" (AO8CH) - registre d'adresse esclave
 // (0x0001-0x00FF). Partage par ctrl-actuator.strategy.ts (commissioning manuel) et
-// ModbusService (decouverte/provisioning automatique de nouveaux modules).
+// ModbusDeviceService (decouverte/provisioning automatique de nouveaux modules).
 export const AO8CH_DEVICE_ADDRESS_REGISTER = 0x4000;
 
 // Adresse d'usine/non configuree du module AO8CH : c'est l'unit id auquel un module

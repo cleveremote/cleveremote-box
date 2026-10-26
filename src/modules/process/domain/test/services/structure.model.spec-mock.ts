@@ -40,7 +40,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     pump.name = '16';
     pump.config.direction = GPIODirection.OUT;
     pump.config.edge = GPIOEdge.BOTH;
-    await rpiActuatorStrategy.configure(pump);
+    await rpiActuatorStrategy.init(pump);
     expect(pump.config.instance).toBeDefined();
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
@@ -53,7 +53,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     pump1.name = '2022';
     pump1.config.direction = GPIODirection.IN;
     pump1.config.edge = GPIOEdge.BOTH;
-    await rpiActuatorStrategy.configure(pump1);
+    await rpiActuatorStrategy.init(pump1);
     expect(pump1.config.instance).toBeDefined();
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
@@ -69,7 +69,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
     //mod1.config.reconfigureDirection: boolean = true;
-    await rpiActuatorStrategy.configure(valve1);
+    await rpiActuatorStrategy.init(valve1);
     expect(valve1.config.instance).toBeDefined();
 
     const valve2 = CreateActuatorRpiModel();
@@ -81,7 +81,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
     //mod1.config.reconfigureDirection: boolean = true;
-    await rpiActuatorStrategy.configure(valve2);
+    await rpiActuatorStrategy.init(valve2);
     expect(valve2.config.instance).toBeDefined();
 
     const valve3 = CreateActuatorRpiModel();
@@ -93,7 +93,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
     //mod1.config.reconfigureDirection: boolean = true;
-    await rpiActuatorStrategy.configure(valve3);
+    await rpiActuatorStrategy.init(valve3);
     expect(valve3.config.instance).toBeDefined();
 
     const valve4 = CreateActuatorRpiModel();
@@ -105,7 +105,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
     //mod1.config.reconfigureDirection: boolean = true;
-    await rpiActuatorStrategy.configure(valve4);
+    await rpiActuatorStrategy.init(valve4);
     expect(valve4.config.instance).toBeDefined();
 
     const falsyModule = CreateActuatorRpiModel();
@@ -117,7 +117,7 @@ export async function CreateStructure(isFalsy: number = 0): Promise<CreatedStruc
     //mod1.config.debounceTimeout: number = undefined;
     //mod1.config.activeLow: boolean = false;
     //mod1.config.reconfigureDirection: boolean = true;
-    await rpiActuatorStrategy.configure(falsyModule);
+    await rpiActuatorStrategy.init(falsyModule);
     expect(falsyModule.config.instance).toBeDefined();
 
     const actuatorRegistry = new Map<string, IActuatorModule>(

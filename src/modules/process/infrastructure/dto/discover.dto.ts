@@ -10,13 +10,10 @@ import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from 
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
     SynchronizeDeviceModel,
-    SynchronizeComRequestModel,
     SynchronizeActuatorModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,

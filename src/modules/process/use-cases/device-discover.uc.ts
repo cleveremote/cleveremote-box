@@ -1,4 +1,4 @@
-import { DeviceModel } from '@process/domain/models/device.model';
+import { DeviceModel, DeviceWithCommands } from '@process/domain/models/device.model';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
@@ -14,7 +14,8 @@ export class DeviceDiscoverUC {
         private waveshareDiscoveryService: WaveshareDiscoveryService
     ) { }
 
-    public execute(masterDeviceId: string): Promise<DeviceModel[]> {
+    // sans master : masters Waveshare découverts ; avec master : slaves créés, avec leurs DeviceCommand
+    public execute(masterDeviceId: string): Promise<DeviceModel[] | DeviceWithCommands[]> {
         if(!masterDeviceId) {
             return this.waveshareDiscoveryService.discover();
         }

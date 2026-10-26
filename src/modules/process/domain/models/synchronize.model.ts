@@ -1,7 +1,6 @@
 import { ConditionModel } from './condition.model';
 import { CycleModel } from './cycle.model';
 import { DeviceModel } from './device.model';
-import { ComRequestModel } from './com-request.model';
 import { DeviceCommandModel } from './device-command.model';
 import { ActuatorModel } from './actuator.model';
 import { ScheduleModel } from './schedule.model';
@@ -37,16 +36,9 @@ export class SynchronizeSensorModel extends SensorModel {
 
 export class SynchronizeDeviceModel extends DeviceModel {
     public delete?: boolean = false;
-    // devices imbriques (slaves) et comrequests imbriques : uniquement presents lors d'une synchro
-    // recursive via box/synchronize/device ; undefined = non fourni, ne cascade pas (retro-compat).
+    // devices imbriques (slaves) : uniquement presents lors d'une synchro recursive via
+    // box/synchronize/device ; undefined = non fourni, ne cascade pas (retro-compat).
     public devices?: SynchronizeDeviceModel[];
-    public comrequests?: SynchronizeComRequestModel[];
-    // commandes register map imbriquees : meme regle que comrequests (undefined = pas touche)
-    public devicecommands?: SynchronizeDeviceCommandModel[];
-}
-
-export class SynchronizeComRequestModel extends ComRequestModel {
-    public delete?: boolean = false;
 }
 
 export class SynchronizeDeviceCommandModel extends DeviceCommandModel {

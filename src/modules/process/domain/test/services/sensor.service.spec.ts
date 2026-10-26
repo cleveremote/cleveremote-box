@@ -26,7 +26,7 @@ function CreateComSensorModel(overrides: Partial<SensorModel> = {}): SensorModel
     sensor.type = SensorType.COM;
     sensor.config = new ComSensorConfigModel();
     sensor.config.cronPattern = '*/30 * * * * *';
-    sensor.config.comRequestId = 'request-1';
+    sensor.config.commandId = 'command-1';
     return Object.assign(sensor, overrides);
 }
 

@@ -1,7 +1,6 @@
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
@@ -10,21 +9,15 @@ describe('DeviceRepository', () => {
     let mongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByType: jest.Mock; findSlavesByMasterId: jest.Mock };
     let modbusService: { resetSlaveAddress: jest.Mock };
     let actuatorRepository: { deleteForDevice: jest.Mock };
-    let comRequestRepository: { deleteForDevice: jest.Mock };
-    let deviceCommandRepository: { deleteForDevice: jest.Mock };
     let repository: DeviceRepository;
 
     beforeEach(() => {
         mongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByType: jest.fn(), findSlavesByMasterId: jest.fn().mockResolvedValue([]) };
         modbusService = { resetSlaveAddress: jest.fn() };
         actuatorRepository = { deleteForDevice: jest.fn() };
-        comRequestRepository = { deleteForDevice: jest.fn() };
-        deviceCommandRepository = { deleteForDevice: jest.fn() };
         repository = new DeviceRepository(
             mongooseRepository as never as DeviceMongooseRepository,
             actuatorRepository as never as ActuatorRepository,
-            comRequestRepository as never as ComRequestRepository,
-            deviceCommandRepository as never,
             modbusService as never,
             { warn: jest.fn(), error: jest.fn() } as never
         );
@@ -49,6 +42,28 @@ describe('DeviceRepository', () => {
 
             expect(mongooseRepository.upsert).toHaveBeenCalledWith(model._id, model);
             expect(result).toEqual(model);
+        });
+
+        it('should keep the slave model and applied init commands when not given (client synchronization)', async () => {
+            const _id = 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a';
+            mongooseRepository.findById.mockResolvedValue({ _id, type: DeviceType.SLAVE, config: { slaveId: 1, modelId: 'model-1', initDoneCommandIds: ['a'] } });
+            const model = Object.assign(new DeviceModel(), { _id, type: DeviceType.SLAVE, config: { slaveId: 2 } });
+
+            await repository.save(model);
+
+            expect(mongooseRepository.upsert).toHaveBeenCalledWith(_id, expect.objectContaining({
+                config: { slaveId: 2, modelId: 'model-1', initDoneCommandIds: ['a'] }
+            }));
+        });
+
+        it('should save the given slave model and applied init commands as is', async () => {
+            const _id = 'e2f6c8a0-1b2c-4d3e-9f4a-5b6c7d8e9f0a';
+            const model = Object.assign(new DeviceModel(), { _id, type: DeviceType.SLAVE, config: { slaveId: 2, modelId: 'model-2', initDoneCommandIds: [] } });
+
+            await repository.save(model);
+
+            expect(mongooseRepository.findById).not.toHaveBeenCalled();
+            expect(mongooseRepository.upsert).toHaveBeenCalledWith(_id, model);
         });
 
         it('should throw InvalidIdException when the _id is not a valid uuid', async () => {
@@ -89,7 +104,6 @@ describe('DeviceRepository', () => {
             await expect(repository.delete('slave-1')).rejects.toThrow('timeout');
             expect(mongooseRepository.delete).not.toHaveBeenCalled();
             expect(actuatorRepository.deleteForDevice).not.toHaveBeenCalled();
-            expect(comRequestRepository.deleteForDevice).not.toHaveBeenCalled();
         });
 
         it('should not delete the slave when its master is not found', async () => {
@@ -127,17 +141,15 @@ describe('DeviceRepository', () => {
 
             expect(mongooseRepository.delete).toHaveBeenCalledWith('slave-1');
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('slave-1');
-            expect(comRequestRepository.deleteForDevice).toHaveBeenCalledWith('slave-1');
             expect(mongooseRepository.delete).toHaveBeenCalledWith('master');
         });
 
-        it('should cascade delete the actuators and comrequests linked to the device', async () => {
+        it('should cascade delete the actuators and device commands linked to the device', async () => {
             mongooseRepository.delete.mockResolvedValue(true);
 
             await repository.delete('id-1');
 
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
-            expect(comRequestRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
         });
     });
 
@@ -152,8 +164,6 @@ describe('DeviceRepository', () => {
 
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
-            expect(comRequestRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
-            expect(deviceCommandRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
             expect(mongooseRepository.create).toHaveBeenCalled();
             expect(result).toEqual(['final']);
         });

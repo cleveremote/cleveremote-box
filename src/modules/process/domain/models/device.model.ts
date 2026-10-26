@@ -1,4 +1,4 @@
-import { ComRequestModel } from './com-request.model';
+import { DeviceCommandModel } from './device-command.model';
 import { SensorType } from '../interfaces/sensor.interface';
 
 export enum MasterProtocol {
@@ -102,6 +102,10 @@ export class SlaveConfigModel {
     public masterDeviceId?: string;
     // Stratégie de pilotage du slave (absent = esclave Modbus générique)
     public kind?: DeviceKind;
+    // Modèle (SlaveTemplate._id) dont le slave partage les DeviceCommand
+    public modelId?: string;
+    // DeviceCommand init du modèle déjà appliquées sur ce slave (non rejouées sauf reset)
+    public initDoneCommandIds?: string[];
     // Configuration des ports de l'équipement (absent = non défini)
     public portConfig?: PortConfigModel;
 }
@@ -123,12 +127,16 @@ export class DeviceModel {
     public deletedAt?: Date | null = null;
 }
 
-// Template d'un SLAVE et de ses comRequests, sans ids ni timestamps, pour le recréer sous un master
+// Slave renvoyé au front avec les DeviceCommand de son modèle (params résolus), non persisté tel quel
+export type DeviceWithCommands = DeviceModel & { deviceCommands: DeviceCommandModel[] };
+
+// Modèle d'un SLAVE et de ses DeviceCommand (partagées par tous les slaves créés depuis ce modèle)
 export interface SlaveTemplate {
     _id: string;
     name: string;
     description?: string;
     kind: DeviceKind;
     device: Pick<DeviceModel, 'name' | 'description'> & Pick<SlaveConfigModel, 'kind' | 'portConfig'>;
-    comRequests: Omit<ComRequestModel, '_id' | 'deviceId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[];
+    // _id absent = commande nouvelle (générée à la sauvegarde du modèle) ; params recalculé depuis la register map à la sauvegarde
+    deviceCommands: (Omit<DeviceCommandModel, '_id' | 'modelId' | 'createdAt' | 'updatedAt' | 'deletedAt'> & { _id?: string })[];
 }

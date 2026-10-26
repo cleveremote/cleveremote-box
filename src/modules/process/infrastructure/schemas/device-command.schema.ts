@@ -1,7 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
 export type DeviceCommandDocument = DeviceCommand & Document;
 
@@ -10,8 +11,9 @@ export class DeviceCommand {
     @Prop({ type: String, default: () => randomUUID() })
     public _id: string;
 
+    // modèle (SlaveTemplate) propriétaire, partagé par ses slaves
     @Prop({ required: true, index: true })
-    public deviceId: string;
+    public modelId: string;
 
     @Prop({ required: true })
     public name: string;
@@ -37,6 +39,14 @@ export class DeviceCommand {
 
     @Prop({ type: Boolean, default: undefined })
     public isConfirmed?: boolean;
+
+    // usages cumulables (set, read, init, reset)
+    @Prop({ type: [{ type: String, enum: Object.values(DeviceCommandType) }], required: true })
+    public types: DeviceCommandType[];
+
+    // typage de la voie et de la valeur (cf. RegisterOperationParams), calculé depuis la register map
+    @Prop({ type: Object, default: undefined })
+    public params?: RegisterOperationParams;
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

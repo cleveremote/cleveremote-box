@@ -3,14 +3,15 @@ import { SlaveTemplate, SlaveTemplateDocument } from '../slave-template.schema';
 
 export class SlaveTemplateMapper {
 
-    public static mapToModel(template: SlaveTemplateDocument): SlaveTemplateModel {
+    // deviceCommands : commandes du modèle (collection devicecommands), lues à part
+    public static mapToModel(template: SlaveTemplateDocument, deviceCommands: SlaveTemplateModel['deviceCommands']): SlaveTemplateModel {
         return {
             _id: template._id,
             name: template.name,
             description: template.description,
             kind: template.kind,
             device: template.device as SlaveTemplateModel['device'],
-            comRequests: template.comRequests as SlaveTemplateModel['comRequests']
+            deviceCommands
         };
     }
 
@@ -20,7 +21,6 @@ export class SlaveTemplateMapper {
         template.description = model.description;
         template.kind = model.kind;
         template.device = { ...model.device };
-        template.comRequests = model.comRequests.map((cr) => ({ ...cr }));
         return template;
     }
 

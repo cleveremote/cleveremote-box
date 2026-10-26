@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateIf } from 'class-validator';
 import { DeviceKind } from '@process/domain/models/device.model';
-import { RegisterOperationCommand, RegisterOperationValue } from '@process/domain/models/register-map.model';
+import { RegisterOperationCommand, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
 export class RegisterMapFetchDTO {
     @ValidateIf((dto: RegisterMapFetchDTO) => !dto.kind)
@@ -38,7 +38,7 @@ export class RegisterOperationExecuteDTO {
     @ApiProperty({ description: 'Index 0-based de la voie (scope channel)', required: false })
     public channel?: number;
 
-    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée par RegisterMapService
+    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée par le RegisterMapService du module register-map
     @IsOptional()
     @ApiProperty({ description: 'Valeur saisie (selon operation.input)', required: false })
     public value?: RegisterOperationValue;
@@ -50,7 +50,6 @@ export class RegisterOperationExecuteDTO {
 
     public static mapToCommand(dto: RegisterOperationExecuteDTO): RegisterOperationCommand {
         return {
-            deviceId: dto.deviceId,
             blockId: dto.blockId,
             operationId: dto.operationId,
             channel: dto.channel,

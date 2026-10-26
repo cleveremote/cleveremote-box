@@ -25,7 +25,7 @@ describe('RpiActuatorStrategy', () => {
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
 
-        await strategy.configure(pump);
+        await strategy.init(pump);
 
         expect(pump.config.instance).toBeDefined();
     });
@@ -37,8 +37,8 @@ describe('RpiActuatorStrategy', () => {
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
 
-        await strategy.configure(pump);
-        await strategy.configure(pump);
+        await strategy.init(pump);
+        await strategy.init(pump);
 
         expect(pump.config.instance).toBeDefined();
     });
@@ -49,15 +49,15 @@ describe('RpiActuatorStrategy', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
-        await strategy.configure(pump);
+        await strategy.init(pump);
 
-        await strategy.execute(pump, 1);
+        await strategy.set(pump, 1);
         expect(pump.status).toEqual(ModuleStatus.ON);
-        expect(strategy.read(pump)).toEqual(1);
+        await expect(strategy.read(pump)).resolves.toEqual(1);
 
-        await strategy.execute(pump, 0);
+        await strategy.set(pump, 0);
         expect(pump.status).toEqual(ModuleStatus.OFF);
-        expect(strategy.read(pump)).toEqual(0);
+        await expect(strategy.read(pump)).resolves.toEqual(0);
         pump.config.instance.unexport();
     });
 
@@ -67,9 +67,9 @@ describe('RpiActuatorStrategy', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.IN;
         pump.config.edge = GPIOEdge.BOTH;
-        await strategy.configure(pump);
+        await strategy.init(pump);
 
-        await expect(strategy.execute(pump, 1)).rejects.toThrow(NotSwitchError);
+        await expect(strategy.set(pump, 1)).rejects.toThrow(NotSwitchError);
         pump.config.instance.unexport();
     });
 });

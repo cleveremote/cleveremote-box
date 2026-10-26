@@ -21,14 +21,11 @@ import {
     StructureSynchronizeDTO,
     DeviceConfigDTO,
     DeviceSynchronizeDTO,
-    ComRequestDTO,
-    ComRequestConfigDTO,
-    ModbusTaskParams,
-    PersistenceDTO,
-    IsNumberOrString,
-    IsNumberOrNumberArray
+    DeviceCommandDTO,
+    IsNumberOrString
 } from '@process/infrastructure/dto/synchronize.dto';
-import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
+import { DeviceType, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import {
     CycleType,
     ExecutableAction,
@@ -42,7 +39,6 @@ import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
-import { ModbusValueType } from '@process/domain/models/com-request.model';
 
 describe('synchronize.dto (mapping vers les modeles domaine)', () => {
     describe('CycleSynchronizeDTO.mapToCycleModel', () => {
@@ -323,13 +319,13 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
         it('should map a COM sensor and its config', () => {
             const dto = Object.assign(new SensorSynchronizeDTO(), {
                 id: 'sensor-2', name: 'sensor', description: 'd', type: SensorType.COM,
-                config: Object.assign(new SensorConfigDTO(), { cronPattern: '*/30 * * * * *', comRequestId: 'request-1' })
+                config: Object.assign(new SensorConfigDTO(), { cronPattern: '*/30 * * * * *', commandId: 'command-1', field: 'pv' })
             });
 
             const model = SensorSynchronizeDTO.mapToSensorModel(dto);
 
             expect(model.type).toEqual(SensorType.COM);
-            expect((model.config as ComSensorConfigModel).comRequestId).toEqual('request-1');
+            expect(model.config).toEqual(expect.objectContaining({ commandId: 'command-1', field: 'pv' }));
         });
 
         it('should map a child sensor (parentId set) to a code/scale/unit config', () => {
@@ -376,11 +372,11 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
 
         it('should map actions through to the CtrlActuatorConfigModel', () => {
             const dto = CreateDto();
-            dto.config.actions = [{ comRequestId: 'ao8ch-write-channel', digitalPort: 2 }];
+            dto.config.actions = [{ commandId: 'ao8ch-outputs-set', channel: 2 }];
 
             const model = ValveSynchronizeDTO.mapToValveModel(dto);
 
-            expect((model.config as CtrlActuatorConfigModel).actions).toEqual([{ comRequestId: 'ao8ch-write-channel', digitalPort: 2 }]);
+            expect((model.config as CtrlActuatorConfigModel).actions).toEqual([{ commandId: 'ao8ch-outputs-set', channel: 2 }]);
         });
     });
 
@@ -469,132 +465,38 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
         });
     });
 
-    describe('ComRequestDTO.mapToComRequestModel', () => {
-        it('should map the fields, including nested params', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-1', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['readHoldingRegisters'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
-                })
+    describe('DeviceCommandDTO.mapToDeviceCommandModel', () => {
+        it('should map every field, defaulting delete to false', () => {
+            const dto = Object.assign(new DeviceCommandDTO(), {
+                _id: 'command-1', modelId: 'model-1', name: 'modes', description: 'd',
+                blockId: 'outputModes', operationId: 'setAll', types: [DeviceCommandType.SET], channel: 0, value: [2, 2], isPersistent: true, isConfirmed: true,
+                params: { range: { min: 0, max: 7, labelStart: 1 }, isConfirmRequired: false, isPersistable: false }
             });
 
-            const model = ComRequestDTO.mapToComRequestModel(dto);
+            const model = DeviceCommandDTO.mapToDeviceCommandModel(dto);
 
-            expect(model._id).toEqual('task-1');
-            expect(model.deviceId).toEqual('conn-1');
-            expect(model.config.params).toEqual({ length: 2, scale: 0.1, unit: '°C' });
+            expect(model).toEqual(expect.objectContaining({
+                _id: 'command-1', modelId: 'model-1', name: 'modes', description: 'd', blockId: 'outputModes', operationId: 'setAll',
+                types: [DeviceCommandType.SET], channel: 0, value: [2, 2], isPersistent: true, isConfirmed: true, delete: false,
+                params: { range: { min: 0, max: 7, labelStart: 1 }, isConfirmRequired: false, isPersistable: false }
+            }));
         });
 
-        it('should map the optional persistence field when present', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-2', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['writeRegister'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), {
-                        length: 1, scale: 1, unit: '',
-                        persistence: Object.assign(new PersistenceDTO(), { persist: true, address: 0x1000 })
-                    })
-                })
+        it('should keep the model, the init type and the delete flag sent by the client', () => {
+            const dto = Object.assign(new DeviceCommandDTO(), {
+                modelId: 'model-1', name: 'all on', blockId: 'allOutputs', operationId: 'set', value: 1, types: [DeviceCommandType.INIT], delete: true
             });
 
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.params.persistence).toEqual({ persist: true, address: 0x1000 });
-        });
-
-        it('should leave persistence undefined when absent (backward compatibility)', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-3', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['readHoldingRegisters'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
-                })
-            });
-
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.params.persistence).toBeUndefined();
-        });
-
-        it('should map a scalar value', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-4', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['writeRegister'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), { length: 1, scale: 1, unit: '', value: 42 })
-                })
-            });
-
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.params.value).toEqual(42);
-        });
-
-        it('should map an array value', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-5', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['writeRegisters'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 1, unit: '', value: [1, 2] })
-                })
-            });
-
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.params.value).toEqual([1, 2]);
-        });
-
-        it('should map type and formula', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-6', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['readHoldingRegisters'], address: 100, type: ModbusValueType.CUMULATIVE,
-                    params: Object.assign(new ModbusTaskParams(), {
-                        length: 4, scale: 1, unit: 'm³', formula: '(N + Nf) * 10^(n - 3)'
-                    })
-                })
-            });
-
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.type).toEqual(ModbusValueType.CUMULATIVE);
-            expect(model.config.params.formula).toEqual('(N + Nf) * 10^(n - 3)');
-        });
-
-        it('should leave type and formula undefined when absent (backward compatibility)', () => {
-            const dto = Object.assign(new ComRequestDTO(), {
-                _id: 'task-7', deviceId: 'conn-1', name: 'task',
-                config: Object.assign(new ComRequestConfigDTO(), {
-                    function: ['readHoldingRegisters'], address: 100,
-                    params: Object.assign(new ModbusTaskParams(), { length: 2, scale: 0.1, unit: '°C' })
-                })
-            });
-
-            const model = ComRequestDTO.mapToComRequestModel(dto);
-
-            expect(model.config.type).toBeUndefined();
-            expect(model.config.params.formula).toBeUndefined();
+            expect(DeviceCommandDTO.mapToDeviceCommandModel(dto)).toEqual(expect.objectContaining({ modelId: 'model-1', types: [DeviceCommandType.INIT], delete: true }));
         });
     });
 
-    describe('IsNumberOrNumberArray validator', () => {
-        const validator = new IsNumberOrNumberArray();
+    describe('DeviceSynchronizeDTO model', () => {
+        it('should map the slave modelId', () => {
+            const config = Object.assign(new DeviceConfigDTO(), { slaveId: 1, masterDeviceId: 'master-1', modelId: 'model-1' });
+            const dto = Object.assign(new DeviceSynchronizeDTO(), { _id: 'device-2', name: 'slave', description: 'd', type: DeviceType.SLAVE, config });
 
-        it('should accept a number', () => {
-            expect(validator.validate(42, null)).toBe(true);
-        });
-
-        it('should accept an array of numbers', () => {
-            expect(validator.validate([1, 2, 3], null)).toBe(true);
-        });
-
-        it('should reject an array containing a non-number', () => {
-            expect(validator.validate([1, '2'], null)).toBe(false);
-        });
-
-        it('should reject a string', () => {
-            expect(validator.validate('42', null)).toBe(false);
+            expect((DeviceSynchronizeDTO.mapToDeviceModel(dto).config as SlaveConfigModel).modelId).toBe('model-1');
         });
     });
 

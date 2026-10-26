@@ -54,6 +54,11 @@ export class SequenceMongooseRepository {
         );
     }
 
+    // cycles dont au moins une sequence reference l'actionneur
+    public async findCycleIdsByModuleId(moduleId: string): Promise<string[]> {
+        return this.sequenceModel.distinct('cycleId', { 'moduleConfigs.moduleId': moduleId, ...NOT_DELETED_FILTER });
+    }
+
     public async findByCycleId(cycleId: string): Promise<SequenceModel[]> {
         const sequences = await this.sequenceModel.find({ cycleId, ...NOT_DELETED_FILTER });
         return sequences.map(SequenceMapper.mapToModel);

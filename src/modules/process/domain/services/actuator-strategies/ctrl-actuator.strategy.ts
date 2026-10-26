@@ -6,12 +6,9 @@ import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from
 import { ActuatorActionConfig, ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { ActuatorStrategy } from './actuator-strategy.interface';
-import { ModbusService } from '../modbus.service';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
-import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { DeviceCommandService } from '../device-command.service';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
@@ -43,17 +40,26 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
     public constructor(
         private deviceRepository: DeviceRepository,
-        private comRequestRepository: ComRequestRepository,
-        private modbusService: ModbusService,
         private waveshareDiscoveryService: WaveshareDiscoveryService,
         private readonly logger: Logger,
         private deviceCommandService: DeviceCommandService
     ) { }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public async configure(actuator: ActuatorModel): Promise<void> {
-        // rien a configurer cote box : les connexions Modbus sont ouvertes/fermees a chaque
-        // ecriture (cf. _connectClient / _writeChannelOutput), pas de handle a preparer en amont.
+    // commandes init de la vanne (ex: plage de sortie du module AO)
+    public async init(actuator: ActuatorModel): Promise<void> {
+        const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
+        await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.INIT);
+    }
+
+    // commandes reset de la vanne ; à défaut, ouverture minimale (set 0 -> 4mA)
+    public async reset(actuator: ActuatorModel): Promise<void> {
+        const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
+        if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
+            await this._writeOpening(deviceId, actions, 0);
+            (actuator.config as CtrlActuatorConfigModel).openingPercent = 0;
+            return;
+        }
+        await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.RESET);
     }
 
     /**
@@ -61,11 +67,11 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
      * (pas un simple 0/1 comme pour RPI/COM). Délègue à setFlowRate() et ignore le résultat
      * détaillé (ValveAdjustmentResult), déjà loggé par setFlowRate.
      */
-    public async execute(actuator: ActuatorModel, action: number): Promise<void> {
+    public async set(actuator: ActuatorModel, action: number): Promise<void> {
         await this.setFlowRate(actuator as ValveActuatorModel, action);
     }
 
-    public read(actuator: ActuatorModel): number {
+    public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as CtrlActuatorConfigModel).openingPercent;
     }
 
@@ -102,7 +108,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
                 valve.config.maxOpening,
                 Math.max(valve.config.minOpening, valve.config.openingPercent + error * (valve.config.kP / 10))
             );
-            await this._writeOpening(valve.config.actions[0], valve.config.openingPercent);
+            await this._writeOpening(valve.config.deviceId, valve.config.actions, valve.config.openingPercent);
         }
 
         const outputCurrentMa = this._openingToMilliAmps(valve.config.openingPercent);
@@ -137,32 +143,19 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         return Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
     }
 
-    // DeviceCommand (register map) : l'ouverture est projetee sur la plage de saisie du template
-    // (ex: AO8CH B outputs.set 0-10000 mV) ; sinon ancien chemin ComRequest en 4-20mA.
-    private async _writeOpening(action: ActuatorActionConfig, openingPercent: number): Promise<void> {
-        if (!action.commandId) {
-            return this._writeOpeningViaComRequest(action, this._openingToMilliAmps(openingPercent));
+    // DeviceCommand set (register map) : l'ouverture est projetee sur la plage de saisie du template
+    // (ex: AO8CH B outputs.set 0-10000 mV). Passe par la file de ModbusBusService (bus RS485 partagé).
+    private async _writeOpening(deviceId: string, actions: ActuatorActionConfig[], openingPercent: number): Promise<void> {
+        const [set] = await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.SET);
+        if (!set) {
+            throw new Error('CtrlActuatorStrategy: vanne sans commande set');
         }
-        const range = await this.deviceCommandService.numberRange(action.commandId);
+        const range = await this.deviceCommandService.numberRange(set.command._id, deviceId);
         if (!range) {
-            throw new Error(`CtrlActuatorStrategy: DeviceCommand ${action.commandId} sans saisie numérique`);
+            throw new Error(`CtrlActuatorStrategy: DeviceCommand ${set.command._id} sans saisie numérique`);
         }
         const value = Math.round(range.min + (openingPercent / 100) * (range.max - range.min));
-        await this.deviceCommandService.execute(action.commandId, { channel: action.channel, value });
-    }
-
-    // route l'ecriture via ModbusTaskService (meme chemin que ComActuatorStrategy.execute) plutot
-    // que via une connexion modbus-serial geree a la main : beneficie de la file d'attente
-    // partagee (_enqueue) qui serialise les acces au bus RS485, et de la gestion
-    // connexion/erreurs deja centralisee dans ModbusTaskService._runComRequest.
-    private async _writeOpeningViaComRequest(action: ActuatorActionConfig, milliAmps: number): Promise<void> {
-        const microAmps = this._toClampedMicroAmps(milliAmps);
-        const comRequest: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
-
-
-        const comRequestData: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
-        const overrideParams: ComRequestConfigModel = { address: action.portNumber, params: { value: microAmps } }
-        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
+        await this.deviceCommandService.execute(set.command, deviceId, { channel: set.action.channel, value });
     }
 
     /**

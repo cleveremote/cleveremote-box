@@ -1,41 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { NotImplementedError } from '../../errors/not-implemented.error';
 import { DeviceModel, DeviceKind } from '../../models/device.model';
 import { DeviceStrategy } from './device-strategy.interface';
-import { ModbusService } from '../modbus.service';
-import { Logger } from 'nestjs-pino';
-import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
-import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
+import { DeviceCommandService } from '../device-command.service';
 
 @Injectable()
 export class ModbusSlaveStrategy implements DeviceStrategy {
     public readonly kind = DeviceKind.MODBUS_SLAVE;
 
-    public constructor(private comRequestRepository: ComRequestRepository,
-        private modbusService: ModbusService,
-        private readonly logger: Logger
-    ) { }
+    public constructor(private deviceCommandService: DeviceCommandService) { }
 
+    // commandes d'init (DeviceCommand init) non encore appliquées
     public async init(device: DeviceModel): Promise<void> {
-        const comRequests: ComRequestModel[] = await this.comRequestRepository.getComRequestsByDeviceIdAndTypes(device._id, [ComRequestType.DIGITAL_IO_INIT]);
-        for (let index = 0; index < comRequests.length; index++) {
-            const comRequest = comRequests[index];
-            try {
-                if (!comRequest.config?.done) {
-                    await this.modbusService.execute(comRequest, comRequest.config);
-                    comRequest.config.done = true;
-                    await this.comRequestRepository.save(comRequest);
-                }
-            } catch (err) {
-                this.logger.error({ comRequestId: comRequest._id, err: err instanceof Error ? err.message : String(err) }, 'inverter reset write failed');
-            }
-        }
+        await this.deviceCommandService.runInitCommands(device._id);
     }
 
+    // commandes reset puis rejoue toutes les commandes d'init
     public async reset(device: DeviceModel): Promise<void> {
-        throw new NotImplementedError(`ModbusSlaveStrategy.reset is not implemented yet (deviceId: ${device._id})`);
+        await this.deviceCommandService.runResetCommands(device._id);
     }
 
     public async configure(device: DeviceModel): Promise<void> {

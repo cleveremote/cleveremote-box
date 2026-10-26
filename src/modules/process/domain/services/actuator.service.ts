@@ -26,13 +26,14 @@ export class ActuatorService {
     }
 
     public async execute(actuator: IActuatorModule, action: number): Promise<void> {
-        return this._resolveStrategy(actuator.type).execute(actuator as ActuatorModel, action);
+        return this._resolveStrategy(actuator.type).set(actuator as ActuatorModel, action);
     }
 
+    // commandes reset propres à chaque actionneur (à défaut, set 0 : cf. stratégies)
     public async reset(actuators: IActuatorModule[]): Promise<void> {
         for (const actuator of actuators) {
             try {
-                await this.execute(actuator, 0);
+                await this._resolveStrategy(actuator.type).reset(actuator as ActuatorModel);
             } catch (error) {
                 this.logger.warn({ error, name: actuator.name }, 'reset actuator error');
             }

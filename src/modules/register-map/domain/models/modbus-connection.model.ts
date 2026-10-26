@@ -1,3 +1,5 @@
+import { RegisterRawData, RegisterRequest } from './register-map.model';
+
 export enum ModbusTransport {
     TCP = 'TCP',
     RTU = 'RTU'
@@ -19,4 +21,14 @@ export interface ModbusConnection {
     // TCP injoignable : l'appelant peut fournir une connexion corrigée (ex: IP DHCP retrouvée),
     // retentée une seule fois ; undefined = abandon
     onUnreachable?: () => Promise<ModbusConnection | undefined>;
+}
+
+/** Cible d'un scan : même requête envoyée à l'adresse `unitId`, sur la connexion du scan */
+export interface ModbusScanTarget {
+    unitId: number;
+    request: RegisterRequest;
+}
+
+export interface ModbusScanResponse extends ModbusScanTarget {
+    data: RegisterRawData;
 }

@@ -33,8 +33,6 @@ export class ActuatorMapper {
             const config = new ComActuatorConfigModel();
             config.deviceId = comConfig.deviceId;
             config.actions = (comConfig.actions ?? []).map((action) => ({
-                comRequestId: action.comRequestId,
-                portNumber: action.portNumber,
                 commandId: action.commandId,
                 channel: action.channel
             }));
@@ -45,8 +43,6 @@ export class ActuatorMapper {
             config.deviceId = ctrlConfig.deviceId;
             config.channel = ctrlConfig.channel;
             config.actions = (ctrlConfig.actions ?? []).map((action) => ({
-                comRequestId: action.comRequestId,
-                portNumber: action.portNumber,
                 commandId: action.commandId,
                 channel: action.channel
             }));

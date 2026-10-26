@@ -1,13 +1,11 @@
 import ModbusRTU from 'modbus-serial';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ModbusService } from '@process/domain/services/modbus.service';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
-import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorActionConfig, ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 
 interface MockModbusClient {
     connectTCP: jest.Mock;
@@ -19,7 +17,7 @@ interface MockModbusClient {
 }
 
 // CtrlActuatorStrategy ne gere plus lui-meme la connexion Modbus pour piloter la vanne (deplace
-// vers ModbusTaskService.execute, cf. _writeOpeningViaComRequest), mais _connectClient et
+// vers DeviceCommandService.execute, cf. _writeOpening), mais _connectClient et
 // _writeChannelOutput restent utilises par les outils de commissionnement
 // (testSetDeviceAddress/testStepOutput) : 'modbus-serial' est mocke pour ne jamais toucher un
 // port reel, y compris pour ces chemins de commissionnement.
@@ -77,7 +75,7 @@ function CreateValveModel(overrides: Partial<CtrlActuatorConfigModel> = {}): Act
     config.valveType = 'PROPORTIONAL';
     config.deviceId = 'ao8ch-device';
     config.channel = 1;
-    config.actions = [{ comRequestId: 'ao8ch-write-channel', portNumber: 0 }];
+    config.actions = [{ commandId: 'ao8ch-outputs-set', channel: 0 }];
     config.flowMeterId = 'flow-meter-1';
     config.maxFlowRate = 100;
     config.kP = 0.5;
@@ -97,18 +95,11 @@ function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
 }
 
-function CreateComRequestModel(): ComRequestModel {
-    return Object.assign(new ComRequestModel(), {
-        _id: 'ao8ch-write-channel',
-        config: { address: 0, function: [], params: { value: 0 } }
-    });
-}
-
-describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
+describe('CtrlActuatorStrategy (DeviceCommandService mocked)', () => {
     let deviceRepository: { get: jest.Mock };
-    let comRequestRepository: { get: jest.Mock };
-    let deviceCommandService: { execute: jest.Mock; numberRange: jest.Mock };
-    let modBusService: { execute: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock; numberRange: jest.Mock; actionsOfType: jest.Mock; runActions: jest.Mock };
+    // usages des commandes des actions de la vanne (par défaut : la commande set de la sortie AO)
+    let commandTypes: Record<string, DeviceCommandType[]>;
     let logger: ReturnType<typeof CreateLoggerMock>;
     let strategy: CtrlActuatorStrategy;
     let masterDevice: DeviceModel;
@@ -126,14 +117,18 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
                 id === masterDevice._id ? masterDevice : id === slaveDevice._id ? slaveDevice : null
             ))
         };
-        comRequestRepository = { get: jest.fn().mockResolvedValue(CreateComRequestModel()) };
-        deviceCommandService = { execute: jest.fn().mockResolvedValue({ isOk: true }), numberRange: jest.fn().mockResolvedValue({ min: 0, max: 10000 }) };
-        modBusService = { execute: jest.fn().mockResolvedValue(undefined) };
+        commandTypes = { 'ao8ch-outputs-set': [DeviceCommandType.SET] };
+        deviceCommandService = {
+            execute: jest.fn().mockResolvedValue({ isOk: true }),
+            numberRange: jest.fn().mockResolvedValue({ min: 0, max: 10000 }),
+            actionsOfType: jest.fn((actions: ActuatorActionConfig[], type: DeviceCommandType) => Promise.resolve(actions
+                .filter((action) => commandTypes[action.commandId]?.includes(type))
+                .map((action) => ({ action, command: { _id: action.commandId, types: commandTypes[action.commandId] } })))),
+            runActions: jest.fn().mockResolvedValue([])
+        };
         logger = CreateLoggerMock();
         strategy = new CtrlActuatorStrategy(
             deviceRepository as unknown as DeviceRepository,
-            comRequestRepository as unknown as ComRequestRepository,
-            modBusService as unknown as ModbusService,
             { refreshMasterAddress: jest.fn().mockResolvedValue(false) } as never,
             logger as never,
             deviceCommandService as never
@@ -148,31 +143,51 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
         expect(strategy.type).toEqual(ActuatorType.CTRL);
     });
 
-    it('should resolve without doing anything on configure', async () => {
+    it('should run the init commands of its actions on init', async () => {
         const valve = CreateValveModel();
 
-        await expect(strategy.configure(valve)).resolves.toBeUndefined();
+        await expect(strategy.init(valve)).resolves.toBeUndefined();
+        expect(deviceCommandService.runActions).toHaveBeenCalledWith('ao8ch-device', valve.config.actions, DeviceCommandType.INIT);
+    });
+
+    describe('reset', () => {
+        it('should run the reset commands of its actions when it has some', async () => {
+            commandTypes['ao8ch-reset'] = [DeviceCommandType.RESET];
+            const valve = CreateValveModel({ openingPercent: 60, actions: [{ commandId: 'ao8ch-outputs-set', channel: 0 }, { commandId: 'ao8ch-reset', channel: 0 }] });
+
+            await strategy.reset(valve);
+
+            expect(deviceCommandService.runActions).toHaveBeenCalledWith('ao8ch-device', valve.config.actions, DeviceCommandType.RESET);
+            expect(deviceCommandService.execute).not.toHaveBeenCalled();
+        });
+
+        it('should fall back to the minimal opening (4mA) through the set command when it has no reset command', async () => {
+            const valve = CreateValveModel({ openingPercent: 60 });
+
+            await strategy.reset(valve);
+
+            expect(deviceCommandService.runActions).not.toHaveBeenCalled();
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 0, value: 0 });
+            expect(valve.config.openingPercent).toEqual(0);
+        });
     });
 
     describe('execute (ActuatorStrategy entry point)', () => {
         it('should treat action as the target flow rate and delegate to setFlowRate', async () => {
             const valve = CreateValveModel({ minOpening: 100, maxOpening: 100 });
 
-            await strategy.execute(valve, 50);
+            await strategy.set(valve, 50);
 
-            expect(modBusService.execute).toHaveBeenCalledWith(
-                expect.objectContaining({ _id: 'ao8ch-write-channel' }),
-                expect.objectContaining({ address: 0, params: expect.objectContaining({ value: 20000 }) })
-            );
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 0, value: 10000 });
         });
     });
 
     describe('read', () => {
-        it('should return the current openingPercent without any modbus I/O', () => {
+        it('should return the current openingPercent without any modbus I/O', async () => {
             const valve = CreateValveModel({ openingPercent: 42 });
 
-            expect(strategy.read(valve)).toEqual(42);
-            expect(modBusService.execute).not.toHaveBeenCalled();
+            await expect(strategy.read(valve)).resolves.toEqual(42);
+            expect(deviceCommandService.execute).not.toHaveBeenCalled();
         });
     });
 
@@ -192,7 +207,7 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
 
             const result = await strategy.setFlowRate(valve, 50);
 
-            expect(modBusService.execute).toHaveBeenCalledTimes(result.iterations - 1);
+            expect(deviceCommandService.execute).toHaveBeenCalledTimes(result.iterations - 1);
         });
 
         // _readFlowMeterTest est un débitmètre simulé (ramp iteration*10) en attendant le
@@ -220,21 +235,7 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
             expect(openResult.outputCurrentMa).toEqual(20);
         });
 
-        it('should call ModbusTaskService.execute with the action comRequestId/digitalPort and the microamps equivalent of the opening', async () => {
-            const valve = CreateValveModel({
-                minOpening: 100, maxOpening: 100, channel: 3,
-                actions: [{ comRequestId: 'ao8ch-write-channel', portNumber: 2 }]
-            });
-
-            await strategy.setFlowRate(valve, 50);
-
-            expect(modBusService.execute).toHaveBeenCalledWith(
-                expect.objectContaining({ _id: 'ao8ch-write-channel' }),
-                expect.objectContaining({ address: 2, params: expect.objectContaining({ value: 20000 }) })
-            );
-        });
-
-        it('should write through the DeviceCommand, scaling the opening onto the template input range, when the action has a commandId', async () => {
+        it('should write through the DeviceCommand, scaling the opening onto the template input range', async () => {
             const valve = CreateValveModel({
                 minOpening: 100, maxOpening: 100,
                 actions: [{ commandId: 'ao8ch-outputs-set', channel: 2 }]
@@ -242,9 +243,35 @@ describe('CtrlActuatorStrategy (ModbusTaskService mocked)', () => {
 
             await strategy.setFlowRate(valve, 50);
 
-            expect(deviceCommandService.numberRange).toHaveBeenCalledWith('ao8ch-outputs-set');
-            expect(deviceCommandService.execute).toHaveBeenCalledWith('ao8ch-outputs-set', { channel: 2, value: 10000 });
-            expect(modBusService.execute).not.toHaveBeenCalled();
+            expect(deviceCommandService.numberRange).toHaveBeenCalledWith('ao8ch-outputs-set', 'ao8ch-device');
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 2, value: 10000 });
+        });
+
+        it('should only write through the set command of its actions', async () => {
+            commandTypes['ao8ch-outputs-read'] = [DeviceCommandType.READ];
+            const valve = CreateValveModel({
+                minOpening: 100, maxOpening: 100,
+                actions: [{ commandId: 'ao8ch-outputs-read', channel: 1 }, { commandId: 'ao8ch-outputs-set', channel: 2 }]
+            });
+
+            await strategy.setFlowRate(valve, 50);
+
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 2, value: 10000 });
+            expect(deviceCommandService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-read' }), expect.anything(), expect.anything());
+        });
+
+        it('should reject when the valve has no set command', async () => {
+            commandTypes = {};
+
+            await expect(strategy.setFlowRate(CreateValveModel(), 50)).rejects.toThrow('sans commande set');
+            expect(deviceCommandService.execute).not.toHaveBeenCalled();
+        });
+
+        it('should reject when the DeviceCommand has no numeric input', async () => {
+            deviceCommandService.numberRange.mockResolvedValue(undefined);
+
+            await expect(strategy.setFlowRate(CreateValveModel(), 50)).rejects.toThrow('sans saisie numérique');
+            expect(deviceCommandService.execute).not.toHaveBeenCalled();
         });
     });
 

@@ -32,7 +32,7 @@ describe('StructureModel model', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(pump);
+        await rpiActuatorStrategy.init(pump);
         expect(pump.config.instance).toBeDefined();
         //mod1.config.debounceTimeout: number = undefined;
         //mod1.config.activeLow: boolean = false;
@@ -47,7 +47,7 @@ describe('StructureModel model', () => {
         //mod1.config.debounceTimeout: number = undefined;
         //mod1.config.activeLow: boolean = false;
         //mod1.config.reconfigureDirection: boolean = true;
-        await rpiActuatorStrategy.configure(valve1);
+        await rpiActuatorStrategy.init(valve1);
         expect(valve1.config.instance).toBeDefined();
 
         const valve2 = CreateActuatorRpiModel();
@@ -59,7 +59,7 @@ describe('StructureModel model', () => {
         //mod1.config.debounceTimeout: number = undefined;
         //mod1.config.activeLow: boolean = false;
         //mod1.config.reconfigureDirection: boolean = true;
-        await rpiActuatorStrategy.configure(valve2);
+        await rpiActuatorStrategy.init(valve2);
         expect(valve2.config.instance).toBeDefined();
 
         const valve3 = CreateActuatorRpiModel();
@@ -71,7 +71,7 @@ describe('StructureModel model', () => {
         //mod1.config.debounceTimeout: number = undefined;
         //mod1.config.activeLow: boolean = false;
         //mod1.config.reconfigureDirection: boolean = true;
-        await rpiActuatorStrategy.configure(valve3);
+        await rpiActuatorStrategy.init(valve3);
         expect(valve3.config.instance).toBeDefined();
 
         const valve4 = CreateActuatorRpiModel();
@@ -83,7 +83,7 @@ describe('StructureModel model', () => {
         //mod1.config.debounceTimeout: number = undefined;
         //mod1.config.activeLow: boolean = false;
         //mod1.config.reconfigureDirection: boolean = true;
-        await rpiActuatorStrategy.configure(valve4);
+        await rpiActuatorStrategy.init(valve4);
         expect(valve4.config.instance).toBeDefined();
 
         const registry = new Map<string, IActuatorModule>(

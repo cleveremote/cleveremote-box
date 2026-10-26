@@ -23,13 +23,13 @@ describe('SensorMapper', () => {
     it('should map a COM model to a schema input with its config copied', () => {
         const model = Object.assign(new SensorModel(), {
             id: 'sensor-2', name: 'sensor', description: 'd', type: SensorType.COM,
-            config: Object.assign(new ComSensorConfigModel(), { cronPattern: '*/30 * * * * *', comRequestId: 'request-1' })
+            config: Object.assign(new ComSensorConfigModel(), { cronPattern: '*/30 * * * * *', commandId: 'command-1' })
         });
 
         const schema = SensorMapper.mapToSchema(model);
 
         expect(schema).toEqual(expect.objectContaining({ name: 'sensor', type: SensorType.COM }));
-        expect(schema.config).toEqual(expect.objectContaining({ cronPattern: '*/30 * * * * *', comRequestId: 'request-1' }));
+        expect(schema.config).toEqual(expect.objectContaining({ cronPattern: '*/30 * * * * *', commandId: 'command-1' }));
     });
 
     it('should map a child sensor document (parentId set) to a model with a code/scale/unit config', () => {
@@ -77,7 +77,7 @@ describe('SensorMapper', () => {
         const model = Object.assign(new SensorModel(), {
             _id: 'sensor-6', name: 'sensor', description: 'd', type: SensorType.COM,
             isEnabled: undefined, display: undefined,
-            config: Object.assign(new ComSensorConfigModel(), { cronPattern: '*/30 * * * * *', comRequestId: 'request-1' })
+            config: Object.assign(new ComSensorConfigModel(), { cronPattern: '*/30 * * * * *', commandId: 'command-1' })
         });
 
         const schema = SensorMapper.mapToSchema(model);

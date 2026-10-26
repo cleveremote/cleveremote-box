@@ -1,6 +1,6 @@
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
-import { ComRequestConfigModel } from './com-request.model';
+import { DeviceCommandOverride } from './device-command.model';
 
 export interface ModuleTimingConfig {
     waitBeforeExec: number;
@@ -15,10 +15,18 @@ export interface SequenceModuleRef {
     customValue?: number;
 }
 
+export interface CustomStackModel {
+    commandId: string;
+    deviceId: string;
+    params?: DeviceCommandOverride;
+    defaultParams?: DeviceCommandOverride;
+}
+
 export interface SecurityConfig {
     maxDuration: number;
     conditions?: ConditionModel[];
-    customStacks?: { comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel }[];
+    // DeviceCommand exécutée sur le slave deviceId au démarrage (params) et à l'arrêt (defaultParams) de la séquence
+    customStacks?: CustomStackModel[];
 }
 
 export class SequenceModel {

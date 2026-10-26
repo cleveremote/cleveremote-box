@@ -1,9 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { DeviceKind, SlaveTemplate } from '@process/domain/models/device.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
-import { ComRequestConfigDTO, PortConfigDTO } from './synchronize.dto';
+import { DeviceCommandBaseDTO, PortConfigDTO } from './synchronize.dto';
 
 export class SlaveTemplateDeviceDTO {
     @IsNotEmpty()
@@ -28,28 +27,14 @@ export class SlaveTemplateDeviceDTO {
     public portConfig?: PortConfigDTO;
 }
 
-export class SlaveTemplateComRequestDTO {
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Nom de la requête' })
-    public name: string;
-
+// Commande du modèle : _id présent = commande existante mise à jour (les actionneurs, sensors et séquences
+// la référencent), absent = nouvelle commande
+export class SlaveTemplateCommandDTO extends DeviceCommandBaseDTO {
     @IsOptional()
     @IsString()
-    @ApiProperty({ description: 'Description de la requête' })
-    public description?: string;
-
-    @IsArray()
-    @ArrayNotEmpty()
-    @IsEnum(ComRequestType, { each: true })
-    @ApiProperty({ description: 'Type(s) de la requête', enum: ComRequestType, isArray: true })
-    public type: ComRequestType[];
-
     @IsNotEmpty()
-    @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    @ApiProperty({ description: 'Configuration Modbus' })
-    public config: ComRequestConfigDTO;
+    @ApiProperty({ description: 'Identifiant de la commande (absent = nouvelle commande)', required: false })
+    public _id?: string;
 }
 
 export class SlaveTemplateDTO {
@@ -79,8 +64,8 @@ export class SlaveTemplateDTO {
 
     @IsArray()
     @ValidateNested({ each: true })
-    @Type(() => SlaveTemplateComRequestDTO)
-    public comRequests: SlaveTemplateComRequestDTO[];
+    @Type(() => SlaveTemplateCommandDTO)
+    public deviceCommands: SlaveTemplateCommandDTO[];
 
     public static mapToSlaveTemplate(dto: SlaveTemplateDTO): SlaveTemplate {
         return {
@@ -94,18 +79,18 @@ export class SlaveTemplateDTO {
                 kind: dto.device.kind,
                 portConfig: dto.device.portConfig && { ...dto.device.portConfig }
             },
-            comRequests: dto.comRequests.map((cr) => ({
-                name: cr.name,
-                description: cr.description,
-                type: cr.type,
-                config: {
-                    function: cr.config.function,
-                    address: cr.config.address,
-                    disabled: cr.config.disabled,
-                    done: cr.config.done ?? false,
-                    type: cr.config.type,
-                    params: cr.config.params || undefined
-                }
+            deviceCommands: dto.deviceCommands.map((command) => ({
+                _id: command._id,
+                name: command.name,
+                description: command.description,
+                blockId: command.blockId,
+                operationId: command.operationId,
+                channel: command.channel,
+                value: command.value,
+                isPersistent: command.isPersistent,
+                isConfirmed: command.isConfirmed,
+                types: [...command.types],
+                params: command.params
             }))
         };
     }

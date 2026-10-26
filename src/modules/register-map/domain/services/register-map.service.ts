@@ -4,9 +4,10 @@ import { RegisterMapInputError, RegisterMapNotFoundError } from '../errors/regis
 import { ModbusConnection, ModbusTransport } from '../models/modbus-connection.model';
 import {
     DecodedChannel, DecodedField, DecodedValue, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
-    RegisterOperationCommand, RegisterOperationError, RegisterOperationOutcome, RegisterFunction, RegisterRawData, RegisterRequest
+    RegisterOperationCommand, RegisterOperationError, RegisterOperationOutcome, RegisterOperationParams, RegisterFunction, RegisterRawData,
+    RegisterRequest
 } from '../models/register-map.model';
-import { RegisterValueEncoder } from '../utils/register-map.util';
+import { RegisterOperationDescriber, RegisterValueEncoder } from '../utils/register-map.util';
 import { FormulaEvaluator, RegisterFieldDecoder } from '../utils/register-field.util';
 import { FormulaEngine } from './formula-engine.service';
 import { ModbusBusService } from './modbus-bus.service';
@@ -44,6 +45,12 @@ export class RegisterMapService {
             throw new RegisterMapNotFoundError(`Opération ${blockId}.${operationId} inconnue pour ${template.kind}`);
         }
         return { block, operation };
+    }
+
+    /** Paramètres attendus par l'opération (voie, valeur, enums résolus) ; lève RegisterMapNotFoundError si elle n'existe pas */
+    public describeParams(template: RegisterMapTemplate, blockId: string, operationId: string): RegisterOperationParams {
+        const { block, operation } = this.findOperation(template, blockId, operationId);
+        return RegisterOperationDescriber.describe(template, block, operation); 
     }
 
     /** Traduit une opération + saisie en requête Modbus brute ; lève RegisterMapInputError si la saisie est invalide */

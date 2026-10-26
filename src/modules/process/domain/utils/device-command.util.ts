@@ -1,9 +1,15 @@
 import { RegisterOperationOutcome } from '@register-map/domain/models/register-map.model';
+import { DeviceCommandModel, DeviceCommandType } from '../models/device-command.model';
 
 export interface DeviceCommandValue {
     name: string;
     value: number;
     unit?: string;
+}
+
+/** La commande porte cet usage (une commande peut en cumuler plusieurs, ex: init + reset) */
+export function hasCommandType(command: Pick<DeviceCommandModel, 'types'>, type: DeviceCommandType): boolean {
+    return command.types?.includes(type) ?? false;
 }
 
 /**

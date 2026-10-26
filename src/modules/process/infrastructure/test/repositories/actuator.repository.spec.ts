@@ -4,22 +4,27 @@ import { ActuatorMongooseRepository } from '@process/infrastructure/repositories
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { SynchronizeActuatorModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
+import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 
 describe('ActuatorRepository', () => {
     let mongooseRepository: {
         create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByIds: jest.Mock;
     };
-    let sequenceMongooseRepository: { removeModuleConfigsByModuleId: jest.Mock };
+    let sequenceMongooseRepository: { removeModuleConfigsByModuleId: jest.Mock; findCycleIdsByModuleId: jest.Mock };
+    let cycleRepository: { get: jest.Mock; delete: jest.Mock };
     let repository: ActuatorRepository;
 
     beforeEach(() => {
         mongooseRepository = {
             create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByIds: jest.fn()
         };
-        sequenceMongooseRepository = { removeModuleConfigsByModuleId: jest.fn() };
+        sequenceMongooseRepository = { removeModuleConfigsByModuleId: jest.fn(), findCycleIdsByModuleId: jest.fn().mockResolvedValue([]) };
+        cycleRepository = { get: jest.fn(), delete: jest.fn().mockResolvedValue(true) };
         repository = new ActuatorRepository(
             mongooseRepository as never as ActuatorMongooseRepository,
-            sequenceMongooseRepository as never as SequenceMongooseRepository
+            sequenceMongooseRepository as never as SequenceMongooseRepository,
+            cycleRepository as never as CycleRepository
         );
     });
 
@@ -60,6 +65,42 @@ describe('ActuatorRepository', () => {
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
             expect(sequenceMongooseRepository.removeModuleConfigsByModuleId).toHaveBeenCalledWith('id-1');
             expect(result).toEqual(true);
+            expect(cycleRepository.delete).not.toHaveBeenCalled();
+        });
+
+        it('should delete a MODULE cycle left without any module', async () => {
+            sequenceMongooseRepository.findCycleIdsByModuleId.mockResolvedValue(['cycle-1']);
+            cycleRepository.get.mockResolvedValue({ _id: 'cycle-1', type: CycleType.MODULE, sequences: [{ moduleConfigs: [] }] });
+
+            await repository.delete('id-1');
+
+            expect(cycleRepository.get).toHaveBeenCalledWith('cycle-1');
+            expect(cycleRepository.delete).toHaveBeenCalledWith('cycle-1');
+        });
+
+        it('should keep a MODULE cycle still referencing another module', async () => {
+            sequenceMongooseRepository.findCycleIdsByModuleId.mockResolvedValue(['cycle-1']);
+            cycleRepository.get.mockResolvedValue({ _id: 'cycle-1', type: CycleType.MODULE, sequences: [{ moduleConfigs: [{ moduleId: 'id-2' }] }] });
+
+            await repository.delete('id-1');
+
+            expect(cycleRepository.delete).not.toHaveBeenCalled();
+        });
+
+        it('should never delete a CYCLE cycle, even left without any module', async () => {
+            sequenceMongooseRepository.findCycleIdsByModuleId.mockResolvedValue(['cycle-1']);
+            cycleRepository.get.mockResolvedValue({ _id: 'cycle-1', type: CycleType.CYCLE, sequences: [{ moduleConfigs: [] }] });
+
+            await repository.delete('id-1');
+
+            expect(cycleRepository.delete).not.toHaveBeenCalled();
+        });
+
+        it('should look up the cycles before removing the module configs', async () => {
+            await repository.delete('id-1');
+
+            expect(sequenceMongooseRepository.findCycleIdsByModuleId.mock.invocationCallOrder[0])
+                .toBeLessThan(sequenceMongooseRepository.removeModuleConfigsByModuleId.mock.invocationCallOrder[0]);
         });
     });
 

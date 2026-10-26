@@ -6,16 +6,9 @@ import { ActuatorType } from '@process/domain/interfaces/actuator-module.interfa
 
 @Schema({ _id: false })
 export class ComActuatorActionConfig {
-    // ancien chemin ComRequest
-    @Prop()
-    public comRequestId?: string;
-
-    @Prop()
-    public portNumber?: number;
-
-    // DeviceCommand (register map), prioritaire sur comRequestId
-    @Prop()
-    public commandId?: string;
+    // DeviceCommand (register map)
+    @Prop({ required: true })
+    public commandId: string;
 
     @Prop()
     public channel?: number;

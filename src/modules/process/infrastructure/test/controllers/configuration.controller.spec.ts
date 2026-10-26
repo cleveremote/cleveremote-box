@@ -2,12 +2,10 @@ import { ConfigurationController } from '@process/infrastructure/controllers/con
 import { StructureService } from '@process/domain/services/configuration.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import {
-    ComRequestConfigDTO,
-    ComRequestDTO,
     CycleSynchronizeDTO,
+    DeviceCommandDTO,
     DeviceConfigDTO,
     DeviceSynchronizeDTO,
-    ModbusTaskParams,
     ActuatorConfigDTO,
     ActuatorSynchronizeDTO,
     ScheduleSynchronizeDTO,
@@ -24,7 +22,7 @@ import { ExecutableAction } from '@process/domain/interfaces/executable.interfac
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { DeviceType, MasterProtocol } from '@process/domain/models/device.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 
 describe('ConfigurationController', () => {
     let configurationService: { getConfigurationWithStatus: jest.Mock; getStatus: jest.Mock };
@@ -36,7 +34,7 @@ describe('ConfigurationController', () => {
         synchronizeService = {
             synchronize: jest.fn(),
             synchronizeDeviceList: jest.fn(),
-            synchronizeModbusTaskList: jest.fn(),
+            synchronizeDeviceCommandList: jest.fn(),
             synchronizeCycle: jest.fn(),
             synchronizeSchedule: jest.fn(),
             synchronizeTrigger: jest.fn(),
@@ -80,21 +78,17 @@ describe('ConfigurationController', () => {
         ]);
     });
 
-    it('should map and delegate a modbus task list synchronization', async () => {
-        synchronizeService.synchronizeModbusTaskList.mockResolvedValue(['result']);
-        const dto = Object.assign(new ComRequestDTO(), {
-            _id: 'task-1', deviceId: 'conn-1', name: 'task', type: [ComRequestType.DIGITAL_OUTPUT],
-            config: Object.assign(new ComRequestConfigDTO(), {
-                function: ['readHoldingRegisters'], address: 0,
-                params: Object.assign(new ModbusTaskParams(), { length: 1, scale: 1, unit: '' })
-            })
+    it('should map and delegate a device command list synchronization', async () => {
+        synchronizeService.synchronizeDeviceCommandList.mockResolvedValue(['result']);
+        const dto = Object.assign(new DeviceCommandDTO(), {
+            _id: 'command-1', deviceId: 'slave-1', name: 'DO', blockId: 'outputs', operationId: 'set', channel: 2, types: [DeviceCommandType.INIT]
         });
 
-        const result = await controller.synchroniseComRequest([dto]);
+        const result = await controller.synchroniseDeviceCommand([dto]);
 
         expect(result).toEqual(['result']);
-        expect(synchronizeService.synchronizeModbusTaskList).toHaveBeenCalledWith([
-            expect.objectContaining({ _id: 'task-1' })
+        expect(synchronizeService.synchronizeDeviceCommandList).toHaveBeenCalledWith([
+            expect.objectContaining({ _id: 'command-1', blockId: 'outputs', operationId: 'set', channel: 2, types: [DeviceCommandType.INIT], isDone: false, delete: false })
         ]);
     });
 

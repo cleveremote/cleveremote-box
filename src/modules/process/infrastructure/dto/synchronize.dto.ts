@@ -13,13 +13,11 @@ import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from 
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
     SynchronizeDeviceModel,
-    SynchronizeComRequestModel,
     SynchronizeDeviceCommandModel,
     SynchronizeActuatorModel,
     SynchronizeScheduleModel,
@@ -29,10 +27,10 @@ import {
 } from '@process/domain/models/synchronize.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
-import { RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+import { RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
 @ValidatorConstraint({ name: 'condition-value', async: false })
 export class IsConditionValue implements ValidatorConstraintInterface {
@@ -63,106 +61,35 @@ export class IsValidConditionExpression implements ValidatorConstraintInterface 
     }
 }
 
-export class PersistenceDTO {
-    @IsBoolean()
-    @ApiProperty({ description: 'Si vrai, écriture persistante (EEPROM) plutôt que volatile' })
-    public persist: boolean;
-
-    @IsNumber()
-    @ApiProperty({ description: 'Adresse cible pour l\'écriture persistante' })
-    public address: number;
-}
-
-@ValidatorConstraint({ name: 'number-or-number-array', async: false })
-export class IsNumberOrNumberArray implements ValidatorConstraintInterface {
-    public validate(value: any, args: ValidationArguments) {
-        return typeof value === 'number' || (Array.isArray(value) && value.every(item => typeof item === 'number'));
-    }
-
-    public defaultMessage(args: ValidationArguments) {
-        return '($value) must be a number or an array of numbers';
-    }
-}
-
-export class ModbusTaskParams {
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: 'Longueur (nombre de registres à lire ou écrire)' })
-    public length: number;
-
+// surcharge voie / valeur d'une DeviceCommand (cf. DeviceCommandOverride)
+export class DeviceCommandOverrideDTO {
     @IsOptional()
     @IsNumber()
-    @ApiProperty({ description: 'Facteur d’échelle appliqué à la valeur brute' })
-    public scale: number;
+    @ApiProperty({ description: 'Voie, 0-based (scope channel)', required: false })
+    public channel?: number;
 
+    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée à l'exécution par le template
     @IsOptional()
-    @IsString()
-    @ApiProperty({ description: 'Unité de mesure (ex: °C, L/h, bar...)' })
-    public unit: string;
-
-    @IsOptional()
-    @Validate(IsNumberOrNumberArray)
-    @ApiProperty({ description: 'Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)', required: false })
-    public value?: number | number[];
-
-    @IsOptional()
-    @ValidateIf((o, value) => value !== null)
-    @IsString()
-    @ApiProperty({ description: 'Formule mathjs de transformation de la valeur lue (ex: "raw")', required: false, nullable: true })
-    public formula?: string | null;
-
-    @IsOptional()
-    @ValidateNested()
-    @Type(() => PersistenceDTO)
-    @ApiProperty({ description: 'Configuration de persistance (EEPROM) du paramètre, si applicable' })
-    public persistence?: PersistenceDTO;
-}
-
-export class ComRequestConfigDTO {
-    @IsArray()
-    @ArrayNotEmpty()
-    @IsEnum(ModbusFunctionName, { each: true })
-    @ApiProperty({ description: 'Fonction(s) Modbus à exécuter', enum: ModbusFunctionName, isArray: true })
-    public function: ModbusFunctionName[];
-
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: 'Adresse Modbus à interroger (ou écrire)' })
-    public address: number;
-
-    @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: 'Désactive la requête sans la supprimer', required: false })
-    public disabled?: boolean;
-
-    @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: 'Indique si la requête a été traitée', required: false, default: false })
-    public done?: boolean;
-
-    @IsOptional()
-    @IsEnum(ModbusValueType)
-    @ApiProperty({ description: 'Type de valeur lue (défaut : int)', enum: ModbusValueType, required: false })
-    public type?: ModbusValueType;
-
-    @ValidateNested()
-    @Type(() => ModbusTaskParams)
-    @ApiProperty({ description: 'Paramètres de la requête (longueur, échelle, unité)' })
-    public params?: ModbusTaskParams;
+    @ApiProperty({ description: 'Valeur (selon operation.input)', required: false })
+    public value?: RegisterOperationValue;
 }
 
 export class CustomStackSync {
     @IsString()
     @IsNotEmpty()
-    public comRequestId: string;
+    public commandId: string;
+    // slave sur lequel la commande est exécutée (du modèle de la commande)
+    @IsString()
+    @IsNotEmpty()
+    public deviceId: string;
     @IsOptional()
     @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    public params?: ComRequestConfigDTO;
+    @Type(() => DeviceCommandOverrideDTO)
+    public params?: DeviceCommandOverrideDTO;
     @IsOptional()
     @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    public defaultParams?: ComRequestConfigDTO;
+    @Type(() => DeviceCommandOverrideDTO)
+    public defaultParams?: DeviceCommandOverrideDTO;
 }
 
 export class SecurityConfigSync {
@@ -370,27 +297,10 @@ export class CycleSynchronizeDTO {
                 maxDuration: sequenceSync.securityConfig.maxDuration,
                 ...(sequenceSync.securityConfig.customStacks !== undefined && {
                     customStacks: sequenceSync.securityConfig.customStacks.map(customStackSync => ({
-                        comRequestId: customStackSync.comRequestId,
-                        ...(customStackSync.params !== undefined && {
-                            params: {
-                                function: customStackSync.params.function,
-                                address: customStackSync.params.address,
-                                disabled: customStackSync.params.disabled,
-                                done: customStackSync.params.done ?? false,
-                                type: customStackSync.params.type,
-                                params: customStackSync.params.params || undefined
-                            }
-                        }),
-                        ...(customStackSync.defaultParams !== undefined && {
-                            defaultParams: {
-                                function: customStackSync.defaultParams.function,
-                                address: customStackSync.defaultParams.address,
-                                disabled: customStackSync.defaultParams.disabled,
-                                done: customStackSync.defaultParams.done ?? false,
-                                type: customStackSync.defaultParams.type,
-                                params: customStackSync.defaultParams.params || undefined
-                            }
-                        })
+                        commandId: customStackSync.commandId,
+                        deviceId: customStackSync.deviceId,
+                        ...(customStackSync.params !== undefined && { params: { ...customStackSync.params } }),
+                        ...(customStackSync.defaultParams !== undefined && { defaultParams: { ...customStackSync.defaultParams } })
                     }))
                 }),
                 ...(sequenceSync.securityConfig.conditions !== undefined && {
@@ -697,15 +607,16 @@ export class SensorConfigDTO {
     @IsEnum(forcastDataName)
     public forcastData?: forcastDataName;
 
-    // COM : comRequestId (ancien) ou commandId (register map)
-    @ValidateIf(o => o.type === SensorType.COM && !o.commandId)
-    @IsString()
-    @IsNotEmpty()
-    public comRequestId?: string;
-    @IsOptional()
+    // COM : DeviceCommand (register map)
+    @ValidateIf(o => o.type === SensorType.COM)
     @IsString()
     @IsNotEmpty()
     public commandId?: string;
+    // COM : slave sur lequel la commande est lue (du modèle de la commande)
+    @ValidateIf(o => o.type === SensorType.COM)
+    @IsString()
+    @IsNotEmpty()
+    public deviceId?: string;
     @IsOptional()
     @IsString()
     public field?: string;
@@ -837,21 +748,10 @@ export class ValveSynchronizeDTO {
 }
 
 export class ComActuatorActionConfigDTO {
-    // ancien chemin ComRequest
-    @ValidateIf(o => !o.commandId)
+    // DeviceCommand (register map)
     @IsString()
     @IsNotEmpty()
-    public comRequestId?: string;
-
-    @ValidateIf(o => !o.commandId)
-    @IsNumber()
-    public digitalPort?: number;
-
-    // DeviceCommand (register map), prioritaire sur comRequestId
-    @IsOptional()
-    @IsString()
-    @IsNotEmpty()
-    public commandId?: string;
+    public commandId: string;
 
     @IsOptional()
     @IsNumber()
@@ -1012,6 +912,11 @@ export class DeviceConfigDTO {
     public masterDeviceId?: string;
 
     @IsOptional()
+    @IsString()
+    @ApiProperty({ description: 'Modèle (slave template) dont le slave partage les commandes', required: false })
+    public modelId?: string;
+
+    @IsOptional()
     @ValidateNested()
     @Type(() => PortConfigDTO)
     @ApiProperty({ description: 'Configuration des ports de l\'équipement', required: false })
@@ -1052,20 +957,6 @@ export class DeviceSynchronizeDTO {
     @Type(() => DeviceSynchronizeDTO)
     public slaveDevices?: DeviceSynchronizeDTO[];
 
-    // comrequests imbriques appartenant a ce device (leur deviceId sera ecrase cote serveur).
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => ComRequestDTO)
-    public comRequests?: ComRequestDTO[];
-
-    // commandes register map imbriquees appartenant a ce device (leur deviceId sera ecrase cote serveur).
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => DeviceCommandDTO)
-    public deviceCommands?: DeviceCommandDTO[];
-
     // --- Méthode de mapping vers le modèle principal ---
     public static mapToDeviceModel(dto: DeviceSynchronizeDTO): SynchronizeDeviceModel {
         const model = new SynchronizeDeviceModel();
@@ -1080,82 +971,12 @@ export class DeviceSynchronizeDTO {
         model.delete = dto.delete ?? false;
         // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
         model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);
-        model.comrequests = dto.comRequests?.map(ComRequestDTO.mapToComRequestModel);
-        model.devicecommands = dto.deviceCommands?.map(DeviceCommandDTO.mapToDeviceCommandModel);
         return model;
     }
 }
 
-export class ComRequestDTO {
-    @IsOptional()
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Identifiant unique de la requête' })
-    public _id: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Identifiant de la connexion associée' })
-    public deviceId: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Nom lisible ou étiquette de la requête' })
-    public name: string;
-
-    @IsOptional()
-    @IsString()
-    @ApiProperty({ description: 'Description de la requête' })
-    public description?: string;
-
-    @IsArray()
-    @ArrayNotEmpty()
-    @IsEnum(ComRequestType, { each: true })
-    @ApiProperty({ description: 'Type(s) de la requête de communication', enum: ComRequestType, isArray: true })
-    public type: ComRequestType[];
-
-    @IsNotEmpty()
-    @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    @ApiProperty({ description: 'Configuration Modbus (fonction, adresse, paramètres)' })
-    public config: ComRequestConfigDTO;
-    @IsOptional()
-    @IsBoolean()
-    public delete?: boolean = false;
-
-    // --- Méthode de mapping vers le modèle principal ---
-    public static mapToComRequestModel(dto: ComRequestDTO): SynchronizeComRequestModel {
-        const model = new SynchronizeComRequestModel();
-        model._id = dto._id;
-        model.deviceId = dto.deviceId;
-        model.name = dto.name;
-        model.description = dto.description;
-        model.type = dto.type;
-        model.config = {
-            function: dto.config.function,
-            address: dto.config.address,
-            disabled: dto.config.disabled,
-            done: dto.config.done ?? false,
-            type: dto.config.type,
-            params: dto.config.params || undefined
-        };
-        model.delete = dto.delete ?? false;
-        return model;
-    }
-}
-
-export class DeviceCommandDTO {
-    @IsOptional()
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Identifiant unique de la commande' })
-    public _id: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Slave cible (son kind désigne la register map)' })
-    public deviceId: string;
-
+// Champs d'une DeviceCommand hors identifiants (aussi utilisés par les slave templates)
+export class DeviceCommandBaseDTO {
     @IsNotEmpty()
     @IsString()
     @ApiProperty({ description: 'Nom lisible de la commande' })
@@ -1196,6 +1017,31 @@ export class DeviceCommandDTO {
     @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
     public isConfirmed?: boolean;
 
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsEnum(DeviceCommandType, { each: true })
+    @ApiProperty({ enum: DeviceCommandType, isArray: true, description: 'Usages cumulables de la commande : set, read, init (initialisation du device), reset (remise à zéro du device)' })
+    public types: DeviceCommandType[];
+
+    // Recalculé depuis la register map à l'enregistrement : la valeur reçue n'est conservée que si l'opération est introuvable
+    @IsOptional()
+    @IsObject()
+    @ApiProperty({ description: 'Typage de la voie et de la valeur (listes, bornes) pour les formulaires', required: false })
+    public params?: RegisterOperationParams;
+}
+
+export class DeviceCommandDTO extends DeviceCommandBaseDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant unique de la commande' })
+    public _id: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Modèle (slave template) propriétaire, partagé par ses slaves (son kind désigne la register map)' })
+    public modelId: string;
+
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
@@ -1203,7 +1049,7 @@ export class DeviceCommandDTO {
     public static mapToDeviceCommandModel(dto: DeviceCommandDTO): SynchronizeDeviceCommandModel {
         const model = new SynchronizeDeviceCommandModel();
         model._id = dto._id;
-        model.deviceId = dto.deviceId;
+        model.modelId = dto.modelId;
         model.name = dto.name;
         model.description = dto.description;
         model.blockId = dto.blockId;
@@ -1212,6 +1058,8 @@ export class DeviceCommandDTO {
         model.value = dto.value;
         model.isPersistent = dto.isPersistent;
         model.isConfirmed = dto.isConfirmed;
+        model.types = [...dto.types];
+        model.params = dto.params;
         model.delete = dto.delete ?? false;
         return model;
     }

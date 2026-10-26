@@ -1,6 +1,7 @@
+/* eslint-disable max-lines */
 // Modélisation d'une register map (ex: register-maps/*.json) : table de registres complète d'un module,
 // décrite pour que le front génère un banc de test (un widget par opération).
-// Indépendant du fonctionnel : aucune notion de device, master, slave ou comRequest.
+// Indépendant du fonctionnel : aucune notion de device, master, slave ou commande.
 
 // Fonctions Modbus supportées (mêmes valeurs que les noms de méthodes modbus-serial)
 export enum RegisterFunction {
@@ -165,6 +166,41 @@ export interface RegisterMapTemplate {
     hardware: RegisterMapHardware;
     enums: Record<string, RegisterEnumEntry[]>;
     registerMap: RegisterBlock[];
+    // Valeurs par défaut du device créé depuis ce template (libre pour le module, ex: portConfig)
+    device?: Record<string, unknown>;
+}
+
+// Voie (scope 'channel') : index 0-based dans [min, max], affiché labelStart + index
+export interface OperationChannelParam {
+    min: number;
+    max: number;
+    labelStart: number;
+}
+
+// Champ composite résolu : enum remplacé par ses entrées
+export type CompositeFieldParam = Omit<CompositeField, 'enum'> & { entries?: RegisterEnumEntry[] };
+
+// Saisie résolue : comme OperationInput (hors 'none'), enums remplacés par leurs entrées (filtrées par `only`)
+export type OperationValueParam =
+    | { type: 'enum'; entries: RegisterEnumEntry[] }
+    | { type: 'number'; min: number; max: number; default?: number; scale?: number; unit?: string }
+    | { type: 'boolean[]'; length: number }
+    | { type: 'enum[]'; length: number; entries: RegisterEnumEntry[] }
+    | { type: 'number[]'; length: number; min: number; max: number; unit?: string }
+    | { type: 'composite'; encode?: string; fields: CompositeFieldParam[] };
+
+// Paramètres à fournir pour exécuter l'opération, prêts pour générer la saisie sans relire le template
+export interface RegisterOperationParams {
+    // scope 'channel' uniquement : voie à fournir
+    channel?: OperationChannelParam;
+    // scope 'range' uniquement : voies couvertes par la requête
+    range?: OperationChannelParam;
+    // Absent quand l'opération n'attend aucune saisie (input absent ou 'none')
+    value?: OperationValueParam;
+    // Bloc `danger` : isConfirmed requis
+    isConfirmRequired: boolean;
+    // operation.params.persistence présent : isPersistent possible
+    isPersistable: boolean;
 }
 
 // Valeur saisie côté front : nombre (enum/number/none), tableau (boolean[]/enum[]) ou champs (composite)

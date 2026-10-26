@@ -1,7 +1,7 @@
 import { RegisterMapInputError } from '../errors/register-map.error';
 import {
-    CompositeField, READ_FUNCTIONS, RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation,
-    RegisterOperationValue, RegisterRequest
+    CompositeField, OperationChannelParam, OperationInput, OperationValueParam, READ_FUNCTIONS, RegisterBlock, RegisterEnumEntry,
+    RegisterFunction, RegisterMapTemplate, RegisterOperation, RegisterOperationParams, RegisterOperationValue, RegisterRequest
 } from '../models/register-map.model';
 import { RegisterFieldDecoder } from './register-field.util';
 
@@ -91,6 +91,45 @@ export class RegisterMapValidator {
 
     private static _checkEnum(template: RegisterMapTemplate, errors: string[], where: string, name?: string): void {
         if (name !== undefined && !template.enums?.[name]) errors.push(`${where}: enum "${name}" absent`);
+    }
+}
+
+/** Description des paramètres à fournir pour une opération (voie ou voies couvertes, valeur), enums résolus */
+export class RegisterOperationDescriber {
+
+    public static describe(template: RegisterMapTemplate, block: RegisterBlock, operation: RegisterOperation): RegisterOperationParams {
+        const input = operation.input;
+        // clés absentes (pas undefined) : sinon persistées à null en base
+        return {
+            ...(operation.scope === 'channel' && { channel: RegisterOperationDescriber._channels(template, block.address.count) }),
+            ...(operation.scope === 'range' && { range: RegisterOperationDescriber._channels(template, operation.params?.length ?? 1) }),
+            ...(input && input.type !== 'none' && { value: RegisterOperationDescriber._value(template, input) }),
+            isConfirmRequired: !!block.danger,
+            isPersistable: !!operation.params?.persistence
+        };
+    }
+
+    // Voies 0..count-1, numérotées à partir de hardware.channels.labelStart
+    private static _channels(template: RegisterMapTemplate, count: number): OperationChannelParam {
+        return { min: 0, max: count - 1, labelStart: template.hardware.channels?.labelStart ?? 1 };
+    }
+
+    private static _value(template: RegisterMapTemplate, input: Exclude<OperationInput, { type: 'none' }>): OperationValueParam {
+        switch (input.type) {
+            case 'enum':
+                return { type: 'enum', entries: RegisterValueEncoder.entries(template, input.enum, input.only) };
+            case 'enum[]':
+                return { type: 'enum[]', length: input.length, entries: RegisterValueEncoder.entries(template, input.enum) };
+            case 'composite':
+                return {
+                    type: 'composite',
+                    encode: input.encode,
+                    fields: input.fields.map(({ enum: enumName, ...field }) =>
+                        (enumName ? { ...field, entries: RegisterValueEncoder.entries(template, enumName) } : field))
+                };
+            default:
+                return { ...input };
+        }
     }
 }
 

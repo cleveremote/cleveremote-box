@@ -1,9 +1,11 @@
 /* eslint-disable max-lines-per-function */
 import { Injectable } from '@nestjs/common';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
+import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
+import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
+import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { CycleModel } from '../models/cycle.model';
 import { SequenceModel } from '../models/sequence.model';
@@ -16,21 +18,23 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
-import { ExecutableStatus } from '../interfaces/executable.interface';
+import { CycleType, ExecutableStatus, ProcessMode } from '../interfaces/executable.interface';
 import { randomUUID } from 'node:crypto';
-import { DEVICE_KIND_SPECS, DeviceModel, DeviceType, SlaveConfigModel, SlaveTemplate, getDeviceKindByAddress, getDiscoveryTargets, DeviceKind } from '../models/device.model';
-import { ModbusService } from './modbus.service';
+import { DEVICE_KIND_SPECS, DeviceModel, DeviceType, DeviceWithCommands, SlaveConfigModel, SlaveTemplate, getDeviceKindByAddress, getDiscoveryTargets, DeviceKind } from '../models/device.model';
+import { ModbusDeviceService } from './modbus-device.service';
 import { Logger } from 'nestjs-pino';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { ComRequestModel } from '../models/com-request.model';
+import { DeviceCommandType } from '../models/device-command.model';
+import { DeviceCommandService } from './device-command.service';
 import { ActuatorModel, ActuatorType, ComActuatorConfigModel } from '../models/actuator.model';
 import { ModuleStatus } from '../interfaces/structure.interface';
-import { ComRequestType } from '../interfaces/com-request.interface';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '../utils/modbus-registers.util';
+import { hasCommandType } from '../utils/device-command.util';
 
 // Slave construit à partir d'un template, avec les éléments qui lui sont rattachés
-type SlaveBundle = { device: DeviceModel; comRequests: ComRequestModel[]; actuators: ActuatorModel[] };
+type SlaveBundle = { device: DeviceModel; actuators: ActuatorModel[]; cycles: CycleModel[] };
+
+// borne d'un ON manuel sur un cycle MODULE auto-créé (1 h)
+const MODULE_SEQUENCE_MAX_DURATION = 3_600_000;
 
 @Injectable()
 export class StructureService {
@@ -42,13 +46,16 @@ export class StructureService {
 
     public constructor(
         private cycleRepository: CycleRepository,
+        private sequenceRepository: SequenceRepository,
         private sensorRepository: SensorRepository,
         private deviceRepository: DeviceRepository,
-        private modbusTaskRepository: ComRequestRepository,
+        private deviceCommandRepository: DeviceCommandRepository,
+        private slaveTemplateRepository: SlaveTemplateRepository,
         private eventRepository: EventRepository,
         private actuatorRepository: ActuatorRepository,
-        private modbusService: ModbusService,
-        private readonly logger: Logger
+        private modbusDeviceService: ModbusDeviceService,
+        private readonly logger: Logger,
+        private deviceCommandService: DeviceCommandService
     ) {
     }
 
@@ -60,7 +67,9 @@ export class StructureService {
         structureModel.cycles = await this.cycleRepository.get() as CycleModel[];
         structureModel.sensors = await this.sensorRepository.get() as StructureModel['sensors'];
         structureModel.devices = await this.deviceRepository.get() as StructureModel['devices'];
-        structureModel.modbusTasks = await this.modbusTaskRepository.get() as StructureModel['modbusTasks'];
+        structureModel.deviceCommands = await this.deviceCommandService.withParams(
+            await this.deviceCommandRepository.get() as StructureModel['deviceCommands']
+        );
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         this.structure = structureModel;
 
@@ -186,6 +195,7 @@ export class StructureService {
             });
     }
 
+    // Slave rattaché au modèle `template` (enregistré, commandes avec _id) : il en partage les DeviceCommand
     public buildSlaveFromTemplate(template: SlaveTemplate, masterDeviceId: string, slaveId = DEFAULT_UNCONFIGURED_UNIT_ID): SlaveBundle {
         const deviceId = randomUUID();
         const device: DeviceModel = {
@@ -197,23 +207,17 @@ export class StructureService {
                 slaveId,
                 masterDeviceId,
                 kind: template.kind,
+                modelId: template._id,
+                initDoneCommandIds: [],
                 portConfig: template.device.portConfig && { ...template.device.portConfig }
             },
             deletedAt: null,
         };
-        const comRequests: ComRequestModel[] = template.comRequests.map((cr) => ({
-            _id: randomUUID(),
-            deviceId,
-            name: cr.name,
-            description: cr.description,
-            type: [...cr.type],
-            config: structuredClone(cr.config),
-            deletedAt: null,
-        }));
         const actuators = template.kind === DeviceKind.DIGITAL_IO_8_CH
-            ? this._buildDigitalOutputActuators(device, comRequests)
+            ? this._buildDigitalOutputActuators(device, template.kind, template.deviceCommands)
             : [];
-        return { device, comRequests, actuators };
+        const cycles = actuators.map((actuator) => this._buildModuleCycle(device, actuator));
+        return { device, actuators, cycles };
     }
 
     // Ajoute un suffixe incrémental (" 1", " 2", ...) si un device du même type porte déjà ce nom
@@ -229,20 +233,22 @@ export class StructureService {
         return `${baseName} ${index}`;
     }
 
-    // Un actuator COM par port de sortie (portNumStart -> portNumStart + portCount - 1), piloté par le comRequest DIGITAL_OUTPUT du slave
-    private _buildDigitalOutputActuators(device: DeviceModel, comRequests: ComRequestModel[]): ActuatorModel[] {
+    // Un actuator COM par port de sortie (portNumStart -> portNumStart + portCount - 1), piloté sur sa voie
+    // par la commande set du modèle qui vise un bloc de coils
+    private _buildDigitalOutputActuators(device: DeviceModel, kind: DeviceKind, deviceCommands: SlaveTemplate['deviceCommands']): ActuatorModel[] {
         const portConfig = (device.config as SlaveConfigModel).portConfig;
         if (!portConfig) return [];
-        const outputRequest = comRequests.find((cr) => cr.type.includes(ComRequestType.DIGITAL_OUTPUT));
-        if (!outputRequest) {
-            this.logger.warn({ deviceId: device._id }, 'no DIGITAL_OUTPUT comRequest, digital output actuators not created');
+        const outputCommand = deviceCommands.find((command) =>
+            command._id && hasCommandType(command, DeviceCommandType.SET) && this.deviceCommandService.isDigitalOutputOf(kind, command));
+        if (!outputCommand) {
+            this.logger.warn({ deviceId: device._id }, 'no digital output command, digital output actuators not created');
             return [];
         }
         return Array.from({ length: portConfig.portCount }, (_, i) => {
             const portNumber = portConfig.portNumStart + i;
             const config = new ComActuatorConfigModel();
             config.deviceId = device._id;
-            config.actions = [{ comRequestId: outputRequest._id, portNumber }];
+            config.actions = [{ commandId: outputCommand._id, channel: portNumber }];
             return {
                 _id: randomUUID(),
                 status: ModuleStatus.OFF,
@@ -254,23 +260,49 @@ export class StructureService {
         });
     }
 
+    // Un cycle MODULE par actuator, d'une seule séquence qui le référence : il pilote l'actuator seul
+    private _buildModuleCycle(device: DeviceModel, actuator: ActuatorModel): CycleModel {
+        const cycle = new CycleModel();
+        cycle._id = randomUUID();
+        cycle.name = `${device.name} ${actuator.name}`;
+        cycle.description = `${device.name} ${actuator.name}`;
+        cycle.type = CycleType.MODULE;
+        cycle.style = { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'module', base: '#000000' } };
+        cycle.modePriority = Object.values(ProcessMode).map((mode) => ({ mode, priority: 0 }));
+
+        const sequence = new SequenceModel();
+        sequence._id = randomUUID();
+        sequence.cycleId = cycle._id;
+        sequence.name = actuator.name;
+        sequence.description = `${device.name} ${actuator.name}`;
+        sequence.order = 0;
+        sequence.securityConfig = { maxDuration: MODULE_SEQUENCE_MAX_DURATION };
+        sequence.moduleConfigs = [{
+            moduleId: actuator._id,
+            configTiming: { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 }
+        }];
+        cycle.sequences = [sequence];
+        return cycle;
+    }
+
     /**
      * Scanne un Master : pour chaque type de DiscoveryAddressRegister, lit son registre sur le
      * premier unit id de sa plage (DEVICE_KIND_SPECS), réservé aux modules neufs. Quand un
      * module répond, la valeur lue est son adresse : sa plage donne le type. Le module est alors
      * réadressé sur le premier slaveId libre de la plage, puis créé à partir du template du type.
+     * Chaque slave créé est renvoyé avec les DeviceCommand de son modèle (params résolus).
      */
-    public async scanMaster(masterDeviceId: string): Promise<DeviceModel[]> {
-        const master = await this._getMaster(masterDeviceId);
+    public async scanMaster(masterDeviceId: string): Promise<DeviceWithCommands[]> {
+        const master = await this._getMaster(masterDeviceId); 
         const existingSlaveIds = new Set(
             (await this.deviceRepository.getSlavesByMasterId(masterDeviceId))
                 .map((slave) => (slave.config as SlaveConfigModel).slaveId)
         );
 
         const targets = getDiscoveryTargets().map(({ unitId, register }) => ({ unitId, register }));
-        const responses = await this.modbusService.scanDiscoveryRegisters(master, targets);
-        const templates = this._loadSlaveTemplates();
-        const created: DeviceModel[] = [];
+        const responses = await this.modbusDeviceService.scanDiscoveryRegisters(master, targets);
+        const templates = await this.slaveTemplateRepository.get();
+        const created: DeviceWithCommands[] = [];
         for (const { unitId, register, value: address } of responses) {
             const kind = getDeviceKindByAddress(address);
             const spec = kind ? DEVICE_KIND_SPECS[kind] : undefined;
@@ -291,14 +323,17 @@ export class StructureService {
                 continue;
             }
             try {
-                await this.modbusService.setSlaveAdress(master, register, unitId, newSlaveId);
+                await this.modbusDeviceService.setSlaveAddress(master, register, unitId, newSlaveId);
             } catch (err) {
                 this.logger.error({ masterDeviceId, unitId, newSlaveId, err: err instanceof Error ? err.message : String(err) }, 'slave address write failed, module left unconfigured');
                 continue;
             }
-            created.push((await this._saveSlave(this.buildSlaveFromTemplate(template, masterDeviceId, newSlaveId))).device);
+            const { device } = await this._saveSlave(this.buildSlaveFromTemplate(template, masterDeviceId, newSlaveId));
+            const deviceCommands = await this.deviceCommandService.withParams(
+                await this.deviceCommandRepository.getByModelId(template._id), templates);
+            created.push({ ...device, deviceCommands });
             existingSlaveIds.add(newSlaveId);
-            this.logger.log({ masterDeviceId, newSlaveId, kind }, 'slave created from scan');
+            this.logger.log({ masterDeviceId, newSlaveId, kind }, 'slave created from scan'); 
         }
         return created;
     }
@@ -314,31 +349,44 @@ export class StructureService {
     // Pas de transaction (Mongo standalone) : si une écriture échoue, ce qui a déjà été créé est supprimé (compensation)
     private async _saveSlave(built: SlaveBundle): Promise<SlaveBundle> {
         const device = await this.deviceRepository.save(built.device);
-        const [comResults, actuatorResults] = await Promise.all([
-            Promise.allSettled(built.comRequests.map((cr) => this.modbusTaskRepository.save(cr))),
-            Promise.allSettled(built.actuators.map((actuator) => this.actuatorRepository.save(actuator)))
-        ]);
-        const failure = [...comResults, ...actuatorResults].find((r): r is PromiseRejectedResult => r.status === 'rejected');
+        const actuatorResults = await Promise.allSettled(built.actuators.map((actuator) => this.actuatorRepository.save(actuator)));
+        const actuatorFailure = this._firstFailure(actuatorResults);
+        if (actuatorFailure) {
+            await this._rollbackSlave(device, actuatorResults);
+            throw actuatorFailure.reason;
+        }
+        const cycleResults = await Promise.allSettled(built.cycles.map((cycle) => this.cycleRepository.save(cycle)));
+        const sequenceResults = this._firstFailure(cycleResults)
+            ? []
+            : await Promise.allSettled(built.cycles.flatMap((cycle) => cycle.sequences.map((sequence) => this.sequenceRepository.save(sequence))));
+        const failure = this._firstFailure(cycleResults) ?? this._firstFailure(sequenceResults);
         if (failure) {
-            await this._rollbackSlave(device, comResults, actuatorResults);
+            await this._rollbackSlave(device, actuatorResults, cycleResults);
             throw failure.reason;
         }
+        const sequences = sequenceResults.map((r) => (r as PromiseFulfilledResult<SequenceModel>).value);
         return {
             device,
-            comRequests: comResults.map((r) => (r as PromiseFulfilledResult<ComRequestModel>).value),
-            actuators: actuatorResults.map((r) => (r as PromiseFulfilledResult<ActuatorModel>).value)
+            actuators: actuatorResults.map((r) => (r as PromiseFulfilledResult<ActuatorModel>).value),
+            cycles: cycleResults.map((r) => {
+                const cycle = (r as PromiseFulfilledResult<CycleModel>).value;
+                cycle.sequences = sequences.filter((sequence) => sequence.cycleId === cycle._id);
+                return cycle;
+            })
         };
     }
 
-    private async _rollbackSlave(
-        device: DeviceModel,
-        comResults: PromiseSettledResult<ComRequestModel>[],
-        actuatorResults: PromiseSettledResult<ActuatorModel>[]
-    ): Promise<void> {
+    private _firstFailure(results: PromiseSettledResult<unknown>[]): PromiseRejectedResult | undefined {
+        return results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    }
+
+    // la suppression d'un cycle supprime aussi ses séquences (CycleRepository.delete)
+    private async _rollbackSlave(device: DeviceModel, actuatorResults: PromiseSettledResult<ActuatorModel>[],
+        cycleResults: PromiseSettledResult<CycleModel>[] = []): Promise<void> {
         const savedIds = <T extends { _id: string }>(results: PromiseSettledResult<T>[]): string[] =>
             results.filter((r): r is PromiseFulfilledResult<T> => r.status === 'fulfilled').map((r) => r.value._id);
         const rollbacks = await Promise.allSettled([
-            ...savedIds(comResults).map((id) => this.modbusTaskRepository.delete(id)),
+            ...savedIds(cycleResults).map((id) => this.cycleRepository.delete(id)),
             ...savedIds(actuatorResults).map((id) => this.actuatorRepository.delete(id)),
             this.deviceRepository.delete(device._id)
         ]);
@@ -348,7 +396,4 @@ export class StructureService {
         }
     }
 
-    private _loadSlaveTemplates(): SlaveTemplate[] {
-        return JSON.parse(readFileSync(join(process.cwd(), 'slave-templates.json'), 'utf8')) as SlaveTemplate[];
-    }
 }

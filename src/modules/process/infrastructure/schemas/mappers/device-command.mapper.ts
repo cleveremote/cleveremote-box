@@ -6,7 +6,7 @@ export class DeviceCommandMapper {
     public static mapToModel(command: DeviceCommandDocument): DeviceCommandModel {
         const model = new DeviceCommandModel();
         model._id = command._id.toString();
-        model.deviceId = command.deviceId;
+        model.modelId = command.modelId;
         model.name = command.name;
         model.description = command.description;
         model.blockId = command.blockId;
@@ -15,6 +15,8 @@ export class DeviceCommandMapper {
         model.value = command.value;
         model.isPersistent = command.isPersistent;
         model.isConfirmed = command.isConfirmed;
+        model.types = [...(command.types ?? [])];
+        model.params = command.params;
         model.createdAt = (command as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (command as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = command.deletedAt ?? null;
@@ -23,7 +25,7 @@ export class DeviceCommandMapper {
 
     public static mapToSchema(model: DeviceCommandModel): DeviceCommand {
         const command = new DeviceCommand();
-        command.deviceId = model.deviceId;
+        command.modelId = model.modelId;
         command.name = model.name;
         command.description = model.description;
         command.blockId = model.blockId;
@@ -32,6 +34,8 @@ export class DeviceCommandMapper {
         command.value = model.value;
         command.isPersistent = model.isPersistent;
         command.isConfirmed = model.isConfirmed;
+        command.types = [...(model.types ?? [])];
+        command.params = model.params;
         return command;
     }
 

@@ -1,29 +1,33 @@
-import { ComRequestConfigModel } from '@process/domain/models/com-request.model';
+import { DeviceCommandOverride } from '@process/domain/models/device-command.model';
+import { CustomStackModel } from '@process/domain/models/sequence.model';
 import { CustomStack } from '../sequence.schema';
-import { mapComRequestConfigToModel, mapComRequestConfigToSchema } from './com-request-config.mapper';
-
-type CustomStackModel = { comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel };
 
 export class CustomStackMapper {
 
     public static mapToModel(customStack: CustomStack): CustomStackModel {
         return {
-            comRequestId: customStack.comRequestId,
-            ...(customStack.params !== undefined && { params: mapComRequestConfigToModel(customStack.params) }),
-            ...(customStack.defaultParams !== undefined && { defaultParams: mapComRequestConfigToModel(customStack.defaultParams) })
+            commandId: customStack.commandId,
+            deviceId: customStack.deviceId,
+            ...(customStack.params !== undefined && { params: CustomStackMapper._override(customStack.params) }),
+            ...(customStack.defaultParams !== undefined && { defaultParams: CustomStackMapper._override(customStack.defaultParams) })
         };
     }
 
     public static mapToSchema(customStack: CustomStackModel): CustomStack {
         const schema = new CustomStack();
-        schema.comRequestId = customStack.comRequestId;
+        schema.commandId = customStack.commandId;
+        schema.deviceId = customStack.deviceId;
         if (customStack.params !== undefined) {
-            schema.params = mapComRequestConfigToSchema(customStack.params);
+            schema.params = CustomStackMapper._override(customStack.params);
         }
         if (customStack.defaultParams !== undefined) {
-            schema.defaultParams = mapComRequestConfigToSchema(customStack.defaultParams);
+            schema.defaultParams = CustomStackMapper._override(customStack.defaultParams);
         }
         return schema;
+    }
+
+    private static _override(override: DeviceCommandOverride): DeviceCommandOverride {
+        return { channel: override.channel, value: override.value };
     }
 
 }

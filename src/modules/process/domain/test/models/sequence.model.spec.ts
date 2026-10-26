@@ -9,7 +9,7 @@ import { ComActuatorStrategy } from '@process/domain/services/actuator-strategie
 
 const logger = { warn: jest.fn() } as any;
 const rpiActuatorStrategy = new RpiActuatorStrategy(logger);
-const actuatorService = new ActuatorService(logger, {} as any, [rpiActuatorStrategy, new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never, {} as never)]);
+const actuatorService = new ActuatorService(logger, {} as any, [rpiActuatorStrategy, new ComActuatorStrategy({ execute: jest.fn() } as never)]);
 
 function CreateActuatorRpiModel(): ActuatorModel & { config: RpiActuatorConfigModel } {
     const actuator = new ActuatorModel();
@@ -26,7 +26,7 @@ describe('SequenceModel model', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(pump);
+        await rpiActuatorStrategy.init(pump);
         expect(pump.config.instance).toBeDefined();
 
         const valve1 = CreateActuatorRpiModel();
@@ -35,7 +35,7 @@ describe('SequenceModel model', () => {
         valve1.name = '26';
         valve1.config.direction = GPIODirection.OUT;
         valve1.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve1);
+        await rpiActuatorStrategy.init(valve1);
         expect(valve1.config.instance).toBeDefined();
 
         const registry = new Map<string, IActuatorModule>([[pump._id, pump], [valve1._id, valve1]]);
@@ -65,7 +65,7 @@ describe('SequenceModel model', () => {
         pump.name = '16';
         pump.config.direction = GPIODirection.OUT;
         pump.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(pump);
+        await rpiActuatorStrategy.init(pump);
         expect(pump.config.instance).toBeDefined();
 
         const valve1 = CreateActuatorRpiModel();
@@ -74,7 +74,7 @@ describe('SequenceModel model', () => {
         valve1.name = '26';
         valve1.config.direction = GPIODirection.OUT;
         valve1.config.edge = GPIOEdge.BOTH;
-        await rpiActuatorStrategy.configure(valve1);
+        await rpiActuatorStrategy.init(valve1);
         expect(valve1.config.instance).toBeDefined();
 
         const registry = new Map<string, IActuatorModule>([[pump._id, pump], [valve1._id, valve1]]);

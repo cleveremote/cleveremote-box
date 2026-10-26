@@ -3,18 +3,33 @@ import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { Condition, ConditionSchema } from './condition.schema';
-import { ComRequestConfig, ComRequestConfigSchema } from './comrequest.schema';
+import { RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+
+// surcharge voie / valeur d'une DeviceCommand
+@Schema({ _id: false })
+export class DeviceCommandOverride {
+    @Prop({ type: Number, default: undefined })
+    public channel?: number;
+
+    @Prop({ type: Object, default: undefined })
+    public value?: RegisterOperationValue;
+}
+export const DeviceCommandOverrideSchema = SchemaFactory.createForClass(DeviceCommandOverride);
 
 @Schema()
 export class CustomStack {
     @Prop({ required: true })
-    public comRequestId: string;
+    public commandId: string;
 
-    @Prop({ type: ComRequestConfigSchema, default: undefined })
-    public params?: ComRequestConfig;
+    // slave sur lequel la commande est executee
+    @Prop({ required: true })
+    public deviceId: string;
 
-    @Prop({ type: ComRequestConfigSchema, default: undefined })
-    public defaultParams?: ComRequestConfig;
+    @Prop({ type: DeviceCommandOverrideSchema, default: undefined })
+    public params?: DeviceCommandOverride;
+
+    @Prop({ type: DeviceCommandOverrideSchema, default: undefined })
+    public defaultParams?: DeviceCommandOverride;
 }
 export const CustomStackSchema = SchemaFactory.createForClass(CustomStack);
 

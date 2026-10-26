@@ -2,7 +2,7 @@ import { NotImplementedError } from '@process/domain/errors/not-implemented.erro
 import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, MasterProtocol } from '@process/domain/models/device.model';
 import { DeviceService } from '@process/domain/services/device.service';
 import { DeviceStrategy } from '@process/domain/services/device-strategies/device-strategy.interface';
-import { ModbusService } from '@process/domain/services/modbus.service';
+import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
 
 function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -62,7 +62,7 @@ describe('DeviceService', () => {
         service = new DeviceService(
             logger as never,
             deviceRepository as never,
-            modbusService as unknown as ModbusService,
+            modbusService as unknown as ModbusDeviceService,
             [modbusSlaveStrategy, inverterStrategy]
         );
     });

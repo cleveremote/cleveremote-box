@@ -1,11 +1,13 @@
 import { join } from 'node:path';
 import { RegisterMapInputError, RegisterMapNotFoundError } from '@register-map/domain/errors/register-map.error';
 import { ModbusConnection, ModbusTransport } from '@register-map/domain/models/modbus-connection.model';
-import { RegisterFunction, RegisterMapTemplate } from '@register-map/domain/models/register-map.model';
+import {
+    RegisterBlock, RegisterFunction, RegisterMapTemplate, RegisterOperation
+} from '@register-map/domain/models/register-map.model';
 import { FormulaEngine } from '@register-map/domain/services/formula-engine.service';
 import { REGISTER_MAPS_DIR, RegisterMapLoader } from '@register-map/domain/services/register-map-loader.service';
 import { RegisterMapService } from '@register-map/domain/services/register-map.service';
-import { RegisterMapValidator } from '@register-map/domain/utils/register-map.util';
+import { RegisterMapValidator, RegisterValueEncoder } from '@register-map/domain/utils/register-map.util';
 
 function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -59,6 +61,168 @@ describe('RegisterMapService (module register-map)', () => {
         const logger = CreateLoggerMock();
         expect(new RegisterMapLoader(logger as any).loadFromDirectory('/nonexistent-register-maps')).toEqual([]);
         expect(logger.warn).toHaveBeenCalled();
+    });
+
+    describe('describeParams', () => {
+        afterEach(() => jest.restoreAllMocks());
+
+        it('should describe a channel enum operation with its resolved entries', () => {
+            expect(service.describeParams(io8, 'outputs', 'set')).toEqual({
+                channel: { min: 0, max: 7, labelStart: 1 },
+                value: { type: 'enum', entries: io8.enums.coilState },
+                isConfirmRequired: false,
+                isPersistable: false
+            });
+        });
+
+        it('should describe a range read by its covered channels, without value', () => {
+            const params = service.describeParams(io8, 'outputs', 'read');
+            expect(params).toEqual({ range: { min: 0, max: 7, labelStart: 1 }, isConfirmRequired: false, isPersistable: false });
+            expect(Object.keys(JSON.parse(JSON.stringify(params)))).toEqual(['range', 'isConfirmRequired', 'isPersistable']);
+        });
+
+        it('should omit the value of a fixed-value operation', () => {
+            expect(service.describeParams(io8, 'outputs', 'toggle').value).toBeUndefined();
+            expect(service.describeParams(io8, 'allOutputs', 'toggle')).toEqual({ isConfirmRequired: false, isPersistable: false });
+        });
+
+        it('should flag persistable writes', () => {
+            expect(service.describeParams(byKind('INVERTER_VEICHI_SI23_V1'), 'frequencyCommand', 'set').isPersistable).toBe(true);
+        });
+
+        it('should keep number bounds, scale and unit', () => {
+            expect(service.describeParams(io8, 'flashOn', 'pulse').value)
+                .toEqual({ type: 'number', min: 1, max: 32767, default: 7, scale: 100, unit: 'ms' });
+        });
+
+        it('should resolve enum[] entries with their length', () => {
+            expect(service.describeParams(io8, 'outputModes', 'setAll').value)
+                .toEqual({ type: 'enum[]', length: 8, entries: io8.enums.outputMode });
+        });
+
+        it('should resolve composite field enums and flag danger blocks', () => {
+            const params = service.describeParams(io8, 'uart', 'set');
+            expect(params.isConfirmRequired).toBe(true);
+            expect(params.value).toEqual({
+                type: 'composite',
+                encode: '(parity << 8) | baudRate',
+                fields: [
+                    { name: 'parity', byte: 'high', default: 0, entries: io8.enums.parity },
+                    { name: 'baudRate', byte: 'low', default: 1, entries: io8.enums.baudRate }
+                ]
+            });
+        });
+
+        it('should throw on an unknown operation', () => {
+            expect(() => service.describeParams(io8, 'outputs', 'nope')).toThrow(RegisterMapNotFoundError);
+        });
+
+        it('should load every register map of the directory', () => {
+            expect(templates.map((t) => t.kind).sort()).toEqual([
+                'ANALOG_INPUT_8CH', 'ANALOG_OUTPUT_8CH', 'DIGITAL_IO_8CH', 'EC_METER_V1', 'FLOWMETER_ULTRASONIC_V1',
+                'INVERTER_VEICHI_SI23_V1', 'PRESSURE_V1', 'TEMPERATURE_MOISTURE_V1'
+            ]);
+        });
+
+        // Toutes les opérations de toutes les register maps : voies identiques à buildRequest, enums résolus,
+        // confirmation et persistance cohérentes
+        const expectChannels = (template: RegisterMapTemplate, block: RegisterBlock, operation: RegisterOperation): void => {
+            const params = service.describeParams(template, block.id, operation.id);
+            const where = `${block.id}.${operation.id}`;
+            const { length } = service.buildRequest(template, { blockId: block.id, operationId: operation.id, channel: 0, isConfirmed: true });
+            const labelStart = template.hardware.channels?.labelStart ?? 1;
+            expect({ where, range: params.range, channel: params.channel }).toEqual({
+                where,
+                range: operation.scope === 'range' ? { min: 0, max: length - 1, labelStart } : undefined,
+                channel: operation.scope === 'channel' ? { min: 0, max: block.address.count - 1, labelStart } : undefined
+            });
+            expect({ where, isConfirmRequired: params.isConfirmRequired, isPersistable: params.isPersistable })
+                .toEqual({ where, isConfirmRequired: !!block.danger, isPersistable: !!operation.params?.persistence });
+        };
+
+        // Saisie : type du template, enums (y compris des champs composite) remplacés par leurs entrées
+        const expectValue = (template: RegisterMapTemplate, block: RegisterBlock, operation: RegisterOperation): void => {
+            const value = service.describeParams(template, block.id, operation.id).value;
+            const where = `${block.id}.${operation.id}`;
+            const inputType = operation.input?.type === 'none' ? undefined : operation.input?.type;
+            expect({ where, type: value?.type }).toEqual({ where, type: inputType });
+            if (value?.type === 'enum' || value?.type === 'enum[]') {
+                expect({ where, isResolved: value.entries.length > 0 }).toEqual({ where, isResolved: true });
+            }
+            if (value?.type === 'composite' && operation.input?.type === 'composite') {
+                operation.input.fields.forEach((field, index) => {
+                    const isResolved = !field.enum || value.fields[index].entries?.length > 0;
+                    expect({ where, field: field.name, isResolved }).toEqual({ where, field: field.name, isResolved: true });
+                });
+            }
+            expect({ where, enumRefs: JSON.stringify(value ?? {}).includes('"enum":') }).toEqual({ where, enumRefs: false });
+        };
+
+        it.each(templates.map((t) => [t.kind, t] as const))('should describe every operation of %s', (_kind, template) => {
+            jest.spyOn(RegisterValueEncoder, 'encode').mockReturnValue(0);
+            for (const block of template.registerMap) {
+                for (const operation of block.operations) {
+                    expectChannels(template, block, operation);
+                    expectValue(template, block, operation);
+                }
+            }
+        });
+
+        it.each([
+            ['TEMPERATURE_MOISTURE_V1', 'temperatureCalibration', 'set', {
+                isConfirmRequired: false,
+                value: { type: 'number', min: -32768, max: 32767, default: 0, scale: 10, unit: '°C' }
+            }],
+            ['TEMPERATURE_MOISTURE_V1', 'baudRate', 'set', { isConfirmRequired: true, value: expect.objectContaining({ type: 'enum' }) }],
+            ['PRESSURE_V1', 'monitoring', 'read', { isConfirmRequired: false, isPersistable: false }],
+            ['PRESSURE_V1', 'zeroOffset', 'set', { value: { type: 'number', min: -32768, max: 32767, default: 0 } }],
+            ['EC_METER_V1', 'deviceAddress', 'set', { isConfirmRequired: true, value: { type: 'number', min: 1, max: 254, default: 1 } }],
+            ['FLOWMETER_ULTRASONIC_V1', 'monthlyHistory', 'read', { channel: { min: 0, max: 31, labelStart: 1 } }],
+            ['FLOWMETER_ULTRASONIC_V1', 'calendar', 'set', {
+                value: expect.objectContaining({
+                    type: 'composite',
+                    fields: expect.arrayContaining([{ name: 'second', word: 0, byte: 'low', encoding: 'bcd', min: 0, max: 59 }])
+                })
+            }],
+            ['INVERTER_VEICHI_SI23_V1', 'frequencyCommand', 'set', {
+                isPersistable: true, isConfirmRequired: false,
+                value: { type: 'number', min: 0, max: 60000, scale: 0.01, unit: 'Hz' }
+            }],
+            ['INVERTER_VEICHI_SI23_V1', 'runCommand', 'set', {
+                isPersistable: false, isConfirmRequired: true,
+                value: { type: 'enum', entries: expect.arrayContaining([{ value: 1, label: 'Marche avant (FWD)' }]) }
+            }],
+            ['INVERTER_VEICHI_SI23_V1', 'F00.00', 'set', {
+                isPersistable: true, isConfirmRequired: true, value: expect.objectContaining({ type: 'enum' })
+            }],
+            ['ANALOG_INPUT_8CH', 'inputRanges', 'set', {
+                channel: { min: 0, max: 7, labelStart: 1 }, value: expect.objectContaining({ type: 'enum' })
+            }],
+            ['ANALOG_INPUT_8CH', 'inputRanges', 'setAll', {
+                range: { min: 0, max: 7, labelStart: 1 }, value: expect.objectContaining({ type: 'enum[]', length: 8 })
+            }],
+            ['ANALOG_OUTPUT_8CH', 'outputs', 'set', {
+                channel: { min: 0, max: 7, labelStart: 1 },
+                value: { type: 'number', min: 0, max: 10000, default: 0, unit: 'mV' }
+            }],
+            ['ANALOG_OUTPUT_8CH', 'outputs', 'setAll', {
+                range: { min: 0, max: 7, labelStart: 1 }, value: { type: 'number[]', length: 8, min: 0, max: 10000, unit: 'mV' }
+            }],
+            ['ANALOG_OUTPUT_8CH', 'uart', 'set', {
+                isConfirmRequired: true,
+                value: expect.objectContaining({
+                    type: 'composite',
+                    fields: [expect.objectContaining({ name: 'parity' }), expect.objectContaining({ name: 'baudRate' })]
+                })
+            }]
+        ])('should describe %s %s.%s', (kind, blockId, operationId, expected) => {
+            expect(service.describeParams(byKind(kind), blockId, operationId)).toEqual(expect.objectContaining(expected));
+        });
+
+        it('should omit the channel, range and value keys when they do not apply (no null persisted)', () => {
+            expect(Object.keys(service.describeParams(byKind('PRESSURE_V1'), 'monitoring', 'read'))).toEqual(['isConfirmRequired', 'isPersistable']);
+            expect(Object.keys(service.describeParams(byKind('FLOWMETER_ULTRASONIC_V1'), 'monthlyHistory', 'read'))).toEqual(['channel', 'isConfirmRequired', 'isPersistable']);
+        });
     });
 
     describe('buildRequest', () => {

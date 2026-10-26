@@ -6,10 +6,11 @@ import { ComActuatorStrategy } from '@process/domain/services/actuator-strategie
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
+import { ComActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { GPIODirection, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { NotSwitchError } from '@process/domain/errors/not-switch.error';
 import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { Gpio } from 'onoff';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateActuatorRpiModel, CreateActuatorComModel, CreateActuatorMongooseModels } from './actuator.spec-mock';
@@ -44,20 +45,13 @@ describe('ActuatorService', () => {
     describe('execute / reset (strategy dispatch)', () => {
         let service: ActuatorService;
         let logger: ReturnType<typeof CreateLoggerMock>;
-        let modBusService: { execute: jest.Mock };
-        let comRequestRepository: { get: jest.Mock };
+        let deviceCommandService: { actionsOfType: jest.Mock; runActions: jest.Mock };
 
         beforeEach(() => {
             Gpio.accessible = false;
             logger = CreateLoggerMock();
-            modBusService = { execute: jest.fn() };
-            comRequestRepository = {
-                get: jest.fn().mockResolvedValue(Object.assign(new ComRequestModel(), {
-                    _id: 'com-request-1',
-                    config: { address: 5, function: [], params: { value: 0 } }
-                }))
-            };
-            const strategies = [new RpiActuatorStrategy(logger as never), new ComActuatorStrategy(modBusService as never, comRequestRepository as never, {} as never)];
+            deviceCommandService = { actionsOfType: jest.fn().mockResolvedValue([]), runActions: jest.fn().mockResolvedValue([]) };
+            const strategies = [new RpiActuatorStrategy(logger as never), new ComActuatorStrategy(deviceCommandService as never)];
             service = new ActuatorService(logger as never, {} as never, strategies);
         });
 
@@ -77,21 +71,27 @@ describe('ActuatorService', () => {
             await expect(service.execute(actuator, 1)).rejects.toThrow(NotSwitchError);
         });
 
-        it('should delegate a COM actuator execution to the modbus task service', async () => {
+        it('should delegate a COM actuator execution to its DeviceCommand', async () => {
             const actuator = CreateActuatorComModel();
 
             await service.execute(actuator, 1);
 
-            expect(modBusService.execute).toHaveBeenCalledWith(
-                expect.objectContaining({ _id: 'com-request-1' }),
-                expect.objectContaining({ address: 1, params: expect.objectContaining({ value: 1 }) })
-            );
+            expect(deviceCommandService.runActions).toHaveBeenCalledWith((actuator.config as ComActuatorConfigModel).deviceId, (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.SET, 1);
         });
 
         it('should throw NotImplementedError for an unsupported actuator type', async () => {
             const actuator = { ...CreateActuatorRpiModel(), type: 'UNKNOWN' } as never;
 
             await expect(service.execute(actuator, 1)).rejects.toThrow(NotImplementedError);
+        });
+
+        it('should reset a COM actuator through its strategy (set 0 when it has no reset command)', async () => {
+            const actuator = CreateActuatorComModel();
+
+            await service.reset([actuator]);
+
+            expect(deviceCommandService.actionsOfType).toHaveBeenCalledWith((actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.RESET);
+            expect(deviceCommandService.runActions).toHaveBeenCalledWith((actuator.config as ComActuatorConfigModel).deviceId, (actuator.config as ComActuatorConfigModel).actions, DeviceCommandType.SET, 0);
         });
 
         it('should reset every actuator to OFF and swallow individual failures', async () => {
@@ -125,8 +125,8 @@ describe('ActuatorService', () => {
             actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
                 actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
                 connection, CreateLoggerMock() as never
-            ), { removeModuleConfigsByModuleId: jest.fn() } as never);
-            service = new ActuatorService(CreateLoggerMock() as never, actuatorRepository, [new RpiActuatorStrategy(CreateLoggerMock() as never), new ComActuatorStrategy({ execute: jest.fn() } as never, { get: jest.fn() } as never, {} as never)]);
+            ), { removeModuleConfigsByModuleId: jest.fn(), findCycleIdsByModuleId: jest.fn().mockResolvedValue([]) } as never, {} as never);
+            service = new ActuatorService(CreateLoggerMock() as never, actuatorRepository, [new RpiActuatorStrategy(CreateLoggerMock() as never), new ComActuatorStrategy({ execute: jest.fn() } as never)]);
         }, 120000);
 
         afterAll(async () => {

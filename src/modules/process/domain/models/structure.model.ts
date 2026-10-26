@@ -1,12 +1,12 @@
 import { CycleModel } from './cycle.model';
-import { ComRequestModel } from './com-request.model';
+import { DeviceCommandModel } from './device-command.model';
 import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
 import { DeviceModel } from './device.model';
 import { ActuatorModel } from './actuator.model';
 export class StructureModel {
-    public modbusTasks: ComRequestModel[] = [];
+    public deviceCommands: DeviceCommandModel[] = [];
     public devices: DeviceModel[] = [];
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];

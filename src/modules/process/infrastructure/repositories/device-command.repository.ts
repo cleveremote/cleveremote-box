@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DeviceCommandModel } from '@process/domain/models/device-command.model';
+import { DeviceCommandModel, DeviceCommandType } from '@process/domain/models/device-command.model';
 import { SynchronizeDeviceCommandModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -24,14 +24,6 @@ export class DeviceCommandRepository {
         return this.deviceCommandMongooseRepository.delete(id);
     }
 
-    // cascade utilisee par DeviceRepository.delete() : soft-supprime toutes les commandes du device.
-    public async deleteForDevice(deviceId: string): Promise<void> {
-        const existing = await this.deviceCommandMongooseRepository.findByDeviceId(deviceId);
-        for (const command of existing) {
-            await this.deviceCommandMongooseRepository.delete(command._id);
-        }
-    }
-
     // une commande n'est soft-supprimee que si elle est explicitement marquee `delete: true`.
     public async saveMany(models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
         for (const model of models) {
@@ -51,10 +43,22 @@ export class DeviceCommandRepository {
         return this.deviceCommandMongooseRepository.findById(id);
     }
 
-    // remplacement complet scope a un device : toute commande existante absente de `models` est
-    // soft-supprimee (meme cascade que ComRequestRepository.replaceForDevice).
-    public async replaceForDevice(deviceId: string, models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
-        const existing = await this.deviceCommandMongooseRepository.findByDeviceId(deviceId);
+    public async getByIds(ids: string[]): Promise<DeviceCommandModel[]> {
+        return this.deviceCommandMongooseRepository.findByIds(ids);
+    }
+
+    public async getByModelId(modelId: string): Promise<DeviceCommandModel[]> {
+        return this.deviceCommandMongooseRepository.findByModelId(modelId);
+    }
+
+    public async getCommandsByType(modelId: string, type: DeviceCommandType): Promise<DeviceCommandModel[]> {
+        return this.deviceCommandMongooseRepository.findByModelIdAndType(modelId, type);
+    }
+
+    // remplacement complet scope a un modele : toute commande existante absente de `models` est
+    // soft-supprimee.
+    public async replaceForModel(modelId: string, models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
+        const existing = await this.deviceCommandMongooseRepository.findByModelId(modelId);
         const incomingIds = new Set(models.filter(model => model._id).map(model => model._id));
         for (const item of existing) {
             if (!incomingIds.has(item._id)) {
@@ -66,10 +70,10 @@ export class DeviceCommandRepository {
                 await this.delete(model._id);
                 continue;
             }
-            model.deviceId = deviceId;
+            model.modelId = modelId;
             await this.save(model);
         }
-        return this.deviceCommandMongooseRepository.findByDeviceId(deviceId);
+        return this.deviceCommandMongooseRepository.findByModelId(modelId);
     }
 
 }

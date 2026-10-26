@@ -16,10 +16,8 @@ import {
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel } from '../models/actuator.model';
-import { ComRequestType } from '../interfaces/com-request.interface';
-import { ComRequestConfigModel, ComRequestModel } from '../models/com-request.model';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { DeviceCommandService } from './device-command.service';
+import { DeviceCommandType, InverterConfigParam } from '../models/device-command.model';
 import { ModuleTimingConfig } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
@@ -32,11 +30,9 @@ import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType, EventModel } from '../models/event.model';
-import { type InverterConfigParam, ModbusService } from './modbus.service';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { buildOverrideParams } from '../utils/build-override-params.util';
 import { evaluateConditions } from '../utils/evaluate-conditions.util';
 
 type ProcessReport = { id: string; type: ProcessType; cause: string }[];
@@ -59,9 +55,7 @@ export class ProcessService {
         private cycleRepository: CycleRepository,
         private valueRepository: ValueRepository,
         private eventRepository: EventRepository,
-        private modBusService: ModbusService,
         private actuatorService: ActuatorService,
-        private comRequestRepository: ComRequestRepository,
         @Inject(forwardRef(() => TriggerService)) private triggerService: TriggerService,
         @Inject(forwardRef(() => ScheduleService)) private scheduleService: ScheduleService,
         private readonly logger: Logger,
@@ -204,7 +198,7 @@ export class ProcessService {
         }
     }
 
-    // mapping sortie physique IO module -> actuator COM (via config.deviceId + config.actions[0].digitalPort)
+    // mapping sortie physique IO module -> actuator COM (via config.deviceId + config.actions[0].channel)
     // -> pilotage du cycle MODULE qui possede cet actuator, sur le meme principe que la regle 2
     // (_triggerOwningModuleCycle) mais declenche par une lecture materielle Modbus plutot que par
     // un CYCLE en cours d'execution. mode = TRIGGER (pas AUTO, contrairement a
@@ -220,7 +214,7 @@ export class ProcessService {
         const candidates = this.configurationService.structure.actuators.filter((a) => {
             if (a.type !== ActuatorType.COM) return false;
             const config = a.config as ComActuatorConfigModel;
-            return config.deviceId === deviceId && config.actions?.[0]?.portNumber === channel;
+            return config.deviceId === deviceId && config.actions?.[0]?.channel === channel;
         });
         if (!candidates.length) return;
 
@@ -234,16 +228,12 @@ export class ProcessService {
             : moduleCycle.status === ExecutableStatus.STOPPED;
         if (alreadyInRequestedState) return;
 
-        // la direction OUTPUT n'est plus stockee sur ComActuatorActionConfig : elle est deduite du
-        // ComRequestModel associe (type DIGITAL_OUTPUT), recupere via comRequestId, ou du bloc de
-        // coils vise par le DeviceCommand (commandId).
-        const comRequests = await this.comRequestRepository.get() as ComRequestModel[];
+        // la direction OUTPUT n'est pas stockee sur ComActuatorActionConfig : elle est deduite du
+        // bloc de coils vise par le DeviceCommand set de l'actionneur.
         const isDigitalOutput = (await Promise.all(candidates.map(async (a) => {
-            const action = (a.config as ComActuatorConfigModel).actions?.[0];
-            if (action?.commandId) {
-                return this.deviceCommandService.isDigitalOutput(action.commandId);
-            }
-            return comRequests.find((comRequest) => comRequest._id === action?.comRequestId)?.type?.includes(ComRequestType.DIGITAL_OUTPUT);
+            const { deviceId, actions } = a.config as ComActuatorConfigModel;
+            const [set] = await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.SET);
+            return set ? this.deviceCommandService.isDigitalOutput(set.command._id, deviceId) : false;
         }))).some(Boolean);
         if (!isDigitalOutput) return;
 
@@ -1000,8 +990,8 @@ export class ProcessService {
             const customStacks = seqFound.securityConfig.customStacks;
             for (let index = 0; index < customStacks?.length; index++) {
                 const customStack = customStacks[index]; // une fonction surement pour le pid pression sur le variateur
-                const comRequest: ComRequestModel = await this.comRequestRepository.get(customStack.comRequestId) as ComRequestModel;
-                this.modBusService.execute(comRequest, action === ExecutableAction.ON ? customStack.params : customStack.defaultParams);
+                this.deviceCommandService.execute(customStack.commandId, customStack.deviceId, action === ExecutableAction.ON ? customStack.params : customStack.defaultParams)
+                    .catch((error) => this.logger.warn({ error, commandId: customStack.commandId, deviceId: customStack.deviceId }, 'sequence custom stack failed'));
             }
 
             seqFound.status = status;
@@ -1029,8 +1019,23 @@ export class ProcessService {
             }
         }, data);
     }
+    /**
+     * Écrit les paramètres Fgg.ii de l'onduleur via sa register map (bloc = code du paramètre,
+     * opération 'set', persist = écriture EEPROM). Paramètre inconnu ou valeur hors plage : ignoré.
+     */
     public async applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
-        return this.modBusService.applyInverterConfig(inverterId, params);
+        for (const { param, value, persist: isPersistent } of params) {
+            try {
+                const outcome = await this.deviceCommandService.executeOnDevice(inverterId, {
+                    blockId: param.toUpperCase(), operationId: 'set', value, isPersistent, isConfirmed: true
+                });
+                if (outcome.isOk) {
+                    this.logger.log({ inverterId, param, value, persist: !!isPersistent }, 'inverter param written');
+                }
+            } catch (err) {
+                this.logger.warn({ inverterId, param, err: err.message }, 'inverter param skipped');
+            }
+        }
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {

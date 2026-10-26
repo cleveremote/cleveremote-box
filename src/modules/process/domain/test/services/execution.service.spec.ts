@@ -22,8 +22,6 @@ import { ConditionModel } from '@process/domain/models/condition.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { IActuatorModule, ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorModel, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
 import { CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessType } from '@process/domain/interfaces/executable.interface';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
@@ -125,8 +123,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let triggerMongooseRepository: TriggerMongooseRepository;
     let structureService: StructureService;
     let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock };
-    let comRequestRepository: { get: jest.Mock };
-    let modBusService: { execute: jest.Mock; applyInverterConfig: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock; executeOnDevice: jest.Mock; isDigitalOutput: jest.Mock };
     let wsService: { sendMessage: jest.Mock };
     let valueRepository: { getDeviceValue: jest.Mock };
     let eventRepository: { save: jest.Mock; getLast: jest.Mock; getByDeviceAndDateRange: jest.Mock };
@@ -181,13 +178,16 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         };
         structureService = new StructureService(
             cycleRepository,
+            {} as never,
             emptyGetRepo as never,
             emptyGetRepo as never,
             emptyGetRepo as never,
+            {} as never,
             structureEventRepository as never,
             emptyGetRepo as never,
             {} as never,
-            {} as never
+            {} as never,
+            { withParams: (commands: unknown) => Promise.resolve(commands) } as never
         );
 
         actuatorService = {
@@ -201,11 +201,13 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         actuatorService.resolve.mockImplementation((moduleIds: string[]) =>
             Promise.resolve(new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i, actuatorTypeOverrides[id])])))
         );
-        modBusService = { execute: jest.fn().mockResolvedValue(undefined), applyInverterConfig: jest.fn().mockResolvedValue(undefined) };
-        // par defaut aucun ComRequest connu : les tests de executeModuleCycleForDigitalOutput
-        // surchargent cette resolution pour exposer le ComRequestModel (type DIGITAL_OUTPUT) lie
-        // au comRequestId de l'actionneur COM teste.
-        comRequestRepository = { get: jest.fn().mockResolvedValue([]) };
+        // par defaut aucune commande n'est une sortie digitale : les tests de
+        // executeModuleCycleForDigitalOutput surchargent isDigitalOutput.
+        deviceCommandService = {
+            execute: jest.fn().mockResolvedValue({ isOk: true }),
+            executeOnDevice: jest.fn().mockResolvedValue({ isOk: true }),
+            isDigitalOutput: jest.fn().mockResolvedValue(false)
+        };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
         valueRepository = {
             getDeviceValue: jest.fn().mockResolvedValue(0)
@@ -229,13 +231,11 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             cycleRepository,
             valueRepository as never,
             eventRepository as never,
-            modBusService as never,
             actuatorService as unknown as ActuatorService,
-            comRequestRepository as never,
             triggerService as never,
             scheduleService as never,
             logger as never,
-            { isDigitalOutput: jest.fn() } as never
+            deviceCommandService as never
         );
     });
 
@@ -1632,7 +1632,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
         // le nom '100' reproduit ce que renvoie CreateFakeActuator(id, 100 + i, ...) pour le
         // premier (et seul) moduleId d'une sequence : cycle.exists() matche par nom, pas par id.
-        function CreateComActuatorModel(id: string, name: string, digitalPort: number): ActuatorModel {
+        function CreateComActuatorModel(id: string, name: string, channel: number): ActuatorModel {
             const actuator = new ActuatorModel();
             actuator._id = id;
             actuator.name = name;
@@ -1640,17 +1640,15 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             actuator.status = ModuleStatus.OFF;
             const config = new ComActuatorConfigModel();
             config.deviceId = deviceId;
-            config.actions = [{ comRequestId: 'com-req-1', portNumber: digitalPort }];
+            config.actions = [{ commandId: 'command-1', channel }];
             actuator.config = config;
             return actuator;
         }
 
-        // la direction OUTPUT n'est plus portee par l'actionneur (cf. suppression de
-        // ComActuatorActionConfig.type) : elle est deduite du ComRequestModel lie via comRequestId.
+        // la direction OUTPUT n'est pas portee par l'actionneur : elle est deduite du bloc de coils
+        // vise par la DeviceCommand de son action (commandId).
         beforeEach(() => {
-            comRequestRepository.get.mockResolvedValue([
-                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: [ComRequestType.DIGITAL_OUTPUT] })
-            ]);
+            deviceCommandService.isDigitalOutput.mockResolvedValue(true);
         });
 
         it('should turn ON the MODULE cycle owning the COM actuator mapped to the changed digital output', async () => {
@@ -1746,7 +1744,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycleM.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should do nothing when no COM actuator matches the deviceId/digitalPort', async () => {
+        it('should do nothing when no COM actuator matches the deviceId/channel', async () => {
             actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
             const [cycleM] = await SeedCycles([
                 { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
@@ -1767,7 +1765,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(actuatorService.execute).not.toHaveBeenCalled();
         });
 
-        it('should only match COM-type actuators, ignoring a non-COM actuator sharing the same deviceId/portNumber', async () => {
+        it('should only match COM-type actuators, ignoring a non-COM actuator sharing the same deviceId/channel', async () => {
             actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
             const [cycleM] = await SeedCycles([
                 { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
@@ -1785,25 +1783,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(50);
         });
 
-        it('should do nothing when the mapped comRequestId does not resolve to any known ComRequestModel', async () => {
+        it('should do nothing when the mapped DeviceCommand is not a digital output', async () => {
             actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
-            comRequestRepository.get.mockResolvedValue([]);
-            const [cycleM] = await SeedCycles([
-                { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
-            ]);
-            structureService.structure.actuators = [CreateComActuatorModel('actuator-com-1', '100', 2)];
-
-            await service.executeModuleCycleForDigitalOutput(deviceId, 2, true);
-            await Flush(50);
-
-            expect(cycleM.status).toEqual(ExecutableStatus.STOPPED);
-        });
-
-        it('should do nothing when the mapped ComRequestModel is not of type DIGITAL_OUTPUT', async () => {
-            actuatorTypeOverrides['actuator-com-1'] = ActuatorType.COM;
-            comRequestRepository.get.mockResolvedValue([
-                Object.assign(new ComRequestModel(), { _id: 'com-req-1', type: [ComRequestType.DIGITAL_INPUT] })
-            ]);
+            deviceCommandService.isDigitalOutput.mockResolvedValue(false);
             const [cycleM] = await SeedCycles([
                 { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
             ]);
@@ -1916,12 +1898,22 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     });
 
     describe('applyInverterConfig', () => {
-        it('should delegate to ModbusTaskService.applyInverterConfig', async () => {
-            const params = [{ param: 'F00.11', value: 4200 }];
+        it('should write each parameter through the inverter register map (set operation, persistence, confirmed)', async () => {
+            await service.applyInverterConfig('inverter-001', [{ param: 'f00.11', value: 4200 }, { param: 'F11.09', value: 300, persist: true }]);
 
-            await service.applyInverterConfig('inverter-001', params as never);
+            expect(deviceCommandService.executeOnDevice.mock.calls).toEqual([
+                ['inverter-001', { blockId: 'F00.11', operationId: 'set', value: 4200, isPersistent: undefined, isConfirmed: true }],
+                ['inverter-001', { blockId: 'F11.09', operationId: 'set', value: 300, isPersistent: true, isConfirmed: true }]
+            ]);
+        });
 
-            expect(modBusService.applyInverterConfig).toHaveBeenCalledWith('inverter-001', params);
+        it('should skip an unknown parameter and keep writing the next ones', async () => {
+            deviceCommandService.executeOnDevice.mockRejectedValueOnce(new Error('Opération X.set inconnue'));
+
+            await expect(service.applyInverterConfig('inverter-001', [{ param: 'X', value: 1 }, { param: 'F00.11', value: 1 }])).resolves.toBeUndefined();
+
+            expect(deviceCommandService.executeOnDevice).toHaveBeenCalledTimes(2);
+            expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ param: 'X' }), 'inverter param skipped');
         });
     });
 
