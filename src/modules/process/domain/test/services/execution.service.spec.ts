@@ -178,16 +178,15 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         };
         structureService = new StructureService(
             cycleRepository,
-            {} as never,
             emptyGetRepo as never,
             emptyGetRepo as never,
             emptyGetRepo as never,
             {} as never,
             structureEventRepository as never,
             emptyGetRepo as never,
+            { withParams: (commands: unknown) => Promise.resolve(commands) } as never,
             {} as never,
-            {} as never,
-            { withParams: (commands: unknown) => Promise.resolve(commands) } as never
+            {} as never
         );
 
         actuatorService = {

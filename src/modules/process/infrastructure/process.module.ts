@@ -43,6 +43,7 @@ import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategie
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
+import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -72,6 +73,7 @@ import { RegisterMapModule } from '@register-map/infrastructure/register-map.mod
         ]),
         ActuatorModule,
         DeviceModule,
+        SlaveProvisioningModule,
         RegisterMapModule
     ],
     controllers: [

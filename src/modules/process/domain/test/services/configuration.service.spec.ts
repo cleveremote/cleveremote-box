@@ -3,14 +3,13 @@ import { StructureService } from '@process/domain/services/configuration.service
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { CycleMongooseRepository } from '@process/infrastructure/repositories/cycle-mongoose.repository';
 import { SequenceMongooseRepository } from '@process/infrastructure/repositories/sequence-mongoose.repository';
-import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
 import { ScheduleMongooseRepository } from '@process/infrastructure/repositories/schedule-mongoose.repository';
 import { TriggerMongooseRepository } from '@process/infrastructure/repositories/trigger-mongoose.repository';
 import { Cycle, CycleSchema } from '@process/infrastructure/schemas/cycle.schema';
 import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequence.schema';
 import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedule.schema';
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
-import { CycleType, ExecutableStatus, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
@@ -20,10 +19,7 @@ import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ValueModel, ExecutableType } from '@process/domain/models/value.model';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateCycleModel } from './cycle.spec-mock';
-import { DeviceKind, DeviceType, DiscoveryAddressRegister, SlaveTemplate } from '@process/domain/models/device.model';
-import { DeviceCommandType } from '@process/domain/models/device-command.model';
-import { ActuatorType, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
-import { isValidUuid } from '@process/domain/utils/id.util';
+import { DeviceKind, SlaveTemplate } from '@process/domain/models/device.model';
 
 function CreateEmptyGetRepositoryMock(): { get: jest.Mock } {
     return { get: jest.fn().mockResolvedValue([]) };
@@ -37,7 +33,10 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
     let sensorRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
     let deviceRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
     let deviceCommandRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
-    let deviceCommandService: { isDigitalOutputOf: jest.Mock; withParams: jest.Mock };
+    let deviceCommandService: { withParams: jest.Mock };
+    let slaveTemplateRepository: { get: jest.Mock };
+    let slaveScanService: { scan: jest.Mock };
+    let autoCreationService: { createSlave: jest.Mock };
     let actuatorRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
     let eventRepository: { save: jest.Mock; getLast: jest.Mock; getByDeviceAndDateRange: jest.Mock };
     let service: StructureService;
@@ -75,11 +74,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
         sensorRepository = CreateEmptyGetRepositoryMock();
         deviceRepository = CreateEmptyGetRepositoryMock();
         deviceCommandRepository = CreateEmptyGetRepositoryMock();
-        // seul le bloc outputs du template DIGITAL_IO_8CH est un bloc de coils pilotable par voie
-        deviceCommandService = {
-            isDigitalOutputOf: jest.fn((_kind: string, command: { blockId: string }) => command.blockId === 'outputs'),
-            withParams: jest.fn((commands: unknown) => Promise.resolve(commands))
-        };
+        deviceCommandService = { withParams: jest.fn((commands: unknown) => Promise.resolve(commands)) };
         actuatorRepository = CreateEmptyGetRepositoryMock();
         eventRepository = {
             save: jest.fn().mockResolvedValue(undefined),
@@ -87,18 +82,21 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             getByDeviceAndDateRange: jest.fn().mockResolvedValue([])
         };
 
+        slaveScanService = { scan: jest.fn() };
+        autoCreationService = { createSlave: jest.fn() };
+        slaveTemplateRepository = { get: jest.fn().mockResolvedValue([]) };
+
         service = new StructureService(
             cycleRepository,
-            new SequenceRepository(sequenceMongooseRepository),
             sensorRepository as never,
             deviceRepository as never,
             deviceCommandRepository as never,
-            {} as never,
+            slaveTemplateRepository as never,
             eventRepository as never,
             actuatorRepository as never,
-            {} as never,
-            {} as never,
-            deviceCommandService as never
+            deviceCommandService as never,
+            slaveScanService as never,
+            autoCreationService as never
         );
     });
 
@@ -326,150 +324,37 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
         });
     });
 
-    describe('buildSlaveFromTemplate / scanMaster', () => {
+    describe('scanMaster', () => {
         const masterId = '8d6f3fe2-af41-405b-9523-a0a6fb589b42';
-        const template: SlaveTemplate = {
-            _id: '5b0c1f0e-3a3e-4c2a-9a51-2f6d1b7e8c01',
-            name: '8/IO IRRIGATION VALVES',
-            description: '8/IO IRRIGATION VALVES',
-            kind: DeviceKind.DIGITAL_IO_8_CH,
-            device: { name: '8/IO IRRIGATION VALVES', description: '8/IO IRRIGATION VALVES' },
-            deviceCommands: [
-                { _id: 'c0000000-0000-4000-8000-000000000001', name: 'digital output request', blockId: 'outputs', operationId: 'set', autoCreate: false, types: [DeviceCommandType.SET] },
-                { _id: 'c0000000-0000-4000-8000-000000000002', name: 'SET ALL TOGGLE MODE', blockId: 'outputModes', operationId: 'setAll', value: [2, 2, 2, 2, 2, 2, 2, 2], autoCreate: false, types: [DeviceCommandType.INIT] },
-                { _id: 'c0000000-0000-4000-8000-000000000003', name: 'SWITCH ALL ON', blockId: 'allOutputs', operationId: 'set', value: 1, autoCreate: false, types: [DeviceCommandType.INIT] },
-            ],
-        };
+        const template = { _id: '5b0c1f0e-3a3e-4c2a-9a51-2f6d1b7e8c01', kind: DeviceKind.DIGITAL_IO_8_CH } as SlaveTemplate;
 
-        it('should build a slave attached to the master and to the model, sharing its commands, no init applied yet', () => {
-            const { device, actuators } = service.buildSlaveFromTemplate(template, masterId);
-
-            expect(isValidUuid(device._id)).toBe(true);
-            expect(device).toMatchObject({
-                type: DeviceType.SLAVE,
-                config: { slaveId: 1, masterDeviceId: masterId, kind: DeviceKind.DIGITAL_IO_8_CH, modelId: template._id, initDoneCommandIds: [] },
-                deletedAt: null
-            });
-            expect(actuators).toEqual([]);
-            expect(service.buildSlaveFromTemplate(template, masterId).cycles).toEqual([]);
-        });
-
-        it('should create one MODULE cycle per COM actuator, with a single sequence referencing it', () => {
-            const withPorts: SlaveTemplate = { ...template, device: { ...template.device, portConfig: { portNumStart: 0, portCount: 3 } } };
-
-            const { actuators, cycles } = service.buildSlaveFromTemplate(withPorts, masterId);
-
-            expect(cycles).toHaveLength(3);
-            cycles.forEach((cycle, index) => {
-                expect(isValidUuid(cycle._id)).toBe(true);
-                expect(cycle.type).toBe(CycleType.MODULE);
-                expect(cycle.modePriority.map((p) => p.mode)).toEqual(Object.values(ProcessMode));
-                expect(cycle.sequences).toHaveLength(1);
-                expect(cycle.sequences[0]).toMatchObject({
-                    cycleId: cycle._id,
-                    securityConfig: { maxDuration: 3_600_000 },
-                    moduleConfigs: [{ moduleId: actuators[index]._id }]
-                });
-            });
-        });
-
-        it('should create one COM actuator per output port, driven on its channel by the digital output command', () => {
-            const withPorts: SlaveTemplate = { ...template, device: { ...template.device, portConfig: { portNumStart: 0, portCount: 3 } } };
-
-            const { device, actuators } = service.buildSlaveFromTemplate(withPorts, masterId);
-
-            expect(actuators.map((a) => a.name)).toEqual(['DO0', 'DO1', 'DO2']);
-            actuators.forEach((actuator, index) => {
-                expect(actuator.type).toBe(ActuatorType.COM);
-                expect((actuator.config as ComActuatorConfigModel).deviceId).toBe(device._id);
-                expect((actuator.config as ComActuatorConfigModel).actions).toEqual([{ commandId: template.deviceCommands[0]._id, channel: index }]);
-            });
-        });
-
-        it('should let two slaves of the same model share the same digital output command', () => {
-            const withPorts: SlaveTemplate = { ...template, device: { ...template.device, portConfig: { portNumStart: 0, portCount: 1 } } };
-
-            const [first, second] = [service.buildSlaveFromTemplate(withPorts, masterId), service.buildSlaveFromTemplate(withPorts, masterId)];
-
-            const [a, b] = [first.actuators[0].config, second.actuators[0].config] as ComActuatorConfigModel[];
-            expect(a.actions[0].commandId).toBe(b.actions[0].commandId);
-            expect(a.deviceId).not.toBe(b.deviceId);
-        });
-
-        it('scanMaster should probe the first unit id of each range and readdress the new module', async () => {
-            const master = { _id: masterId, type: DeviceType.MASTER, config: {} };
-            deviceRepository.get.mockResolvedValue(master);
-            const save = jest.fn().mockImplementation(async (m) => m);
-            Object.assign(deviceRepository, { save, getSlavesByMasterId: jest.fn().mockResolvedValue([{ config: { slaveId: 62 } }]) });
-            const scanDiscoveryRegisters = jest.fn().mockResolvedValue([
-                { unitId: 61, register: 0x4000, value: 61 },
-                { unitId: 11, register: 0x0005, value: 95 },
-            ]);
-            const setSlaveAddress = jest.fn().mockResolvedValue(true);
-            const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
-            Object.assign(service, { modbusDeviceService: { scanDiscoveryRegisters, setSlaveAddress }, logger, slaveTemplateRepository: { get: jest.fn().mockResolvedValue([template]) } });
+        it('should create each slave yielded by the scan, with the loaded templates and the known devices', async () => {
+            const scanned = [{ template, kind: template.kind, slaveId: 62 }, { template, kind: template.kind, slaveId: 63 }];
+            const devices = [{ _id: 'existing' }];
+            service.structure = { devices } as StructureModel;
+            slaveTemplateRepository.get.mockResolvedValue([template]);
+            slaveScanService.scan.mockImplementation(async function* () { yield* scanned; });
+            autoCreationService.createSlave.mockImplementation(async ({ slaveId }) => ({ _id: `slave-${slaveId}`, deviceCommands: [] }));
 
             const created = await service.scanMaster(masterId);
 
-            const targets = scanDiscoveryRegisters.mock.calls[0][1] as { unitId: number; register: number }[];
-            expect(targets).toHaveLength(9);
-            expect(targets).toContainEqual({ unitId: 1, register: DiscoveryAddressRegister.INVERTER });
-            expect(targets).toContainEqual({ unitId: 81, register: DiscoveryAddressRegister.ANALOG_INPUT });
-            expect(setSlaveAddress).toHaveBeenCalledWith(master, 0x4000, 61, 63);
-            expect(created).toHaveLength(1);
-            expect(created[0].config).toMatchObject({ slaveId: 63, masterDeviceId: masterId, modelId: template._id });
-            expect(logger.warn).toHaveBeenCalledTimes(1);
+            expect(slaveScanService.scan).toHaveBeenCalledWith(masterId, [template]);
+            expect(autoCreationService.createSlave).toHaveBeenCalledTimes(2);
+            expect(autoCreationService.createSlave).toHaveBeenCalledWith(scanned[0], masterId, { existingDevices: devices, templates: [template] });
+            expect(created.map((d) => d._id)).toEqual(['slave-62', 'slave-63']);
         });
 
-        it('scanMaster should persist the MODULE cycles and their sequences of the created actuators', async () => {
-            const withPorts: SlaveTemplate = { ...template, device: { ...template.device, portConfig: { portNumStart: 0, portCount: 2 } } };
-            deviceRepository.get.mockResolvedValue({ _id: masterId, type: DeviceType.MASTER, config: {} });
-            Object.assign(deviceRepository, { save: jest.fn().mockImplementation(async (m) => m), getSlavesByMasterId: jest.fn().mockResolvedValue([]) });
-            Object.assign(actuatorRepository, { save: jest.fn().mockImplementation(async (m) => m) });
-            Object.assign(service, {
-                modbusDeviceService: { scanDiscoveryRegisters: jest.fn().mockResolvedValue([{ unitId: 61, register: 0x4000, value: 61 }]), setSlaveAddress: jest.fn().mockResolvedValue(true) },
-                logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-                slaveTemplateRepository: { get: jest.fn().mockResolvedValue([withPorts]) }
+        it('should stop the scan when a slave creation fails', async () => {
+            service.structure = { devices: [] } as StructureModel;
+            let isResumed = false;
+            slaveScanService.scan.mockImplementation(async function* () {
+                yield { template, kind: template.kind, slaveId: 62 };
+                isResumed = true;
             });
+            autoCreationService.createSlave.mockRejectedValue(new Error('save failed'));
 
-            await service.scanMaster(masterId);
-
-            const actuators = (actuatorRepository as unknown as { save: jest.Mock }).save.mock.calls.map(([a]) => a);
-            const cycles = await cycleRepository.get() as CycleModel[];
-            expect(cycles).toHaveLength(2);
-            expect(cycles.every((cycle) => cycle.type === CycleType.MODULE)).toBe(true);
-            expect(cycles.map((cycle) => cycle.sequences[0].moduleConfigs[0].moduleId).sort())
-                .toEqual(actuators.map((a) => a._id).sort());
-        });
-
-        it('scanMaster should roll back cycles, actuators and device when a sequence save fails', async () => {
-            const withPorts: SlaveTemplate = { ...template, device: { ...template.device, portConfig: { portNumStart: 0, portCount: 1 } } };
-            deviceRepository.get.mockResolvedValue({ _id: masterId, type: DeviceType.MASTER, config: {} });
-            const deviceDelete = jest.fn().mockResolvedValue(true);
-            const actuatorDelete = jest.fn().mockResolvedValue(true);
-            Object.assign(deviceRepository, { save: jest.fn().mockImplementation(async (m) => m), delete: deviceDelete, getSlavesByMasterId: jest.fn().mockResolvedValue([]) });
-            Object.assign(actuatorRepository, { save: jest.fn().mockImplementation(async (m) => m), delete: actuatorDelete });
-            const cycleDelete = jest.spyOn(cycleRepository, 'delete').mockResolvedValue(true);
-            Object.assign(service, {
-                sequenceRepository: { save: jest.fn().mockRejectedValue(new Error('sequence save failed')) },
-                modbusDeviceService: { scanDiscoveryRegisters: jest.fn().mockResolvedValue([{ unitId: 61, register: 0x4000, value: 61 }]), setSlaveAddress: jest.fn().mockResolvedValue(true) },
-                logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-                slaveTemplateRepository: { get: jest.fn().mockResolvedValue([withPorts]) }
-            });
-
-            await expect(service.scanMaster(masterId)).rejects.toThrow('sequence save failed');
-
-            expect(cycleDelete).toHaveBeenCalledTimes(1);
-            expect(actuatorDelete).toHaveBeenCalledTimes(1);
-            expect(deviceDelete).toHaveBeenCalledTimes(1);
-            cycleDelete.mockRestore();
-        });
-
-        it('should throw when master is missing or not a MASTER', async () => {
-            deviceRepository.get.mockResolvedValue(null);
-            await expect(service.scanMaster(masterId)).rejects.toThrow();
-            deviceRepository.get.mockResolvedValue({ _id: masterId, type: DeviceType.SLAVE });
-            await expect(service.scanMaster(masterId)).rejects.toThrow();
+            await expect(service.scanMaster(masterId)).rejects.toThrow('save failed');
+            expect(isResumed).toBe(false);
         });
     });
 });

@@ -99,16 +99,15 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
 
     const structureService = new StructureService(
         cycleRepository as any,
-        {} as any,
         sensorRepository as any,
         deviceRepository as any,
         deviceCommandRepository as any,
         {} as any,
         valueRepository as any,
         actuatorRepository as any,
+        { withParams: (commands: unknown) => Promise.resolve(commands) } as any,
         {} as any,
-        logger as any,
-        { withParams: (commands: unknown) => Promise.resolve(commands) } as any
+        {} as any
     );
 
     return { structureService, structureRepository, actuatorRegistry: structureRepository.actuatorRegistry, cycleRepository, logger };
