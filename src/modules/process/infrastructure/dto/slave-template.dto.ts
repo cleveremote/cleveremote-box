@@ -89,6 +89,7 @@ export class SlaveTemplateDTO {
                 value: command.value,
                 isPersistent: command.isPersistent,
                 isConfirmed: command.isConfirmed,
+                autoCreate: command.autoCreate ?? false,
                 types: [...command.types],
                 params: command.params
             }))

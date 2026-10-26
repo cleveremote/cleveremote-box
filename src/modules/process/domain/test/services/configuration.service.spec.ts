@@ -335,9 +335,9 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             kind: DeviceKind.DIGITAL_IO_8_CH,
             device: { name: '8/IO IRRIGATION VALVES', description: '8/IO IRRIGATION VALVES' },
             deviceCommands: [
-                { _id: 'c0000000-0000-4000-8000-000000000001', name: 'digital output request', blockId: 'outputs', operationId: 'set', types: [DeviceCommandType.SET] },
-                { _id: 'c0000000-0000-4000-8000-000000000002', name: 'SET ALL TOGGLE MODE', blockId: 'outputModes', operationId: 'setAll', value: [2, 2, 2, 2, 2, 2, 2, 2], types: [DeviceCommandType.INIT] },
-                { _id: 'c0000000-0000-4000-8000-000000000003', name: 'SWITCH ALL ON', blockId: 'allOutputs', operationId: 'set', value: 1, types: [DeviceCommandType.INIT] },
+                { _id: 'c0000000-0000-4000-8000-000000000001', name: 'digital output request', blockId: 'outputs', operationId: 'set', autoCreate: false, types: [DeviceCommandType.SET] },
+                { _id: 'c0000000-0000-4000-8000-000000000002', name: 'SET ALL TOGGLE MODE', blockId: 'outputModes', operationId: 'setAll', value: [2, 2, 2, 2, 2, 2, 2, 2], autoCreate: false, types: [DeviceCommandType.INIT] },
+                { _id: 'c0000000-0000-4000-8000-000000000003', name: 'SWITCH ALL ON', blockId: 'allOutputs', operationId: 'set', value: 1, autoCreate: false, types: [DeviceCommandType.INIT] },
             ],
         };
 

@@ -40,6 +40,9 @@ export class DeviceCommand {
     @Prop({ type: Boolean, default: undefined })
     public isConfirmed?: boolean;
 
+    @Prop({ type: Boolean, default: false })
+    public autoCreate: boolean;
+
     // usages cumulables (set, read, init, reset)
     @Prop({ type: [{ type: String, enum: Object.values(DeviceCommandType) }], required: true })
     public types: DeviceCommandType[];

@@ -15,6 +15,7 @@ export class DeviceCommandMapper {
         model.value = command.value;
         model.isPersistent = command.isPersistent;
         model.isConfirmed = command.isConfirmed;
+        model.autoCreate = command.autoCreate ?? false;
         model.types = [...(command.types ?? [])];
         model.params = command.params;
         model.createdAt = (command as unknown as { createdAt?: Date }).createdAt;
@@ -34,6 +35,7 @@ export class DeviceCommandMapper {
         command.value = model.value;
         command.isPersistent = model.isPersistent;
         command.isConfirmed = model.isConfirmed;
+        command.autoCreate = model.autoCreate ?? false;
         command.types = [...(model.types ?? [])];
         command.params = model.params;
         return command;

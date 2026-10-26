@@ -1017,6 +1017,11 @@ export class DeviceCommandBaseDTO {
     @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
     public isConfirmed?: boolean;
 
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: 'Création automatique', required: false, default: false })
+    public autoCreate?: boolean = false;
+
     @IsArray()
     @ArrayNotEmpty()
     @IsEnum(DeviceCommandType, { each: true })
@@ -1058,6 +1063,7 @@ export class DeviceCommandDTO extends DeviceCommandBaseDTO {
         model.value = dto.value;
         model.isPersistent = dto.isPersistent;
         model.isConfirmed = dto.isConfirmed;
+        model.autoCreate = dto.autoCreate ?? false;
         model.types = [...dto.types];
         model.params = dto.params;
         model.delete = dto.delete ?? false;
