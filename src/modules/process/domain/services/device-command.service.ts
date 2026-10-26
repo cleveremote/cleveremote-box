@@ -13,7 +13,7 @@ import { RegisterMapService } from '@register-map/domain/services/register-map.s
 import { ActuatorActionConfig } from '../models/actuator.model';
 import { DeviceCommandModel, DeviceCommandOverride, DeviceCommandType } from '../models/device-command.model';
 import { DeviceModel, MasterConfigModel, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
-import { hasCommandType } from '../utils/device-command.util';
+import { DeviceCommandValue, hasCommandType, outcomeValues } from '../utils/device-command.util';
 import { ModbusDeviceService } from './modbus-device.service';
 
 interface ResolvedDevice {
@@ -60,10 +60,16 @@ export class DeviceCommandService {
         deviceId: string,
         override: DeviceCommandOverride = {}
     ): Promise<RegisterOperationOutcome> {
-        const { command: model, template, connection } = await this._resolve(command, deviceId);
-        const { blockId, operationId, channel, value, isPersistent, isConfirmed } = model;
-        const operation: RegisterOperationCommand = { blockId, operationId, channel, value, isPersistent, isConfirmed, ...this._defined(override) };
-        return this.registerMapService.execute(template, connection, operation);
+        return this._execute(await this._resolve(command, deviceId), override);
+    }
+
+    /**
+     * Exécute la commande de lecture (ou son id) sur le slave `deviceId` et renvoie ses valeurs numériques, limitées
+     * aux champs `fields` (sinon à ceux de la commande, sinon tous). Échec d'exécution ou champ absent : exception.
+     */
+    public async read(command: DeviceCommandModel | string, deviceId: string, fields?: string[]): Promise<DeviceCommandValue[]> {
+        const resolved = await this._resolve(command, deviceId);
+        return outcomeValues(await this._execute(resolved), fields ?? resolved.command.fields);
     }
 
     /** Exécute une opération de la register map d'un slave, sans DeviceCommand enregistrée (banc de test, config onduleur) */
@@ -167,7 +173,8 @@ export class DeviceCommandService {
 
     /**
      * Une commande par opération de la register map : usage read ou set selon la fonction Modbus, voie 0 (scope
-     * 'channel'), valeur par défaut de la saisie numérique. _id stable (modèle + bloc + opération) : regénérer donne
+     * 'channel'), valeur par défaut de la saisie numérique ; lecture : tous ses champs (fields absent, params.result les
+     * décrit pour une sélection ultérieure). _id stable (modèle + bloc + opération) : regénérer donne
      * les mêmes commandes. Blocs `danger` : isConfirmed à false, à confirmer explicitement avant exécution.
      */
     public fromRegisterMap(modelId: string, registerMap: RegisterMapTemplate): SlaveTemplate['deviceCommands'] {
@@ -270,6 +277,12 @@ export class DeviceCommandService {
         }
         const connection = this.modbusDeviceService.toConnection(master.config as MasterConfigModel, slaveConfig.slaveId);
         return { slave, template: this.getTemplate(slaveConfig.kind), connection };
+    }
+
+    private _execute({ command, template, connection }: ResolvedCommand, override: DeviceCommandOverride = {}): Promise<RegisterOperationOutcome> {
+        const { blockId, operationId, channel, value, isPersistent, isConfirmed } = command;
+        const operation: RegisterOperationCommand = { blockId, operationId, channel, value, isPersistent, isConfirmed, ...this._defined(override) };
+        return this.registerMapService.execute(template, connection, operation);
     }
 
     // Commandes exécutées dans l'ordre ; `onSuccess` après chaque exécution réussie. Un échec est loggé sans interrompre les suivantes.

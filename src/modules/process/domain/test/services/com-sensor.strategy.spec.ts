@@ -1,6 +1,7 @@
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { ComSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
+import { outcomeValues } from '@process/domain/utils/device-command.util';
 import { DecodedValue, RegisterFunction, RegisterOperationOutcome } from '@register-map/domain/models/register-map.model';
 
 function CreateComSensorModel(field?: string): SensorModel {
@@ -28,11 +29,15 @@ const FIELDS: DecodedValue = {
 };
 
 describe('ComSensorStrategy', () => {
-    let deviceCommandService: { execute: jest.Mock };
+    let deviceCommandService: { execute: jest.Mock; read: jest.Mock };
     let strategy: ComSensorStrategy;
 
     beforeEach(() => {
-        deviceCommandService = { execute: jest.fn().mockResolvedValue(CreateOutcome(FIELDS)) };
+        // read réel ramené à execute + outcomeValues ; la sélection DeviceCommand.fields est testée côté service
+        const execute = jest.fn().mockResolvedValue(CreateOutcome(FIELDS));
+        const read = jest.fn(async (commandId: string, deviceId: string, fields?: string[]) =>
+            outcomeValues(await execute(commandId, deviceId), fields));
+        deviceCommandService = { execute, read };
         strategy = new ComSensorStrategy(deviceCommandService as never);
     });
 
@@ -43,13 +48,14 @@ describe('ComSensorStrategy', () => {
     it('should read the DeviceCommand and keep only the configured field', async () => {
         const result = await strategy.read(CreateComSensorModel('pv'));
 
-        expect(deviceCommandService.execute).toHaveBeenCalledWith('cmd-1', 'slave-1');
+        expect(deviceCommandService.read).toHaveBeenCalledWith('cmd-1', 'slave-1', ['pv']);
         expect(result).toEqual([{ value: 12.34, isFormated: true, unit: 'bar', name: 'pv' }]);
     });
 
-    it('should return every numeric field when no field is configured, with an empty unit when absent', async () => {
+    it('should defer to the DeviceCommand fields when no field is configured, with an empty unit when absent', async () => {
         const result = await strategy.read(CreateComSensorModel());
 
+        expect(deviceCommandService.read).toHaveBeenCalledWith('cmd-1', 'slave-1', undefined);
         expect(result).toEqual([
             { value: 12.34, isFormated: true, unit: 'bar', name: 'pv' },
             { value: 2, isFormated: true, unit: '', name: 'decimals' }

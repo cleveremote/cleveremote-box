@@ -75,10 +75,23 @@ describe('RegisterMapService (module register-map)', () => {
             });
         });
 
-        it('should describe a range read by its covered channels, without value', () => {
+        it('should describe a range read by its covered channels and result type, without value', () => {
             const params = service.describeParams(io8, 'outputs', 'read');
-            expect(params).toEqual({ range: { min: 0, max: 7, labelStart: 1 }, isConfirmRequired: false, isPersistable: false });
-            expect(Object.keys(JSON.parse(JSON.stringify(params)))).toEqual(['range', 'isConfirmRequired', 'isPersistable']);
+            expect(params).toEqual({
+                range: { min: 0, max: 7, labelStart: 1 }, result: { type: 'boolean[]' }, isConfirmRequired: false, isPersistable: false
+            });
+            expect(Object.keys(JSON.parse(JSON.stringify(params)))).toEqual(['range', 'result', 'isConfirmRequired', 'isPersistable']);
+        });
+
+        it('should describe the fields of a read, without offset or formula, and no result for a write', () => {
+            expect(service.describeParams(byKind('PRESSURE_V1'), 'range', 'read').result).toEqual({
+                type: 'fields',
+                fields: [
+                    { name: 'rangeZero', label: 'Zéro de l\'échelle', type: 'int16' },
+                    { name: 'rangeFull', label: 'Pleine échelle', type: 'int16' }
+                ]
+            });
+            expect(service.describeParams(io8, 'outputs', 'set').result).toBeUndefined();
         });
 
         it('should omit the value of a fixed-value operation', () => {
@@ -158,12 +171,24 @@ describe('RegisterMapService (module register-map)', () => {
             expect({ where, enumRefs: JSON.stringify(value ?? {}).includes('"enum":') }).toEqual({ where, enumRefs: false });
         };
 
+        // Résultat : type du template (absent pour echo), un champ décrit par champ décodé
+        const expectResult = (template: RegisterMapTemplate, block: RegisterBlock, operation: RegisterOperation): void => {
+            const result = service.describeParams(template, block.id, operation.id).result;
+            const where = `${block.id}.${operation.id}`;
+            const resultType = operation.result?.type === 'echo' ? undefined : operation.result?.type;
+            expect({ where, type: result?.type }).toEqual({ where, type: resultType });
+            if (result?.type === 'fields' && operation.result?.type === 'fields') {
+                expect({ where, names: result.fields.map((f) => f.name) }).toEqual({ where, names: operation.result.fields.map((f) => f.name) });
+            }
+        };
+
         it.each(templates.map((t) => [t.kind, t] as const))('should describe every operation of %s', (_kind, template) => {
             jest.spyOn(RegisterValueEncoder, 'encode').mockReturnValue(0);
             for (const block of template.registerMap) {
                 for (const operation of block.operations) {
                     expectChannels(template, block, operation);
                     expectValue(template, block, operation);
+                    expectResult(template, block, operation);
                 }
             }
         });
@@ -226,9 +251,12 @@ describe('RegisterMapService (module register-map)', () => {
             expect(service.describeParams(byKind(kind), blockId, operationId)).toEqual(expect.objectContaining(expected));
         });
 
-        it('should omit the channel, range and value keys when they do not apply (no null persisted)', () => {
-            expect(Object.keys(service.describeParams(byKind('PRESSURE_V1'), 'monitoring', 'read'))).toEqual(['isConfirmRequired', 'isPersistable']);
-            expect(Object.keys(service.describeParams(byKind('FLOWMETER_ULTRASONIC_V1'), 'monthlyHistory', 'read'))).toEqual(['channel', 'isConfirmRequired', 'isPersistable']);
+        it('should omit the channel, range, value and result keys when they do not apply (no null persisted)', () => {
+            const keys = (kind: string, blockId: string, operationId: string): string[] =>
+                Object.keys(service.describeParams(byKind(kind), blockId, operationId));
+            expect(keys('PRESSURE_V1', 'monitoring', 'read')).toEqual(['result', 'isConfirmRequired', 'isPersistable']);
+            expect(keys('FLOWMETER_ULTRASONIC_V1', 'monthlyHistory', 'read')).toEqual(['channel', 'result', 'isConfirmRequired', 'isPersistable']);
+            expect(keys('PRESSURE_V1', 'saveToUser', 'save')).toEqual(['isConfirmRequired', 'isPersistable']);
         });
     });
 

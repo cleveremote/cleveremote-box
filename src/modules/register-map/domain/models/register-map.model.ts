@@ -189,6 +189,20 @@ export type OperationValueParam =
     | { type: 'number[]'; length: number; min: number; max: number; unit?: string }
     | { type: 'composite'; encode?: string; fields: CompositeFieldParam[] };
 
+// Champ d'une lecture, sans offset ni formule : de quoi le choisir et l'afficher (unitFrom : unité connue à la lecture, `unit` en repli)
+export interface ResultFieldParam {
+    name: string;
+    label: string;
+    type: RegisterFieldType;
+    unit?: string;
+    description?: string;
+}
+
+// Résultat résolu d'une lecture : champs décrits pour 'fields', type seul sinon
+export type OperationResultParam =
+    | { type: 'fields'; fields: ResultFieldParam[] }
+    | { type: Exclude<OperationResult['type'], 'fields' | 'echo'> };
+
 // Paramètres à fournir pour exécuter l'opération, prêts pour générer la saisie sans relire le template
 export interface RegisterOperationParams {
     // scope 'channel' uniquement : voie à fournir
@@ -197,6 +211,8 @@ export interface RegisterOperationParams {
     range?: OperationChannelParam;
     // Absent quand l'opération n'attend aucune saisie (input absent ou 'none')
     value?: OperationValueParam;
+    // Lectures uniquement (absent pour echo) : forme du résultat, champs sélectionnables (DeviceCommand.fields)
+    result?: OperationResultParam;
     // Bloc `danger` : isConfirmed requis
     isConfirmRequired: boolean;
     // operation.params.persistence présent : isPersistent possible

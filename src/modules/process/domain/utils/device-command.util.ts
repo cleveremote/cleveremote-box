@@ -13,11 +13,11 @@ export function hasCommandType(command: Pick<DeviceCommandModel, 'types'>, type:
 }
 
 /**
- * Valeurs numériques d'un résultat de DeviceCommand : champs décodés (tous les numériques, ou `field`),
+ * Valeurs numériques d'un résultat de DeviceCommand : champs décodés (tous les numériques, ou ceux de `fields`),
  * valeur unique (number / version) ou une entrée par voie (boolean[] / enum[]).
- * Lève une erreur si l'exécution a échoué ou si `field` est absent du résultat.
+ * Lève une erreur si l'exécution a échoué ou si un champ de `fields` est absent du résultat.
  */
-export function outcomeValues(outcome: RegisterOperationOutcome, field?: string): DeviceCommandValue[] {
+export function outcomeValues(outcome: RegisterOperationOutcome, fields?: string[]): DeviceCommandValue[] {
     const name = `${outcome.blockId}.${outcome.operationId}`;
     if (!outcome.isOk) {
         const { message, label } = outcome.error ?? { message: 'échec' };
@@ -26,11 +26,10 @@ export function outcomeValues(outcome: RegisterOperationOutcome, field?: string)
     const value = outcome.value;
     switch (value?.type) {
         case 'fields': {
-            const fields = value.fields.filter((f) => typeof f.value === 'number' && (!field || f.name === field));
-            if (field && !fields.length) {
-                throw new Error(`${name} : champ numérique "${field}" absent du résultat`);
-            }
-            return fields.map((f) => ({ name: f.name, value: f.value as number, unit: f.unit }));
+            const numerics = value.fields.filter((f) => typeof f.value === 'number' && (!fields?.length || fields.includes(f.name)));
+            const missing = (fields ?? []).filter((field) => !numerics.some((f) => f.name === field)).map((f) => `"${f}"`);
+            if (missing.length) throw new Error(`${name} : champ(s) numérique(s) ${missing.join(', ')} absent(s) du résultat`);
+            return numerics.map((f) => ({ name: f.name, value: f.value as number, unit: f.unit }));
         }
         case 'number':
         case 'version':

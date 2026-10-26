@@ -8,7 +8,7 @@ export class ComSensorConfigModel {
     public commandId?: string;
     // Slave sur lequel la commande est lue
     public deviceId?: string;
-    // Nom du champ décodé à retenir (lecture à plusieurs champs, ou sensor enfant)
+    // Nom du champ décodé à retenir (sensor enfant, ou surcharge de DeviceCommand.fields)
     public field?: string;
     public cronPattern?: string;
     public code?: number;

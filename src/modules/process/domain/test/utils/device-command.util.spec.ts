@@ -26,9 +26,10 @@ describe('outcomeValues', () => {
         ]);
     });
 
-    it('should return only the requested field and throw when it is missing', () => {
-        expect(outcomeValues(CreateOutcome(fields), 'pv')).toEqual([{ name: 'pv', value: 12.34, unit: 'bar' }]);
-        expect(() => outcomeValues(CreateOutcome(fields), 'serial')).toThrow('champ numérique "serial" absent');
+    it('should return only the requested fields and throw when one is missing', () => {
+        expect(outcomeValues(CreateOutcome(fields), ['pv'])).toEqual([{ name: 'pv', value: 12.34, unit: 'bar' }]);
+        expect(outcomeValues(CreateOutcome(fields), [])).toHaveLength(outcomeValues(CreateOutcome(fields)).length);
+        expect(() => outcomeValues(CreateOutcome(fields), ['pv', 'serial'])).toThrow('champ(s) numérique(s) "serial" absent(s)');
     });
 
     it('should return the single value of a number or version result', () => {

@@ -163,6 +163,40 @@ describe('DeviceCommandService', () => {
         });
     });
 
+    describe('read', () => {
+        const FIELDS = {
+            isOk: true, blockId: 'monitoring', operationId: 'read',
+            value: { type: 'fields', fields: [
+                { name: 'pv', label: 'Mesure', raw: 1234, value: 12.34, unit: 'bar' },
+                { name: 'unit', label: 'Unité', raw: 1, value: 1 }
+            ] }
+        };
+
+        beforeEach(() => {
+            (registerMapService.execute as jest.Mock).mockResolvedValue(FIELDS);
+        });
+
+        it('should keep only the fields selected on the command', async () => {
+            deviceCommandRepository.get.mockResolvedValue(CreateCommand({ fields: ['pv'] }));
+
+            expect(await service.read('cmd-1', 'slave-1')).toEqual([{ name: 'pv', value: 12.34, unit: 'bar' }]);
+        });
+
+        it('should return every numeric field without selection, and let the given fields override the command ones', async () => {
+            expect((await service.read('cmd-1', 'slave-1')).map((v) => v.name)).toEqual(['pv', 'unit']);
+
+            deviceCommandRepository.get.mockResolvedValue(CreateCommand({ fields: ['pv'] }));
+            expect((await service.read('cmd-1', 'slave-1', ['unit'])).map((v) => v.name)).toEqual(['unit']);
+        });
+
+        it('should throw when the read failed', async () => {
+            (registerMapService.execute as jest.Mock)
+                .mockResolvedValue({ isOk: false, blockId: 'monitoring', operationId: 'read', error: { message: 'Timed out' } });
+
+            await expect(service.read('cmd-1', 'slave-1')).rejects.toThrow('monitoring.read : Timed out');
+        });
+    });
+
     describe('executeOnDevice', () => {
         it('should run the operation on the slave template and connection, without saved command', async () => {
             const operation = { blockId: 'analog', operationId: 'set', channel: 2, value: 5000 };

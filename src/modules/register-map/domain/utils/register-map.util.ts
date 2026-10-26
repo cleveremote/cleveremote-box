@@ -1,7 +1,8 @@
 import { RegisterMapInputError } from '../errors/register-map.error';
 import {
-    CompositeField, OperationChannelParam, OperationInput, OperationValueParam, READ_FUNCTIONS, RegisterBlock, RegisterEnumEntry,
-    RegisterFunction, RegisterMapTemplate, RegisterOperation, RegisterOperationParams, RegisterOperationValue, RegisterRequest
+    CompositeField, OperationChannelParam, OperationInput, OperationResult, OperationResultParam, OperationValueParam, READ_FUNCTIONS,
+    RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation, RegisterOperationParams, RegisterOperationValue,
+    RegisterRequest
 } from '../models/register-map.model';
 import { RegisterFieldDecoder } from './register-field.util';
 
@@ -104,6 +105,8 @@ export class RegisterOperationDescriber {
             ...(operation.scope === 'channel' && { channel: RegisterOperationDescriber._channels(template, block.address.count) }),
             ...(operation.scope === 'range' && { range: RegisterOperationDescriber._channels(template, operation.params?.length ?? 1) }),
             ...(input && input.type !== 'none' && { value: RegisterOperationDescriber._value(template, input) }),
+            ...(operation.result && operation.result.type !== 'echo'
+                && { result: RegisterOperationDescriber._result(operation.result) }),
             isConfirmRequired: !!block.danger,
             isPersistable: !!operation.params?.persistence
         };
@@ -112,6 +115,18 @@ export class RegisterOperationDescriber {
     // Voies 0..count-1, numérotées à partir de hardware.channels.labelStart
     private static _channels(template: RegisterMapTemplate, count: number): OperationChannelParam {
         return { min: 0, max: count - 1, labelStart: template.hardware.channels?.labelStart ?? 1 };
+    }
+
+    // Champs : nom, libellé, type et unité / description (si présents) ; autres résultats : type seul
+    private static _result(result: Exclude<OperationResult, { type: 'echo' }>): OperationResultParam {
+        if (result.type !== 'fields') {
+            return { type: result.type };
+        }
+        return {
+            type: 'fields',
+            fields: result.fields.map(({ name, label, type, unit, description }) =>
+                ({ name, label, type, ...(unit && { unit }), ...(description && { description }) }))
+        };
     }
 
     private static _value(template: RegisterMapTemplate, input: Exclude<OperationInput, { type: 'none' }>): OperationValueParam {

@@ -33,6 +33,8 @@ export class DeviceCommandModel {
     // init : exécutée à l'initialisation du device (ex: mode des sorties, paramètres variateur) ;
     // reset : exécutée à la remise à zéro du device, avant de rejouer l'init
     public types: DeviceCommandType[];
+    // Lecture à champs : champs retenus (params.result.fields[].name) à l'exploitation (sensors) ; absent = tous
+    public fields?: string[];
     // Paramètres attendus (voie, valeur) et leur type détaillé (listes, bornes) pour les formulaires du front ;
     // persisté, recalculé depuis la register map du kind du modèle à chaque enregistrement et à chaque lecture
     public params?: RegisterOperationParams;

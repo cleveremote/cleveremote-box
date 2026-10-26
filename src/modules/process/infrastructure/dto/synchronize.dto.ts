@@ -1028,6 +1028,12 @@ export class DeviceCommandBaseDTO {
     @ApiProperty({ enum: DeviceCommandType, isArray: true, description: 'Usages cumulables de la commande : set, read, init (initialisation du device), reset (remise à zéro du device)' })
     public types: DeviceCommandType[];
 
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    @ApiProperty({ description: 'Lecture à champs : champs retenus (params.result.fields[].name), absent = tous', required: false, type: [String] })
+    public fields?: string[];
+
     // Recalculé depuis la register map à l'enregistrement : la valeur reçue n'est conservée que si l'opération est introuvable
     @IsOptional()
     @IsObject()
@@ -1065,6 +1071,7 @@ export class DeviceCommandDTO extends DeviceCommandBaseDTO {
         model.isConfirmed = dto.isConfirmed;
         model.autoCreate = dto.autoCreate ?? false;
         model.types = [...dto.types];
+        model.fields = dto.fields && [...dto.fields];
         model.params = dto.params;
         model.delete = dto.delete ?? false;
         return model;

@@ -91,6 +91,7 @@ export class SlaveTemplateDTO {
                 isConfirmed: command.isConfirmed,
                 autoCreate: command.autoCreate ?? false,
                 types: [...command.types],
+                fields: command.fields && [...command.fields],
                 params: command.params
             }))
         };

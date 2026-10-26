@@ -91,7 +91,7 @@ export class InitService {
             //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             //.then(() => wrap('InitService.testBuildSlaveDeviceCommandsJson', () => this._testBuildSlaveDeviceCommandsJson()))
             .then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
-            .then(() => wrap('InitService.testDeviceCommands', () => this._testDeviceCommands("8d6f3fe2-af41-405b-9523-a0a6fb589b70"))) 
+            .then(() => wrap('InitService.testDeviceCommands', () => this._testDeviceCommands("eec70b4d-eddc-456a-a1be-0229663b60a3"))) 
         
             
             //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))

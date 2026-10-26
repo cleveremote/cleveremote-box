@@ -47,6 +47,10 @@ export class DeviceCommand {
     @Prop({ type: [{ type: String, enum: Object.values(DeviceCommandType) }], required: true })
     public types: DeviceCommandType[];
 
+    // lecture à champs : champs retenus (absent = tous)
+    @Prop({ type: [String], default: undefined })
+    public fields?: string[];
+
     // typage de la voie et de la valeur (cf. RegisterOperationParams), calculé depuis la register map
     @Prop({ type: Object, default: undefined })
     public params?: RegisterOperationParams;
