@@ -28,7 +28,6 @@ export class DeviceCommandModel {
     public isPersistent?: boolean;
     // Requis pour les blocs `danger`
     public isConfirmed?: boolean;
-    public autoCreate: boolean = false;
     // Usages de la commande (cumulables, ex: [init, reset]) ; chaque stratégie n'exécute que ceux de son appel.
     // init : exécutée à l'initialisation du device (ex: mode des sorties, paramètres variateur) ;
     // reset : exécutée à la remise à zéro du device, avant de rejouer l'init

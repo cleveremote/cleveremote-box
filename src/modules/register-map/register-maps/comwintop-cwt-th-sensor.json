@@ -110,6 +110,7 @@
             "fields": [
               {
                 "name": "humidity",
+                "autoCreate": true,
                 "label": "Humidité relative",
                 "offset": 0,
                 "type": "uint16",
@@ -118,6 +119,7 @@
               },
               {
                 "name": "temperature",
+                "autoCreate": true,
                 "label": "Température",
                 "offset": 1,
                 "type": "int16",

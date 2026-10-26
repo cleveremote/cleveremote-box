@@ -75,6 +75,8 @@ export interface RegisterField {
     // Valeur attendue (registres de test)
     expected?: number;
     description?: string;
+    // Champ de mesure transformé en sensor (enfant du sensor de sa lecture) à la création du slave
+    autoCreate?: boolean;
 }
 
 export type OperationInput =
@@ -196,6 +198,7 @@ export interface ResultFieldParam {
     type: RegisterFieldType;
     unit?: string;
     description?: string;
+    autoCreate?: boolean;
 }
 
 // Résultat résolu d'une lecture : champs décrits pour 'fields', type seul sinon

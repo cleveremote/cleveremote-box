@@ -26,16 +26,6 @@ export class SensorConfig {
     // nom du champ decode a retenir (racine ou enfant)
     @Prop()
     public field?: string;
-
-    // CHILD COM (sensor avec parentId)
-    @Prop()
-    public code?: number;
-
-    @Prop()
-    public scale?: number;
-
-    @Prop()
-    public unit?: string;
 }
 export const SensorConfigSchema = SchemaFactory.createForClass(SensorConfig);
 

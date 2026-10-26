@@ -8,6 +8,6 @@ export class DeviceOnlyAutoCreationStrategy implements AutoCreationStrategy {
     public readonly kinds: DeviceKind[] = [];
 
     public async build(): Promise<AutoCreatedElements> {
-        return { actuators: [], cycles: [] };
+        return { actuators: [], cycles: [], sensors: [] };
     }
 }

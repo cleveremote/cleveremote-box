@@ -1,8 +1,8 @@
 import { SensorType } from '../interfaces/sensor.interface';
 
 // tous les champs sont optionnels : un sensor COM "racine" utilise cronPattern/commandId, un sensor
-// enfant (parentId renseigne) utilise code/scale/unit (ou field) - la valeur est alors extraite de la
-// lecture du sensor parent, pas lue via son propre cron.
+// enfant (parentId renseigne) utilise field - la valeur (decodee, unite comprise, par la register map)
+// est alors extraite de la lecture du sensor parent, pas lue via son propre cron.
 export class ComSensorConfigModel {
     // DeviceCommand (register map) lue à chaque tick
     public commandId?: string;
@@ -11,9 +11,6 @@ export class ComSensorConfigModel {
     // Nom du champ décodé à retenir (sensor enfant, ou surcharge de DeviceCommand.fields)
     public field?: string;
     public cronPattern?: string;
-    public code?: number;
-    public scale?: number;
-    public unit?: string;
 }
 
 export enum forcastDataName {
@@ -39,7 +36,7 @@ export class SensorModel {
     public display?: boolean = true;
 
     // relation auto-referencee : un sensor enfant (parentId renseigne) remplit
-    // code/scale/unit/field sur ComSensorConfigModel plutot que cronPattern/commandId.
+    // field sur ComSensorConfigModel plutot que cronPattern/commandId.
     public parentId?: string | null = null;
 
     public value?: number;

@@ -6,6 +6,9 @@ import {
     DigitalIoAutoCreationStrategy
 } from '@process/domain/services/slave-provisioning/auto-creation/strategies/digital-io-auto-creation.strategy';
 import {
+    SensorAutoCreationStrategy
+} from '@process/domain/services/slave-provisioning/auto-creation/strategies/sensor-auto-creation.strategy';
+import {
     DeviceOnlyAutoCreationStrategy
 } from '@process/domain/services/slave-provisioning/auto-creation/strategies/device-only-auto-creation.strategy';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
@@ -23,7 +26,9 @@ import { CycleModel } from '@process/domain/models/cycle.model';
 import { DeviceKind, DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
-import { CreateDeviceCommandServiceMock, CreateLoggerMock, DIGITAL_IO_TEMPLATE, MASTER_ID, WithPorts } from './slave-provisioning.spec-mock';
+import {
+    CreateDeviceCommandServiceMock, CreateLoggerMock, DIGITAL_IO_TEMPLATE, MASTER_ID, TH_SENSOR_TEMPLATE, WithPorts
+} from './slave-provisioning.spec-mock';
 
 describe('AutoCreationService (integration mongodb-memory-server for cycles)', () => {
     let mongod: Awaited<ReturnType<typeof StartMongoMemory>>['mongod'];
@@ -32,6 +37,7 @@ describe('AutoCreationService (integration mongodb-memory-server for cycles)', (
     let sequenceRepository: SequenceRepository;
     let deviceRepository: { save: jest.Mock; delete: jest.Mock };
     let actuatorRepository: { save: jest.Mock; delete: jest.Mock };
+    let sensorRepository: { save: jest.Mock; delete: jest.Mock };
     let deviceCommandRepository: { getByModelId: jest.Mock };
     let deviceCommandService: ReturnType<typeof CreateDeviceCommandServiceMock>;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -65,6 +71,7 @@ describe('AutoCreationService (integration mongodb-memory-server for cycles)', (
 
         deviceRepository = { save: jest.fn().mockImplementation(async (m) => m), delete: jest.fn().mockResolvedValue(true) };
         actuatorRepository = { save: jest.fn().mockImplementation(async (m) => m), delete: jest.fn().mockResolvedValue(true) };
+        sensorRepository = { save: jest.fn().mockImplementation(async (m) => m), delete: jest.fn().mockResolvedValue(true) };
         deviceCommandRepository = { getByModelId: jest.fn().mockResolvedValue([]) };
         deviceCommandService = CreateDeviceCommandServiceMock();
         logger = CreateLoggerMock();
@@ -73,11 +80,14 @@ describe('AutoCreationService (integration mongodb-memory-server for cycles)', (
 
     function CreateService(sequences: SequenceRepository): AutoCreationService {
         const resolver = new AutoCreationStrategyResolver(
-            [new DigitalIoAutoCreationStrategy(deviceCommandService as never, logger as never)],
+            [
+                new DigitalIoAutoCreationStrategy(deviceCommandService as never, logger as never),
+                new SensorAutoCreationStrategy(deviceCommandService as never, logger as never)
+            ],
             new DeviceOnlyAutoCreationStrategy()
         );
         const persister = new SlaveBundlePersister(
-            deviceRepository as never, actuatorRepository as never, cycleRepository, sequences, logger as never
+            deviceRepository as never, actuatorRepository as never, cycleRepository, sequences, sensorRepository as never, logger as never
         );
         return new AutoCreationService(resolver, persister, deviceCommandRepository as never, deviceCommandService as never, logger as never);
     }
@@ -153,6 +163,29 @@ describe('AutoCreationService (integration mongodb-memory-server for cycles)', (
             expect(actuatorRepository.delete).toHaveBeenCalledTimes(1);
             expect(deviceRepository.delete).toHaveBeenCalledTimes(1);
             cycleDelete.mockRestore();
+        });
+
+        it('should persist the sensors built from the autoCreate fields', async () => {
+            const scanned = { template: TH_SENSOR_TEMPLATE, kind: TH_SENSOR_TEMPLATE.kind, slaveId: 63 };
+
+            await service.createSlave(scanned, MASTER_ID, { existingDevices: [], templates: [TH_SENSOR_TEMPLATE] });
+
+            const sensors = sensorRepository.save.mock.calls.map(([sensor]) => sensor);
+            expect(sensors).toHaveLength(3);
+            expect(sensors.slice(1).every((sensor) => sensor.parentId === sensors[0]._id)).toBe(true);
+        });
+
+        it('should roll back the saved sensors and the device when a sensor save fails', async () => {
+            sensorRepository.save
+                .mockImplementationOnce(async (m) => m)
+                .mockRejectedValueOnce(new Error('sensor save failed'));
+            const scanned = { template: TH_SENSOR_TEMPLATE, kind: TH_SENSOR_TEMPLATE.kind, slaveId: 63 };
+
+            await expect(service.createSlave(scanned, MASTER_ID, { existingDevices: [], templates: [TH_SENSOR_TEMPLATE] }))
+                .rejects.toThrow('sensor save failed');
+
+            expect(sensorRepository.delete).toHaveBeenCalledTimes(2);
+            expect(deviceRepository.delete).toHaveBeenCalledTimes(1);
         });
     });
 });

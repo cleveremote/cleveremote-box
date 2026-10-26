@@ -421,6 +421,7 @@
             "fields": [
               {
                 "name": "pv",
+                "autoCreate": true,
                 "label": "Mesure (PV)",
                 "offset": 0,
                 "type": "int16",

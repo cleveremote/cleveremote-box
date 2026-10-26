@@ -5,10 +5,12 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { SequenceRepository } from '@process/infrastructure/repositories/sequence.repository';
+import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { DeviceModel } from '@process/domain/models/device.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
+import { SensorModel } from '@process/domain/models/sensor.model';
 import { SlaveBundle } from './auto-creation-strategy.interface';
 
 @Injectable()
@@ -18,6 +20,7 @@ export class SlaveBundlePersister {
         private actuatorRepository: ActuatorRepository,
         private cycleRepository: CycleRepository,
         private sequenceRepository: SequenceRepository,
+        private sensorRepository: SensorRepository,
         private readonly logger: Logger
     ) { }
 
@@ -30,19 +33,26 @@ export class SlaveBundlePersister {
             await this._rollbackSlave(device, actuatorResults);
             throw actuatorFailure.reason;
         }
+        const sensorResults = await Promise.allSettled(built.sensors.map((sensor) => this.sensorRepository.save(sensor)));
+        const sensorFailure = this._firstFailure(sensorResults);
+        if (sensorFailure) {
+            await this._rollbackSlave(device, actuatorResults, sensorResults);
+            throw sensorFailure.reason;
+        }
         const cycleResults = await Promise.allSettled(built.cycles.map((cycle) => this.cycleRepository.save(cycle)));
         const sequenceResults = this._firstFailure(cycleResults)
             ? []
             : await Promise.allSettled(built.cycles.flatMap((cycle) => cycle.sequences.map((sequence) => this.sequenceRepository.save(sequence))));
         const failure = this._firstFailure(cycleResults) ?? this._firstFailure(sequenceResults);
         if (failure) {
-            await this._rollbackSlave(device, actuatorResults, cycleResults);
+            await this._rollbackSlave(device, actuatorResults, sensorResults, cycleResults);
             throw failure.reason;
         }
         const sequences = sequenceResults.map((r) => (r as PromiseFulfilledResult<SequenceModel>).value);
         return {
             device,
             actuators: actuatorResults.map((r) => (r as PromiseFulfilledResult<ActuatorModel>).value),
+            sensors: sensorResults.map((r) => (r as PromiseFulfilledResult<SensorModel>).value),
             cycles: cycleResults.map((r) => {
                 const cycle = (r as PromiseFulfilledResult<CycleModel>).value;
                 cycle.sequences = sequences.filter((sequence) => sequence.cycleId === cycle._id);
@@ -57,11 +67,12 @@ export class SlaveBundlePersister {
 
     // la suppression d'un cycle supprime aussi ses séquences (CycleRepository.delete)
     private async _rollbackSlave(device: DeviceModel, actuatorResults: PromiseSettledResult<ActuatorModel>[],
-        cycleResults: PromiseSettledResult<CycleModel>[] = []): Promise<void> {
+        sensorResults: PromiseSettledResult<SensorModel>[] = [], cycleResults: PromiseSettledResult<CycleModel>[] = []): Promise<void> {
         const savedIds = <T extends { _id: string }>(results: PromiseSettledResult<T>[]): string[] =>
             results.filter((r): r is PromiseFulfilledResult<T> => r.status === 'fulfilled').map((r) => r.value._id);
         const rollbacks = await Promise.allSettled([
             ...savedIds(cycleResults).map((id) => this.cycleRepository.delete(id)),
+            ...savedIds(sensorResults).map((id) => this.sensorRepository.delete(id)),
             ...savedIds(actuatorResults).map((id) => this.actuatorRepository.delete(id)),
             this.deviceRepository.delete(device._id)
         ]);

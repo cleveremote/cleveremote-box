@@ -292,38 +292,23 @@ describe('SensorService', () => {
             schedulerRegistry.getCronJob('unsupported-type-sensor').stop();
         });
 
-        it('should compute a scaled value from the parent read results for each child sensor', async () => {
+        it('should emit for each child sensor the parent read result matching its field', async () => {
             const sensor = CreateComSensorModel({ _id: 'cron-sensor-6' });
             const child = CreateComSensorModel({ _id: 'child-a', parentId: 'cron-sensor-6' });
-            (child.config as ComSensorConfigModel).code = 0;
-            (child.config as ComSensorConfigModel).scale = 2;
+            (child.config as ComSensorConfigModel).field = 'temperature';
             sensorRepository.getChildren.mockResolvedValue([child]);
-            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
+            comStrategy.read = jest.fn().mockResolvedValue([
+                { value: 55, isFormated: true, unit: '%RH', name: 'humidity' },
+                { value: 21.5, isFormated: true, unit: '°C', name: 'temperature' }
+            ] as never);
             await service.initScheduledSensor(sensor);
 
             await schedulerRegistry.getCronJob('cron-sensor-6').fireOnTick();
 
             expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'child-a', value: 20 })
+                expect.objectContaining({ id: 'child-a', value: 21.5 })
             );
             schedulerRegistry.getCronJob('cron-sensor-6').stop();
-        });
-
-        it('should default the child scale to 1 when not configured', async () => {
-            const sensor = CreateComSensorModel({ _id: 'cron-sensor-7' });
-            const child = CreateComSensorModel({ _id: 'child-b', parentId: 'cron-sensor-7' });
-            (child.config as ComSensorConfigModel).code = 0;
-            (child.config as ComSensorConfigModel).scale = undefined;
-            sensorRepository.getChildren.mockResolvedValue([child]);
-            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
-            await service.initScheduledSensor(sensor);
-
-            await schedulerRegistry.getCronJob('cron-sensor-7').fireOnTick();
-
-            expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'child-b', value: 10 })
-            );
-            schedulerRegistry.getCronJob('cron-sensor-7').stop();
         });
     });
 

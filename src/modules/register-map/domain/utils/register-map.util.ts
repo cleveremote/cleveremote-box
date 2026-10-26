@@ -117,15 +117,15 @@ export class RegisterOperationDescriber {
         return { min: 0, max: count - 1, labelStart: template.hardware.channels?.labelStart ?? 1 };
     }
 
-    // Champs : nom, libellé, type et unité / description (si présents) ; autres résultats : type seul
+    // Champs : nom, libellé, type et unité / description / autoCreate (si présents) ; autres résultats : type seul
     private static _result(result: Exclude<OperationResult, { type: 'echo' }>): OperationResultParam {
         if (result.type !== 'fields') {
             return { type: result.type };
         }
         return {
             type: 'fields',
-            fields: result.fields.map(({ name, label, type, unit, description }) =>
-                ({ name, label, type, ...(unit && { unit }), ...(description && { description }) }))
+            fields: result.fields.map(({ name, label, type, unit, description, autoCreate }) =>
+                ({ name, label, type, ...(unit && { unit }), ...(description && { description }), ...(autoCreate && { autoCreate }) }))
         };
     }
 

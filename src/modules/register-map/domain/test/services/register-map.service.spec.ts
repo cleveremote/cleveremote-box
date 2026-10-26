@@ -94,6 +94,19 @@ describe('RegisterMapService (module register-map)', () => {
             expect(service.describeParams(io8, 'outputs', 'set').result).toBeUndefined();
         });
 
+        it('should flag the autoCreate fields of a read, and only them', () => {
+            const result = service.describeParams(byKind('TEMPERATURE_MOISTURE_V1'), 'monitoring', 'read').result;
+            expect(result).toEqual({
+                type: 'fields',
+                fields: [
+                    expect.objectContaining({ name: 'humidity', autoCreate: true }),
+                    expect.objectContaining({ name: 'temperature', autoCreate: true })
+                ]
+            });
+            const calibration = service.describeParams(byKind('TEMPERATURE_MOISTURE_V1'), 'calibration', 'read').result;
+            expect(calibration.type === 'fields' && calibration.fields.some((field) => 'autoCreate' in field)).toBe(false);
+        });
+
         it('should omit the value of a fixed-value operation', () => {
             expect(service.describeParams(io8, 'outputs', 'toggle').value).toBeUndefined();
             expect(service.describeParams(io8, 'allOutputs', 'toggle')).toEqual({ isConfirmRequired: false, isPersistable: false });
@@ -133,7 +146,7 @@ describe('RegisterMapService (module register-map)', () => {
         it('should load every register map of the directory', () => {
             expect(templates.map((t) => t.kind).sort()).toEqual([
                 'ANALOG_INPUT_8CH', 'ANALOG_OUTPUT_8CH', 'ANALOG_OUTPUT_8CH_MA', 'DIGITAL_IO_8CH', 'EC_METER_V1', 'FLOWMETER_ULTRASONIC_V1',
-                'INVERTER_VEICHI_SI23_V1', 'PRESSURE_V1', 'TEMPERATURE_MOISTURE_V1'
+                'FLOWMETER_V1', 'INVERTER_VEICHI_SI23_V1', 'PRESSURE_V1', 'TEMPERATURE_MOISTURE_V1'
             ]);
         });
 

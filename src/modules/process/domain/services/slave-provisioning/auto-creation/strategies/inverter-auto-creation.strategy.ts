@@ -8,6 +8,6 @@ export class InverterAutoCreationStrategy implements AutoCreationStrategy {
 
     // TODO: auto-création variateur non implémentée, le slave est créé seul
     public async build(): Promise<AutoCreatedElements> {
-        return { actuators: [], cycles: [] };
+        return { actuators: [], cycles: [], sensors: [] };
     }
 }

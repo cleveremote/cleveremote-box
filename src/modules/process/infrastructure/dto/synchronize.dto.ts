@@ -596,8 +596,8 @@ export class TriggerSynchronizeDTO {
 }
 
 export class SensorConfigDTO {
-    // requis pour FORCAST/COM ; absent quand le sensor est un enfant (parentId renseigne)
-    @ValidateIf(o => o.code === undefined || o.code === null)
+    // requis pour FORCAST/COM ; absent quand le sensor est un enfant (field sans commandId)
+    @ValidateIf(o => !o.field || !!o.commandId)
     @IsString()
     @IsNotEmpty()
     public cronPattern?: string;
@@ -620,17 +620,6 @@ export class SensorConfigDTO {
     @IsOptional()
     @IsString()
     public field?: string;
-
-    // CHILD COM (sensor avec parentId)
-    @IsOptional()
-    @IsNumber()
-    public code?: number;
-    @IsOptional()
-    @IsNumber()
-    public scale?: number;
-    @IsOptional()
-    @IsString()
-    public unit?: string;
 }
 
 export class SensorSynchronizeDTO {
@@ -1017,11 +1006,6 @@ export class DeviceCommandBaseDTO {
     @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
     public isConfirmed?: boolean;
 
-    @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: 'Création automatique', required: false, default: false })
-    public autoCreate?: boolean = false;
-
     @IsArray()
     @ArrayNotEmpty()
     @IsEnum(DeviceCommandType, { each: true })
@@ -1069,7 +1053,6 @@ export class DeviceCommandDTO extends DeviceCommandBaseDTO {
         model.value = dto.value;
         model.isPersistent = dto.isPersistent;
         model.isConfirmed = dto.isConfirmed;
-        model.autoCreate = dto.autoCreate ?? false;
         model.types = [...dto.types];
         model.fields = dto.fields && [...dto.fields];
         model.params = dto.params;

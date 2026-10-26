@@ -392,6 +392,73 @@ export class RegisterMapService {
     }
 
     /**
+     * Test du débitmètre RS485 (flowmeter-rs485.json) : toutes les lectures, comparaison à la valeur usine,
+     * contrôle de l'identifiant 0x2022 et cohérence vues groupées / blocs unitaires. Lecture seule, aucune écriture.
+     */
+    public async testFlowMeter(): Promise<void> {
+        // Débitmètre : unit id usine 255 (plage FLOWMETER_V1 : 11-20), série 115200 8N1 en usine ; adapter host/port/unitId au montage réel
+        const CONNECTION: ModbusConnection = { transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, unitId: 12 };
+        const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+        const flowMeterTemplate = readdirSync(dir).filter((f) => f.endsWith('.json'))
+            .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as RegisterMapTemplate)
+            .find((t) => t.kind === 'FLOWMETER_V1');
+        if (!flowMeterTemplate) {
+            console.log('register map FLOWMETER_V1 introuvable');
+            return;
+        }
+
+        const readBlocks = flowMeterTemplate.registerMap
+            .filter((b) => b.operations.some((o) => o.id === 'read' && o.scope === 'fixed'));
+        const outcomes = new Map<string, RegisterOperationOutcome>();
+        const errors: string[] = [];
+        const notDefault: string[] = [];
+        for (const block of readBlocks) {
+            const outcome = await this.execute(flowMeterTemplate, CONNECTION, { blockId: block.id, operationId: 'read', isConfirmed: true });
+            outcomes.set(block.id, outcome);
+            this._printOutcome(outcome);
+            if (!outcome.isOk) {
+                errors.push(`${block.id} : ${outcome.error?.message}${outcome.error?.label ? ` (${outcome.error.label})` : ''}`);
+                continue;
+            }
+            const first = outcome.value?.type === 'fields' ? outcome.value.fields[0] : undefined;
+            if (block.defaultValue !== undefined && first && !this._isSameValue(first.raw, block.defaultValue)) {
+                notDefault.push(`${block.id} ${block.label} : lu ${first.text ?? first.value}${first.unit ? ` ${first.unit}` : ''}, usine ${block.defaultValue}`);
+            }
+        }
+
+        const fieldOf = (blockId: string, name: string): DecodedField | undefined => {
+            const value = outcomes.get(blockId)?.value;
+            return value?.type === 'fields' ? value.fields.find((f) => f.name === name) : undefined;
+        };
+
+        // L'identifiant du modèle est toujours 0x2022 (8226) : sinon mauvais équipement ou mauvais décodage
+        const modelId = fieldOf('modelId', 'modelId');
+        if (modelId) {
+            const isExpected = this._isSameValue(modelId.raw, 8226);
+            console.log(`\n=== Débitmètre : identifiant 0x${Number(modelId.raw).toString(16)} ${isExpected ? 'OK' : '(attendu 0x2022)'}`);
+        }
+
+        // Les vues groupées et les blocs unitaires doivent concorder (lectures successives : faible écart possible sur les mesures)
+        console.log('\n=== Débitmètre : vues groupées / blocs unitaires');
+        const pairs: [string, string][] = [
+            ['monitoring', 'instantFlow'], ['monitoring', 'totalFlow'], ['monitoring', 'pressure'],
+            ['configuration', 'modelId'], ['configuration', 'baudRate'], ['configuration', 'deviceAddress'], ['configuration', 'kFactor'],
+        ];
+        for (const [groupId, name] of pairs) {
+            const grouped = fieldOf(groupId, name);
+            const single = fieldOf(name, name);
+            if (grouped && single) {
+                console.log(`  ${name} : groupé ${grouped.text ?? grouped.value} / unitaire ${single.text ?? single.value} ${single.unit ?? ''}`);
+            }
+        }
+
+        console.log(`\n=== Débitmètre : ${readBlocks.length} lectures, ${readBlocks.length - errors.length} OK, ${errors.length} en erreur`);
+        errors.forEach((e) => console.log(`  ERREUR ${e}`));
+        console.log(`\n=== Débitmètre : ${notDefault.length} paramètres différents de la valeur usine`);
+        notDefault.forEach((d) => console.log(`  ${d}`));
+    }
+
+    /**
      * Test de toutes les opérations du module Waveshare Modbus RTU IO 8CH (waveshare-modbus-rtu-io-8ch.json) :
      * lectures, pilotage des sorties (unitaire, masque, toggle, toutes, flash ON/OFF), modes de contrôle,
      * puis réécriture à l'identique de l'adresse et des paramètres UART. Chaque écriture est vérifiée par relecture.
@@ -469,7 +536,7 @@ export class RegisterMapService {
         }
 
         // outputs.setMask puis outputs.toggleRange (inversion du masque)
-        const mask = fill(false).map((_, i) => i % 2 === 0);
+        const mask = fill(false).map((_, i) => i % 2 === 0); 
         await run({ blockId: 'outputs', operationId: 'setMask', value: mask });
         await expectChannels('outputs.setMask 10101010', 'outputs', mask);
         await run({ blockId: 'outputs', operationId: 'toggleRange' });

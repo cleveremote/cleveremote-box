@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { Sensor, SensorSchema } from '@process/infrastructure/schemas/sensor.schema';
+import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
+import { SensorMongooseRepository } from '@process/infrastructure/repositories/sensor-mongoose.repository';
 import { ActuatorModule } from '../actuator-strategies/actuator.module';
 import { SlaveScanService } from './scan/slave-scan.service';
 import { AutoCreationService } from './auto-creation/auto-creation.service';
@@ -14,8 +18,14 @@ import { DeviceOnlyAutoCreationStrategy } from './auto-creation/strategies/devic
 
 // Scan des masters et auto-création des slaves détectés ; un nouveau type = une stratégie ajoutée à AUTO_CREATION_STRATEGIES
 @Module({
-    imports: [ActuatorModule],
+    imports: [
+        MongooseModule.forFeature([{ name: Sensor.name, schema: SensorSchema }]),
+        ActuatorModule
+    ],
     providers: [
+        // sensors créés depuis les champs autoCreate (SensorAutoCreationStrategy)
+        SensorRepository,
+        SensorMongooseRepository,
         SlaveScanService,
         AutoCreationService,
         AutoCreationStrategyResolver,

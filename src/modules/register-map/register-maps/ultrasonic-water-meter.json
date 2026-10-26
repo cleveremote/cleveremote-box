@@ -806,6 +806,7 @@
             "fields": [
               {
                 "name": "instantFlow",
+                "autoCreate": true,
                 "label": "Débit instantané",
                 "offset": 0,
                 "type": "float",

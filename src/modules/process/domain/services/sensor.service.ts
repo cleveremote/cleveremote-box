@@ -76,7 +76,7 @@ export class SensorService {
                 for (let index = 0; index < children.length; index++) {
                     const childSensor = children[index];
                     const config = childSensor.config as ComSensorConfigModel;
-                    //const value = +(results[config.code].value * (config.scale ?? 1)).toFixed(3);
+                    //const value = results.find((result) => result.name === config.field)?.value;
                     //this.emitReceivedData(childSensor,value);
                     this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
                 }

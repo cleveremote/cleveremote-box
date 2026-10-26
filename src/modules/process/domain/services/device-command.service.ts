@@ -190,7 +190,6 @@ export class DeviceCommandService {
                 value: !isRead && operation.input?.type === 'number' ? operation.input.default : undefined,
                 isPersistent: false,
                 isConfirmed: false,
-                autoCreate: false,
                 types: [isRead ? DeviceCommandType.READ : DeviceCommandType.SET]
             };
         }));

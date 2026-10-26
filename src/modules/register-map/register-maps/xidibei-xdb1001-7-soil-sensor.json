@@ -109,6 +109,7 @@
             "fields": [
               {
                 "name": "moisture",
+                "autoCreate": true,
                 "label": "Humidité volumique",
                 "offset": 0,
                 "type": "uint16",
@@ -117,6 +118,7 @@
               },
               {
                 "name": "temperature",
+                "autoCreate": true,
                 "label": "Température",
                 "offset": 1,
                 "type": "int16",
@@ -125,6 +127,7 @@
               },
               {
                 "name": "conductivity",
+                "autoCreate": true,
                 "label": "Conductivité",
                 "offset": 2,
                 "type": "uint16",
@@ -132,6 +135,7 @@
               },
               {
                 "name": "ph",
+                "autoCreate": true,
                 "label": "pH",
                 "offset": 3,
                 "type": "uint16",

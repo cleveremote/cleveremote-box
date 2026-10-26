@@ -23,7 +23,7 @@ export class DigitalIoAutoCreationStrategy implements AutoCreationStrategy {
     public async build({ device, template }: AutoCreationContext): Promise<AutoCreatedElements> {
         const actuators = this._buildDigitalOutputActuators(device, template.kind, template.deviceCommands);
         const cycles = actuators.map((actuator) => BuildModuleCycle(device, actuator));
-        return { actuators, cycles };
+        return { actuators, cycles, sensors: [] };
     }
 
     // Un actuator COM par port de sortie (portNumStart -> portNumStart + portCount - 1), piloté sur sa voie

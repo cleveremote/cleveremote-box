@@ -15,7 +15,6 @@ export class DeviceCommandMapper {
         model.value = command.value;
         model.isPersistent = command.isPersistent;
         model.isConfirmed = command.isConfirmed;
-        model.autoCreate = command.autoCreate ?? false;
         model.types = [...(command.types ?? [])];
         model.fields = command.fields?.length ? [...command.fields] : undefined;
         model.params = command.params;
@@ -36,7 +35,6 @@ export class DeviceCommandMapper {
         command.value = model.value;
         command.isPersistent = model.isPersistent;
         command.isConfirmed = model.isConfirmed;
-        command.autoCreate = model.autoCreate ?? false;
         command.types = [...(model.types ?? [])];
         command.fields = model.fields && [...model.fields];
         command.params = model.params;
