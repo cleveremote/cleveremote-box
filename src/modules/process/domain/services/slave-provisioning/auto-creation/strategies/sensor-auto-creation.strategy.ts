@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DeviceKind } from '@process/domain/models/device.model';
-import { AutoCreatedElements, AutoCreationStrategy } from '../auto-creation-strategy.interface';
+import { AutoCreatedElements, AutoCreationContext, AutoCreationStrategy } from '../auto-creation-strategy.interface';
 
 // Capteurs Modbus ; une spécialisation par kind se fait en sortant ce kind vers sa propre stratégie
 @Injectable()
@@ -14,7 +14,7 @@ export class SensorAutoCreationStrategy implements AutoCreationStrategy {
     ];
 
     // TODO: auto-création capteur non implémentée, le slave est créé seul
-    public async build(): Promise<AutoCreatedElements> {
+    public async build({ device, template }: AutoCreationContext): Promise<AutoCreatedElements> {
         return { actuators: [], cycles: [] };
     }
 }
