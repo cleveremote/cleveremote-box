@@ -7,7 +7,7 @@
     "length": "operation.params.length si présent, sinon 1",
     "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : saisie brute ; 'number[]' : tableau de saisies brutes ; 'composite' : input.encode",
     "channelLabel": "libellé voie = hardware.channels.labelStart + index",
-    "outputUnit": "Version (B) : sortie tension 0-10 V, consigne en mV (0-10000). Version standard : sortie courant 0-20 mA (non couverte par ce template)",
+    "outputUnit": "Version (B) : sortie tension 0-10 V, consigne en mV (0-10000). Version standard : sortie courant 0-20 mA (cf. waveshare-modbus-rtu-analog-output-8ch.json)",
     "supply": "Alimentation du module supérieure à la tension de sortie (ex: ≥ 15 V pour 10 V), 100 mA max par voie",
     "linkage": "Doc Waveshare : un mode Linkage (registre non documenté) peut bloquer le pilotage Modbus des sorties",
     "danger": "true : l'opération peut couper la communication avec le module (confirmation requise)"

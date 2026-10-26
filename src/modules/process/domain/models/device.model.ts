@@ -22,6 +22,7 @@ export enum DeviceKind {
     //IO MODULES
     DIGITAL_IO_8_CH = 'DIGITAL_IO_8CH',
     ANALOG_OUTPUT_8_CH = 'ANALOG_OUTPUT_8CH',
+    ANALOG_OUTPUT_8_CH_MA = 'ANALOG_OUTPUT_8CH_MA',
     ANALOG_INPUT_8_CH = 'ANALOG_INPUT_8CH',
     // Esclave Modbus générique (ex-OTHERS)
     MODBUS_SLAVE = 'MODBUS_SLAVE',
@@ -65,6 +66,7 @@ export const DEVICE_KIND_SPECS: Record<DeviceKind, DeviceKindSpec | undefined> =
     [DeviceKind.ANALOG_OUTPUT_8_CH]: { range: { min: 71, max: 80 }, discoveryRegister: DiscoveryAddressRegister.ANALOG_OUTPUT },
     [DeviceKind.ANALOG_INPUT_8_CH]: { range: { min: 81, max: 90 }, discoveryRegister: DiscoveryAddressRegister.ANALOG_INPUT },
     [DeviceKind.MODBUS_SLAVE]: { range: { min: 91, max: 100 } },
+    [DeviceKind.ANALOG_OUTPUT_8_CH_MA]: { range: { min: 101, max: 110 }, discoveryRegister: DiscoveryAddressRegister.ANALOG_OUTPUT },
     [DeviceKind.UNKNOWN_DEVICE]: undefined,
 };
 

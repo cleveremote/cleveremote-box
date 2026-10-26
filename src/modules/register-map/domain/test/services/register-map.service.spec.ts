@@ -119,7 +119,7 @@ describe('RegisterMapService (module register-map)', () => {
 
         it('should load every register map of the directory', () => {
             expect(templates.map((t) => t.kind).sort()).toEqual([
-                'ANALOG_INPUT_8CH', 'ANALOG_OUTPUT_8CH', 'DIGITAL_IO_8CH', 'EC_METER_V1', 'FLOWMETER_ULTRASONIC_V1',
+                'ANALOG_INPUT_8CH', 'ANALOG_OUTPUT_8CH', 'ANALOG_OUTPUT_8CH_MA', 'DIGITAL_IO_8CH', 'EC_METER_V1', 'FLOWMETER_ULTRASONIC_V1',
                 'INVERTER_VEICHI_SI23_V1', 'PRESSURE_V1', 'TEMPERATURE_MOISTURE_V1'
             ]);
         });
@@ -207,6 +207,13 @@ describe('RegisterMapService (module register-map)', () => {
             }],
             ['ANALOG_OUTPUT_8CH', 'outputs', 'setAll', {
                 range: { min: 0, max: 7, labelStart: 1 }, value: { type: 'number[]', length: 8, min: 0, max: 10000, unit: 'mV' }
+            }],
+            ['ANALOG_OUTPUT_8CH_MA', 'outputs', 'set', {
+                channel: { min: 0, max: 7, labelStart: 1 },
+                value: { type: 'number', min: 0, max: 20000, default: 0, unit: 'µA' }
+            }],
+            ['ANALOG_OUTPUT_8CH_MA', 'outputs', 'setAll', {
+                range: { min: 0, max: 7, labelStart: 1 }, value: { type: 'number[]', length: 8, min: 0, max: 20000, unit: 'µA' }
             }],
             ['ANALOG_OUTPUT_8CH', 'uart', 'set', {
                 isConfirmRequired: true,
