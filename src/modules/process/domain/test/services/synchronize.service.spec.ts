@@ -150,6 +150,7 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         deviceRepository = new DeviceRepository(
             new DeviceMongooseRepository(deviceModel as never),
             actuatorRepository,
+            { deleteForDevice: jest.fn() } as never,
             { resetSlaveAddress: jest.fn() } as never,
             CreateLoggerMock() as never
         );

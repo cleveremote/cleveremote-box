@@ -254,7 +254,7 @@ export class DeviceCommandService {
         if (!(slave?.config as SlaveConfigModel)?.kind) {
             throw new RegisterMapNotFoundError(`Slave ${deviceId} introuvable ou sans kind`);
         }
-        return slave;
+        return slave; 
     }
 
     // Slave rattaché à un modèle ; sans modelId (slave antérieur aux modèles) : undefined (warn), aucune commande à jouer

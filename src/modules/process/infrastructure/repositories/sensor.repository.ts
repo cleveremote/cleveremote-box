@@ -21,7 +21,20 @@ export class SensorRepository {
     }
 
     public async delete(id: string): Promise<boolean> {
-        return this.sensorMongooseRepository.delete(id);
+        return this.sensorMongooseRepository.delete(id); 
+    }
+
+    // cascade utilisee par DeviceRepository.delete() : soft-supprime les sensors COM lus sur le device
+    // (config.deviceId, sensors parents) et leurs enfants, independamment de tout flag `delete`.
+    public async deleteForDevice(deviceId: string): Promise<void> {
+        const parents = await this.sensorMongooseRepository.findByDeviceId(deviceId);
+        for (const parent of parents) {
+            const children = await this.sensorMongooseRepository.findByParentId(parent._id);
+            for (const child of children) {
+                await this.sensorMongooseRepository.delete(child._id);
+            }
+            await this.sensorMongooseRepository.delete(parent._id);
+        }
     }
 
     public async get(id?: string): Promise<SensorModel | SensorModel[]> {

@@ -1,7 +1,8 @@
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceMongooseRepository } from '@process/infrastructure/repositories/device-mongoose.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
-import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
+import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
+import { DeviceKind, DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 
@@ -9,15 +10,18 @@ describe('DeviceRepository', () => {
     let mongooseRepository: { create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByType: jest.Mock; findSlavesByMasterId: jest.Mock };
     let modbusService: { resetSlaveAddress: jest.Mock };
     let actuatorRepository: { deleteForDevice: jest.Mock };
+    let sensorRepository: { deleteForDevice: jest.Mock };
     let repository: DeviceRepository;
 
     beforeEach(() => {
         mongooseRepository = { create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByType: jest.fn(), findSlavesByMasterId: jest.fn().mockResolvedValue([]) };
         modbusService = { resetSlaveAddress: jest.fn() };
         actuatorRepository = { deleteForDevice: jest.fn() };
+        sensorRepository = { deleteForDevice: jest.fn() };
         repository = new DeviceRepository(
             mongooseRepository as never as DeviceMongooseRepository,
             actuatorRepository as never as ActuatorRepository,
+            sensorRepository as never as SensorRepository,
             modbusService as never,
             { warn: jest.fn(), error: jest.fn() } as never
         );
@@ -150,6 +154,49 @@ describe('DeviceRepository', () => {
             await repository.delete('id-1');
 
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('id-1');
+        });
+
+        it('should cascade delete the actuators of a DIGITAL_IO_8CH slave', async () => {
+            mongooseRepository.delete.mockResolvedValue(true);
+            const master = { _id: 'master', type: DeviceType.MASTER };
+            const slave = { _id: 'slave-io', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 61, kind: DeviceKind.DIGITAL_IO_8_CH } };
+            mongooseRepository.findById.mockImplementation(async (id: string) => (id === 'master' ? master : slave));
+
+            await repository.delete('slave-io');
+
+            expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('slave-io');
+            expect(sensorRepository.deleteForDevice).not.toHaveBeenCalled();
+            expect(mongooseRepository.delete).toHaveBeenCalledWith('slave-io');
+        });
+
+        it('should cascade delete the sensors of a FLOWMETER_V1 slave', async () => {
+            mongooseRepository.delete.mockResolvedValue(true);
+            const master = { _id: 'master', type: DeviceType.MASTER };
+            const slave = { _id: 'slave-flow', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 11, kind: DeviceKind.FLOWMETER_V1 } };
+            mongooseRepository.findById.mockImplementation(async (id: string) => (id === 'master' ? master : slave));
+
+            await repository.delete('slave-flow');
+
+            expect(sensorRepository.deleteForDevice).toHaveBeenCalledWith('slave-flow');
+            expect(actuatorRepository.deleteForDevice).not.toHaveBeenCalled();
+            expect(mongooseRepository.delete).toHaveBeenCalledWith('slave-flow');
+        });
+
+        it('should apply the cascade of each slave kind when deleting a master', async () => {
+            mongooseRepository.delete.mockResolvedValue(true);
+            const master = { _id: 'master', type: DeviceType.MASTER };
+            const io = { _id: 'slave-io', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 61, kind: DeviceKind.DIGITAL_IO_8_CH } };
+            const flow = { _id: 'slave-flow', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 11, kind: DeviceKind.FLOWMETER_V1 } };
+            mongooseRepository.findById.mockResolvedValue(master);
+            mongooseRepository.findSlavesByMasterId.mockImplementation(async (id: string) => (id === 'master' ? [io, flow] : []));
+
+            await repository.delete('master');
+
+            expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('slave-io');
+            expect(sensorRepository.deleteForDevice).toHaveBeenCalledWith('slave-flow');
+            expect(actuatorRepository.deleteForDevice).not.toHaveBeenCalledWith('slave-flow');
+            expect(sensorRepository.deleteForDevice).not.toHaveBeenCalledWith('slave-io');
+            expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('master');
         });
     });
 

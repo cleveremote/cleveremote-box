@@ -3,7 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
-import { Sensor, SensorSchema } from './schemas/sensor.schema';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
 import { GlobalSettings, GlobalSettingsSchema } from './schemas/global-settings.schema';
@@ -19,7 +18,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { SensorRepository } from './repositories/sensor.repository';
 import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
@@ -35,7 +33,6 @@ import { PingController } from './controllers/ping.controller';
 import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
 import { SlaveTemplateController } from './controllers/slave-template.controller';
 import { RegisterMapController } from './controllers/register-map.controller';
-import { SensorMongooseRepository } from './repositories/sensor-mongoose.repository';
 import { CycleGroupService } from '@process/domain/services/cycle-group.service';
 import { ActuatorModule } from '@process/domain/services/actuator-strategies/actuator.module';
 import { DeviceModule } from '@process/domain/services/device-strategies/device.module';
@@ -66,7 +63,6 @@ import { SlaveProvisioningModule } from '@process/domain/services/slave-provisio
             }
         }),
         MongooseModule.forFeature([
-            { name: Sensor.name, schema: SensorSchema },
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema },
             { name: GlobalSettings.name, schema: GlobalSettingsSchema }
@@ -89,11 +85,9 @@ import { SlaveProvisioningModule } from '@process/domain/services/slave-provisio
         //----Repositories------//
         AuthenticationRepository,
         GlobalSettingsRepository,
-        SensorRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
-        SensorMongooseRepository,
         //---------------------//
         AuthenticationService,
         GlobalSettingsService,

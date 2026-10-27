@@ -1,12 +1,15 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceKind, DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
 import { DeviceMongooseRepository } from './device-mongoose.repository';
 import { ActuatorRepository } from './actuator.repository';
+import { SensorRepository } from './sensor.repository';
+
+type DeviceCascade = (deviceId: string) => Promise<void>;
 
 @Injectable()
 export class DeviceRepository {
@@ -14,9 +17,31 @@ export class DeviceRepository {
     public constructor(
         private deviceMongooseRepository: DeviceMongooseRepository,
         private actuatorRepository: ActuatorRepository,
+        private sensorRepository: SensorRepository,
         @Inject(forwardRef(() => ModbusDeviceService)) private modbusDeviceService: ModbusDeviceService,
         private readonly logger: Logger
     ) { }
+
+    // elements rattaches au device (config.deviceId) soft-supprimes avec lui, selon ce que l'auto-creation
+    // cree pour son kind (cf. slave-provisioning/auto-creation/strategies). Record complet : tout nouveau
+    // DeviceKind doit etre declare ici. Device sans kind (master, slave generique) : actionneurs rattaches.
+    private readonly _defaultCascade: DeviceCascade = (deviceId) => this.actuatorRepository.deleteForDevice(deviceId);
+    private readonly _sensorCascade: DeviceCascade = (deviceId) => this.sensorRepository.deleteForDevice(deviceId);
+    private readonly _cascadeByKind: Record<DeviceKind, DeviceCascade> = {
+        [DeviceKind.DIGITAL_IO_8_CH]: this._defaultCascade,
+        [DeviceKind.FLOWMETER_V1]: this._sensorCascade,
+        [DeviceKind.PRESSURE_V1]: this._sensorCascade,
+        [DeviceKind.EC_METER_V1]: this._sensorCascade,
+        [DeviceKind.FLOWMETER_ULTRASONIC_V1]: this._sensorCascade,
+        [DeviceKind.TEMPERATURE_MOISTURE_V1]: this._sensorCascade,
+        // TODO: a adapter quand l'auto-creation variateur / analog sera implementee
+        [DeviceKind.INVERTER_VEICHI_SI23_V1]: this._defaultCascade,
+        [DeviceKind.ANALOG_OUTPUT_8_CH]: this._defaultCascade,
+        [DeviceKind.ANALOG_OUTPUT_8_CH_MA]: this._defaultCascade,
+        [DeviceKind.ANALOG_INPUT_8_CH]: this._defaultCascade,
+        [DeviceKind.MODBUS_SLAVE]: this._defaultCascade,
+        [DeviceKind.UNKNOWN_DEVICE]: this._defaultCascade
+    };
 
     public async save(model: DeviceModel): Promise<DeviceModel> {
         if (model._id) {
@@ -28,8 +53,8 @@ export class DeviceRepository {
         return this.deviceMongooseRepository.create(model);
     }
 
-    // cascade : soft-supprime les slaves (config.masterDeviceId), puis les actionneurs rattaches, avant
-    // le device lui-meme (les commandes appartiennent au modele, partage avec d'autres slaves). Chaque slave concerne est d'abord remis sur
+    // cascade : soft-supprime les slaves (config.masterDeviceId), puis les elements rattaches selon le kind
+    // (cf _cascadeByKind), avant le device lui-meme (les commandes appartiennent au modele, partage avec d'autres slaves). Chaque slave concerne est d'abord remis sur
     // l'adresse d'origine de sa plage (cf ModbusDeviceService.resetSlaveAddress) : tous les resets sont
     // faits avant toute suppression, et un echec de reset annule la suppression (exception propagee).
     public async delete(id: string): Promise<boolean> {
@@ -42,13 +67,14 @@ export class DeviceRepository {
             await this._resetSlaveAddress(device);
         }
         for (const slave of slaves) {
-            await this._softDelete(slave._id);
+            await this._softDelete(slave._id, slave);
         }
-        return this._softDelete(id);
+        return this._softDelete(id, device);
     }
 
-    private async _softDelete(id: string): Promise<boolean> {
-        await this.actuatorRepository.deleteForDevice(id);
+    private async _softDelete(id: string, device: DeviceModel | null): Promise<boolean> {
+        const kind = device?.type === DeviceType.SLAVE ? (device.config as SlaveConfigModel)?.kind : undefined;
+        await (kind ? this._cascadeByKind[kind] : this._defaultCascade)(id);
         return this.deviceMongooseRepository.delete(id);
     }
 

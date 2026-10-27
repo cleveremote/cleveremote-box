@@ -57,4 +57,9 @@ export class SensorMongooseRepository {
         return sensors.map(SensorMapper.mapToModel);
     }
 
+    public async findByDeviceId(deviceId: string): Promise<SensorModel[]> {
+        const sensors = await this.sensorModel.find({ 'config.deviceId': deviceId, ...NOT_DELETED_FILTER });
+        return sensors.map(SensorMapper.mapToModel);
+    }
+
 }

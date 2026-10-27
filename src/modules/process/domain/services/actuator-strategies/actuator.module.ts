@@ -13,6 +13,7 @@ import { Cycle, CycleSchema } from '@process/infrastructure/schemas/cycle.schema
 import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedule.schema';
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
 import { SlaveTemplate, SlaveTemplateSchema } from '@process/infrastructure/schemas/slave-template.schema';
+import { Sensor, SensorSchema } from '@process/infrastructure/schemas/sensor.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
@@ -29,6 +30,8 @@ import { TriggerMongooseRepository } from '@process/infrastructure/repositories/
 import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
 import { DeviceCommandMongooseRepository } from '@process/infrastructure/repositories/device-command-mongoose.repository';
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
+import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
+import { SensorMongooseRepository } from '@process/infrastructure/repositories/sensor-mongoose.repository';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
@@ -57,7 +60,8 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             { name: Cycle.name, schema: CycleSchema },
             { name: Schedule.name, schema: ScheduleSchema },
             { name: Trigger.name, schema: TriggerSchema },
-            { name: SlaveTemplate.name, schema: SlaveTemplateSchema }
+            { name: SlaveTemplate.name, schema: SlaveTemplateSchema },
+            { name: Sensor.name, schema: SensorSchema }
         ]),
         RegisterMapModule
     ],
@@ -67,6 +71,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         ActuatorMongooseRepository,
         DeviceRepository,
         DeviceMongooseRepository,
+        // DeviceRepository.delete supprime les sensors lus sur un slave capteur
+        SensorRepository,
+        SensorMongooseRepository,
         DeviceCommandRepository,
         DeviceCommandMongooseRepository,
         SlaveTemplateRepository,
@@ -92,7 +99,7 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         }
     ],
     exports: [
-        ActuatorService, ActuatorRepository, DeviceRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
+        ActuatorService, ActuatorRepository, DeviceRepository, SensorRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
         ModbusDeviceService, WaveshareDiscoveryService, CtrlActuatorStrategy,
         CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository
     ]
