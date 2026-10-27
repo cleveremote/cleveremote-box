@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CycleModel } from '@process/domain/models/cycle.model';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
 import { Cycle, CycleDocument } from '../schemas/cycle.schema';
 import { ChildCycle } from '../schemas/child-cycle.schema';
@@ -58,7 +59,8 @@ export class CycleMongooseRepository {
 
     public async findAll(): Promise<CycleModel[]> {
         const cycles = await this.cycleModel.find(NOT_DELETED_FILTER);
-        return Promise.all(cycles.map((cycle) => this._hydrate(CycleMapper.mapToModel(cycle))));
+        const models = await Promise.all(cycles.map((cycle) => this._hydrate(CycleMapper.mapToModel(cycle))));
+        return CycleMongooseRepository._sortModuleCycles(models);
     }
 
     public async findRoots(): Promise<CycleModel[]> {
@@ -88,6 +90,17 @@ export class CycleMongooseRepository {
             throw new ElementNotFoundExeception(parentId, 'update', 'cycle');
         }
         return this._hydrate(CycleMapper.mapToModel(updated));
+    }
+
+    // seuls les cycles MODULE sont tries par ordre alphabetique (insensible casse/accents) : ils
+    // reprennent les emplacements qu'ils occupaient dans la liste, les cycles CYCLE/GROUP gardent
+    // donc leur ordre et leur position d'origine.
+    private static _sortModuleCycles(models: CycleModel[]): CycleModel[] {
+        const sortedModules = models
+            .filter((model) => model.type === CycleType.MODULE)
+            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'fr', { sensitivity: 'base' }));
+        let moduleIndex = 0;
+        return models.map((model) => (model.type === CycleType.MODULE ? sortedModules[moduleIndex++] : model));
     }
 
     // sequences/schedules/triggers vivent desormais dans leurs propres collections

@@ -74,7 +74,10 @@ export class ActuatorMongooseRepository {
 
     public async findAll(): Promise<ActuatorModel[]> {
         const actuators = await this.actuatorModel.find(NOT_DELETED_FILTER);
-        return actuators.map(ActuatorMapper.mapToModel);
+        // tri alphabetique en memoire (insensible casse/accents) plutot que via une collation
+        // Mongo, non garantie selon la version de MongoDB embarquee sur la box.
+        return actuators.map(ActuatorMapper.mapToModel)
+            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'fr', { sensitivity: 'base' }));
     }
 
     public async findByIds(ids: string[]): Promise<ActuatorModel[]> {
