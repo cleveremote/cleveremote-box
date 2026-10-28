@@ -1,4 +1,6 @@
 import { SensorType } from '../interfaces/sensor.interface';
+import { DeviceCommandModel } from './device-command.model';
+import { SlaveTemplate } from './device.model';
 
 // tous les champs sont optionnels : un sensor COM "racine" utilise cronPattern/commandId, un sensor
 // enfant (parentId renseigne) utilise field - la valeur (decodee, unite comprise, par la register map)
@@ -24,9 +26,12 @@ export class ForcastSensorConfigModel {
     public forcastData: forcastDataName;
 }
 
+// Resume du modele (SlaveTemplate) proprietaire de la DeviceCommand d'un sensor COM
+export type SensorTemplateModel = Pick<SlaveTemplate, '_id' | 'name' | 'description' | 'kind'>;
+
 export class SensorModel {
     public _id: string;
-    public name: string;
+    public name: string; 
     public description: string;
     public style: { bgColor: string; fontColor: string; iconColor: { base: string; icon: string } };
     public type: SensorType;
@@ -41,6 +46,11 @@ export class SensorModel {
 
     public value?: number;
     public date?: Date;
+
+    // renvoyes au front, non persistes (cf. SensorMapper) : DeviceCommand lue (params resolus) et modele
+    // (SlaveTemplate) du slave ; un sensor enfant reprend ceux de son parent.
+    public deviceCommand?: DeviceCommandModel;
+    public model?: SensorTemplateModel;
 
     public createdAt?: Date;
     public updatedAt?: Date;

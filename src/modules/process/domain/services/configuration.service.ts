@@ -18,7 +18,10 @@ import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
-import { DeviceWithCommands } from '../models/device.model';
+import { DeviceWithCommands, SlaveTemplate } from '../models/device.model';
+import { DeviceCommandModel } from '../models/device-command.model';
+import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
+import { SensorType } from '../interfaces/sensor.interface';
 import { DeviceCommandService } from './device-command.service';
 import { SlaveScanService } from './slave-provisioning/scan/slave-scan.service';
 import { AutoCreationService } from './slave-provisioning/auto-creation/auto-creation.service';
@@ -53,9 +56,12 @@ export class StructureService {
         structureModel.cycles = await this.cycleRepository.get() as CycleModel[];
         structureModel.sensors = await this.sensorRepository.get() as StructureModel['sensors'];
         structureModel.devices = await this.deviceRepository.get() as StructureModel['devices'];
+        const templates = await this.slaveTemplateRepository.get();
         structureModel.deviceCommands = await this.deviceCommandService.withParams(
-            await this.deviceCommandRepository.get() as StructureModel['deviceCommands']
+            await this.deviceCommandRepository.get() as StructureModel['deviceCommands'],
+            templates
         );
+        this._attachSensorCommands(structureModel.sensors, structureModel.deviceCommands, templates);
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         this.structure = structureModel;
 
@@ -105,6 +111,25 @@ export class StructureService {
             .filter((sensor) => sensor.value !== undefined)
             .map((sensor) => ({ id: sensor._id, value: sensor.value, type: 'SENSOR', date: sensor.date }));
         return this.structure;
+    }
+
+    // DeviceCommand (params resolus) et modele des sensors COM, pour l'affichage front ; un sensor enfant
+    // (config.field seul) reprend ceux de son parent. Commande ou modele introuvable : champ laisse vide.
+    private _attachSensorCommands(sensors: SensorModel[], commands: DeviceCommandModel[], templates: SlaveTemplate[]): void {
+        const commandsById = new Map(commands.map((command) => [command._id, command]));
+        const templatesById = new Map(templates.map((template) => [template._id, template]));
+        const sensorsById = new Map(sensors.map((sensor) => [sensor._id, sensor]));
+        for (const sensor of sensors) {
+            if (sensor.type === SensorType.FORCAST) { continue; }
+            const source = sensor.parentId ? sensorsById.get(sensor.parentId) : sensor;
+            const command = commandsById.get((source?.config as ComSensorConfigModel | undefined)?.commandId);
+            if (!command) { continue; }
+            sensor.deviceCommand = command;
+            const template = templatesById.get(command.modelId);
+            if (template) {
+                sensor.model = { _id: template._id, name: template.name, description: template.description, kind: template.kind };
+            }
+        }
     }
 
     // progression n'a de sens que pour IN_PROCCESS, meme convention que ProcessService._processProgress.

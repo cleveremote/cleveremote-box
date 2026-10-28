@@ -20,6 +20,7 @@ import { ValueModel, ExecutableType } from '@process/domain/models/value.model';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateCycleModel } from './cycle.spec-mock';
 import { DeviceKind, SlaveTemplate } from '@process/domain/models/device.model';
+import { SensorType } from '@process/domain/interfaces/sensor.interface';
 
 function CreateEmptyGetRepositoryMock(): { get: jest.Mock } {
     return { get: jest.fn().mockResolvedValue([]) };
@@ -224,6 +225,34 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             const structure = await service.getStructure();
 
             expect(structure.values).toEqual([]);
+        });
+
+        it('should attach its DeviceCommand and model to a COM sensor, and its parent\'s ones to a child sensor', async () => {
+            const template = {
+                _id: 'model-1', name: 'Débitmètre', description: 'RS485', kind: DeviceKind.FLOWMETER_V1, deviceCommands: []
+            } as SlaveTemplate;
+            const command = { _id: 'command-1', modelId: 'model-1', name: 'Lecture débit' };
+            slaveTemplateRepository.get.mockResolvedValue([template]);
+            deviceCommandRepository.get.mockResolvedValue([command]);
+            sensorRepository.get.mockResolvedValue([
+                { _id: 'parent', type: SensorType.COM, parentId: null, config: { commandId: 'command-1', deviceId: 'slave-1' } },
+                { _id: 'child', type: SensorType.COM, parentId: 'parent', config: { field: 'flow' } },
+                { _id: 'unknown', type: SensorType.COM, parentId: null, config: { commandId: 'missing' } },
+                { _id: 'forcast', type: SensorType.FORCAST, config: { cronPattern: '0 0 * * *' } }
+            ]);
+
+            const structure = await service.getStructure();
+
+            const expectedModel = { _id: 'model-1', name: 'Débitmètre', description: 'RS485', kind: DeviceKind.FLOWMETER_V1 };
+            const [parent, child, unknown, forcast] = structure.sensors;
+            expect(deviceCommandService.withParams).toHaveBeenCalledWith([command], [template]);
+            expect(parent.deviceCommand).toEqual(command);
+            expect(parent.model).toEqual(expectedModel);
+            expect(child.deviceCommand).toEqual(command);
+            expect(child.model).toEqual(expectedModel);
+            expect(unknown.deviceCommand).toBeUndefined();
+            expect(unknown.model).toBeUndefined();
+            expect(forcast.deviceCommand).toBeUndefined();
         });
 
         it('should aggregate sequences/schedules/triggers across every cycle', async () => {

@@ -69,16 +69,16 @@ export class SensorService {
 
     private async _readAndEmit(sensor: SensorModel): Promise<void> {
         try {
-            //const results = await this._resolveStrategy(sensor.type).read(sensor);
+            const results = await this._resolveStrategy(sensor.type).read(sensor);
             const children = await this.sensorRepository.getChildren(sensor._id);
 
             if (children.length) {
                 for (let index = 0; index < children.length; index++) {
                     const childSensor = children[index];
                     const config = childSensor.config as ComSensorConfigModel;
-                    //const value = results.find((result) => result.name === config.field)?.value;
-                    //this.emitReceivedData(childSensor,value);
-                    this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
+                    const value = results.find((result) => result.name === config.field)?.value;
+                    this.emitReceivedData(childSensor,value);
+                    //this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
                 }
             } else {
                 //for (const result of results) {
