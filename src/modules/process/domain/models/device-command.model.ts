@@ -1,4 +1,4 @@
-import { RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+import { OperationRange, RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
 // Usage de la commande : pilotage (set), lecture (read), init du device (init), remise à zéro (reset)
 export enum DeviceCommandType {
@@ -42,8 +42,9 @@ export class DeviceCommandModel {
     public deletedAt?: Date | null = null;
 }
 
-// Surcharge appliquée au moment de l'exécution (ex: voie et consigne d'un actionneur)
-export type DeviceCommandOverride = Partial<Pick<DeviceCommandModel, 'channel' | 'value'>>;
+// Surcharge appliquée au moment de l'exécution (ex: voie et consigne d'un actionneur, confirmation d'un bloc danger,
+// sous-plage de voies d'une opération de scope 'range')
+export type DeviceCommandOverride = Partial<Pick<DeviceCommandModel, 'channel' | 'value' | 'isPersistent' | 'isConfirmed'>> & { range?: OperationRange };
 
 // Paramètre onduleur (code Fgg.ii = bloc de sa register map) ; persist : écriture EEPROM
 export interface InverterConfigParam {

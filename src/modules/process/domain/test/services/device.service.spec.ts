@@ -106,7 +106,7 @@ describe('DeviceService', () => {
 
     describe('watchMasterDevicesForNewSlaves', () => {
         it('should log and return a no-op handle when no MASTER devices exist', async () => {
-            const handle = await service.watchMasterDevicesForNewSlaves(20);
+            const handle = await service.watchMasterDevicesForNewSlaves(20) as unknown as { stop: () => Promise<void> };
 
             expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
             await expect(handle.stop()).resolves.toBeUndefined();
@@ -118,7 +118,7 @@ describe('DeviceService', () => {
             const masterWithEmpty = CreateMasterModel('master-empty-discovery', []);
             deviceRepository.getByType.mockResolvedValue([masterWithout, masterWithEmpty]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(40);
             await handle.stop();
 
@@ -133,7 +133,7 @@ describe('DeviceService', () => {
             const masterB = CreateMasterModel('master-b', [0x4000]);
             deviceRepository.getByType.mockResolvedValue([masterA, masterB]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(50);
             await handle.stop();
 
@@ -150,7 +150,7 @@ describe('DeviceService', () => {
                 master._id === 'master-iso-a' ? new Promise(() => { /* never resolves */ }) : Promise.resolve()
             );
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(60);
             await handle.stop();
 
@@ -165,7 +165,7 @@ describe('DeviceService', () => {
                 .mockRejectedValueOnce(new Error('boom'))
                 .mockResolvedValue(undefined);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(50);
             await handle.stop();
 
@@ -181,7 +181,7 @@ describe('DeviceService', () => {
             const masterB = CreateMasterModel('master-stop-b', [0x4000]);
             deviceRepository.getByType.mockResolvedValue([masterA, masterB]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(40);
             await handle.stop();
             const countAfterStop = modbusService.probeMasterForNewSlave.mock.calls.length;

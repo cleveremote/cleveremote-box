@@ -3,7 +3,7 @@ import { Logger } from 'nestjs-pino';
 import { RegisterMapInputError, RegisterMapNotFoundError } from '../errors/register-map.error';
 import { ModbusConnection, ModbusTransport } from '../models/modbus-connection.model';
 import {
-    DecodedChannel, DecodedField, DecodedValue, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
+    DecodedChannel, DecodedField, DecodedValue, OperationRange, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
     RegisterOperationCommand, RegisterOperationError, RegisterOperationOutcome, RegisterOperationParams, RegisterFunction, RegisterRawData,
     RegisterRequest
 } from '../models/register-map.model';
@@ -59,32 +59,42 @@ export class RegisterMapService {
         if (block.danger && !command.isConfirmed) {
             throw new RegisterMapInputError(`${block.id}.${operation.id} : opération sensible, isConfirmed=true requis`);
         }
+        const range = this._range(operation, command.range);
         const request: RegisterRequest = {
             function: operation.function,
-            address: block.address.start + this._channelOffset(block, operation, command.channel) + this._persistenceOffset(block, operation, command),
-            length: operation.params?.length ?? 1
+            address: block.address.start + this._channelOffset(block, operation, command.channel) + this._persistenceOffset(block, operation, command)
+                + (range?.min ?? 0),
+            length: range ? range.max - range.min + 1 : operation.params?.length ?? 1
         };
         if (!READ_FUNCTIONS.includes(operation.function)) {
-            request.value = RegisterValueEncoder.encode(template, operation, command.value);
+            request.value = RegisterValueEncoder.encode(template, operation, command.value, range && request.length);
         }
         return request;
     }
 
-    /** Met en forme la réponse brute selon operation.result ; `scope` alimente les formules des champs */
+    /**
+     * Met en forme la réponse brute selon operation.result ; `scope` alimente les formules des champs ;
+     * `first` : première voie lue (sous-plage d'une opération de scope 'range'), voies et champs décalés d'autant
+     */
     public decodeResult(
         template: RegisterMapTemplate,
         operation: RegisterOperation,
         raw: RegisterRawData,
-        scope: Record<string, number> = {}
+        scope: Record<string, number> = {},
+        first = 0
     ): DecodedValue {
         const result = operation.result ?? { type: 'echo' };
         const data = raw || [];
         switch (result.type) {
             case 'boolean[]':
             case 'enum[]':
-                return this._decodeChannels(template, result, data);
-            case 'fields':
-                return { type: 'fields', fields: RegisterFieldDecoder.decodeAll(template, result.fields, data as number[], this._evaluate, scope) };
+                return this._decodeChannels(template, result, data, first);
+            case 'fields': {
+                const fields = result.fields
+                    .filter((f) => f.offset >= first && f.offset < first + data.length)
+                    .map((f) => ({ ...f, offset: f.offset - first }));
+                return { type: 'fields', fields: RegisterFieldDecoder.decodeAll(template, fields, data as number[], this._evaluate, scope) };
+            }
             case 'number':
                 return { type: 'number', value: this._applyFormula(operation, Number(data[0])) };
             case 'version': {
@@ -934,7 +944,7 @@ export class RegisterMapService {
             if (scopeFields.length) outcome.scopeFields = scopeFields;
             const raw = await this.modbusBus.execute(connection, request);
             outcome.raw = raw || undefined;
-            outcome.value = this.decodeResult(template, operation, raw, scope);
+            outcome.value = this.decodeResult(template, operation, raw, scope, this._range(operation, command.range)?.min);
             outcome.isOk = true;
         } catch (err) {
             outcome.error = this._toError(template, err);
@@ -978,6 +988,19 @@ export class RegisterMapService {
         return offset;
     }
 
+    // Sous-plage de voies d'une opération de scope 'range' (voies 0..params.length-1) ; undefined : toutes, ou autre scope
+    private _range(operation: RegisterOperation, range: OperationRange | undefined): OperationRange | undefined {
+        if (operation.scope !== 'range' || !range) {
+            return undefined;
+        }
+        const count = operation.params?.length ?? 1;
+        const { min, max } = range;
+        if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || min > max || max >= count) {
+            throw new RegisterMapInputError(`${operation.id} : range doit vérifier 0 <= min <= max <= ${count - 1}`);
+        }
+        return range;
+    }
+
     // scope 'channel' : décalage = index × stride ; 'range'/'fixed' : adresse de départ du bloc
     private _channelOffset(block: RegisterBlock, operation: RegisterOperation, channel: number | undefined): number {
         if (operation.scope !== 'channel') {
@@ -997,9 +1020,10 @@ export class RegisterMapService {
     }
 
     // Une entrée par voie, numérotée à partir de hardware.channels.labelStart
-    private _decodeChannels(template: RegisterMapTemplate, result: ChannelResult, data: (number | boolean)[]): DecodedValue {
+    private _decodeChannels(template: RegisterMapTemplate, result: ChannelResult, data: (number | boolean)[], first = 0): DecodedValue {
         const labelStart = template.hardware.channels?.labelStart ?? 1;
-        const channels = data.map((v, index): DecodedChannel => {
+        const channels = data.map((v, i): DecodedChannel => {
+            const index = first + i;
             const value = result.type === 'boolean[]' ? Boolean(v) : Number(v);
             const channel: DecodedChannel = { index, number: labelStart + index, value };
             if (result.type === 'enum[]') channel.label = template.enums[result.enum]?.find((e) => e.value === value)?.label;

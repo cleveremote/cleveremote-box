@@ -3,7 +3,6 @@ import { Injectable } from '@nestjs/common';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { CycleModel } from '../models/cycle.model';
@@ -38,7 +37,6 @@ export class StructureService {
         private cycleRepository: CycleRepository,
         private sensorRepository: SensorRepository,
         private deviceRepository: DeviceRepository,
-        private deviceCommandRepository: DeviceCommandRepository,
         private slaveTemplateRepository: SlaveTemplateRepository,
         private eventRepository: EventRepository,
         private actuatorRepository: ActuatorRepository,
@@ -56,12 +54,8 @@ export class StructureService {
         structureModel.cycles = await this.cycleRepository.get() as CycleModel[];
         structureModel.sensors = await this.sensorRepository.get() as StructureModel['sensors'];
         structureModel.devices = await this.deviceRepository.get() as StructureModel['devices'];
-        const templates = await this.slaveTemplateRepository.get();
-        structureModel.deviceCommands = await this.deviceCommandService.withParams(
-            await this.deviceCommandRepository.get() as StructureModel['deviceCommands'],
-            templates
-        );
-        this._attachSensorCommands(structureModel.sensors, structureModel.deviceCommands, templates);
+        structureModel.models = await this.deviceCommandService.modelsWithParams();
+        this._attachSensorCommands(structureModel.sensors, structureModel.models);
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         this.structure = structureModel;
 
@@ -115,7 +109,8 @@ export class StructureService {
 
     // DeviceCommand (params resolus) et modele des sensors COM, pour l'affichage front ; un sensor enfant
     // (config.field seul) reprend ceux de son parent. Commande ou modele introuvable : champ laisse vide.
-    private _attachSensorCommands(sensors: SensorModel[], commands: DeviceCommandModel[], templates: SlaveTemplate[]): void {
+    private _attachSensorCommands(sensors: SensorModel[], templates: SlaveTemplate[]): void {
+        const commands = templates.flatMap((template) => template.deviceCommands) as DeviceCommandModel[];
         const commandsById = new Map(commands.map((command) => [command._id, command]));
         const templatesById = new Map(templates.map((template) => [template._id, template]));
         const sensorsById = new Map(sensors.map((sensor) => [sensor._id, sensor]));

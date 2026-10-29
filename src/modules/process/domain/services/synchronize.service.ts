@@ -68,7 +68,7 @@ export class SynchronizeService {
         data.cycles = await this.cycleRepository.replaceAll(incoming.cycles);
         data.sensors = await this.sensorRepository.replaceAll(incoming.sensors ?? []);
         // les commandes se synchronisent par device (box/synchronize/device, box/synchronize/device-command)
-        data.deviceCommands = await this.deviceCommandService.withParams(await this.deviceCommandRepository.get() as DeviceCommandModel[]);
+        data.models = await this.deviceCommandService.modelsWithParams();
         this.configurationService.structure = data;
 
         return data;

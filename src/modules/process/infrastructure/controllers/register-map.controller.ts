@@ -2,7 +2,7 @@ import { Controller, UsePipes, ValidationError, ValidationPipe } from '@nestjs/c
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
 import { RegisterMapTemplate, RegisterOperationOutcome } from '@register-map/domain/models/register-map.model';
-import { RegisterMapFetchDTO, RegisterOperationExecuteDTO } from '../dto/register-map.dto';
+import { DeviceCommandExecuteDTO, RegisterMapFetchDTO, RegisterOperationExecuteDTO } from '../dto/register-map.dto';
 
 function ValidationExceptionFactory(errors: ValidationError[]): RpcException {
     return new RpcException(errors.flatMap((e) => Object.values(e.constraints ?? {})).join(', '));
@@ -32,6 +32,12 @@ export class RegisterMapController {
     @MessagePattern(['box/execution/register-map'])
     public async execute(@Payload() dto: RegisterOperationExecuteDTO): Promise<RegisterOperationOutcome> {
         return this._toRpc(() => this._deviceCommandService.executeOnDevice(dto.deviceId, RegisterOperationExecuteDTO.mapToCommand(dto)));
+    }
+
+    /** Exécute une DeviceCommand sur un slave de son modèle ; erreurs Modbus/réseau dans le résultat, commande invalide en RpcException */
+    @MessagePattern(['box/execution/device-command'])
+    public async executeCommand(@Payload() dto: DeviceCommandExecuteDTO): Promise<RegisterOperationOutcome> {
+        return this._toRpc(() => this._deviceCommandService.execute(dto.commandId, dto.deviceId, DeviceCommandExecuteDTO.mapToOverride(dto)));
     }
 
     private async _toRpc<T>(run: () => T | Promise<T>): Promise<T> {

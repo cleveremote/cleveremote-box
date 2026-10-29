@@ -91,7 +91,6 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             cycleRepository,
             sensorRepository as never,
             deviceRepository as never,
-            deviceCommandRepository as never,
             slaveTemplateRepository as never,
             eventRepository as never,
             actuatorRepository as never,

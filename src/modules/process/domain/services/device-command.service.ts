@@ -166,6 +166,11 @@ export class DeviceCommandService {
         return commands.map((command) => this._withParams(kinds.get(command.modelId), command.modelId, command));
     }
 
+    /** Modèles de slave avec leurs commandes enrichies de leurs `params` */
+    public async modelsWithParams(): Promise<SlaveTemplate[]> {
+        return (await this.slaveTemplateRepository.get()).map((template) => this.withTemplateParams(template));
+    }
+
     /** Même enrichissement pour les commandes d'un slave template (typage des saisies du formulaire front) */
     public withTemplateParams(template: SlaveTemplate): SlaveTemplate {
         return { ...template, deviceCommands: template.deviceCommands.map((command) => this._withParams(template.kind, template._id, command)) };

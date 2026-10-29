@@ -222,6 +222,12 @@ export interface RegisterOperationParams {
     isPersistable: boolean;
 }
 
+// Sous-plage de voies 0-based [min, max] d'une opération de scope 'range' (défaut : toutes)
+export interface OperationRange {
+    min: number;
+    max: number;
+}
+
 // Valeur saisie côté front : nombre (enum/number/none), tableau (boolean[]/enum[]) ou champs (composite)
 export type RegisterOperationValue = number | boolean | (number | boolean)[] | Record<string, number>;
 
@@ -230,6 +236,8 @@ export interface RegisterOperationCommand {
     operationId: string;
     // Index 0-based de la voie (scope 'channel')
     channel?: number;
+    // Voies visées (scope 'range'), sinon toutes ; la valeur (tableau) couvre alors max - min + 1 voies
+    range?: OperationRange;
     value?: RegisterOperationValue;
     // Requis pour les blocs `danger`
     isConfirmed?: boolean;

@@ -151,7 +151,8 @@ export class RegisterOperationDescriber {
 /** Traduit la saisie du front en valeur Modbus selon operation.input ; lève RegisterMapInputError si invalide */
 export class RegisterValueEncoder {
 
-    public static encode(template: RegisterMapTemplate, operation: RegisterOperation, value: InputValue): RegisterRequest['value'] {
+    /** `length` : nombre de voies saisies (sous-plage d'une opération de scope 'range'), sinon input.length */
+    public static encode(template: RegisterMapTemplate, operation: RegisterOperation, value: InputValue, length?: number): RegisterRequest['value'] {
         const input = operation.input ?? { type: 'none' };
         const where = `${operation.id} (${input.type})`;
         switch (input.type) {
@@ -163,14 +164,14 @@ export class RegisterValueEncoder {
             case 'number':
                 return RegisterValueEncoder._checkRange(value ?? input.default, input.min, input.max, where);
             case 'boolean[]':
-                return RegisterValueEncoder._checkArray(value, input.length, where).map(Boolean);
+                return RegisterValueEncoder._checkArray(value, length ?? input.length, where).map(Boolean);
             case 'enum[]': {
                 const entries = RegisterValueEncoder.entries(template, input.enum);
-                return RegisterValueEncoder._checkArray(value, input.length, where)
+                return RegisterValueEncoder._checkArray(value, length ?? input.length, where)
                     .map((v) => RegisterValueEncoder.checkEnumValue(entries, v, where));
             }
             case 'number[]':
-                return RegisterValueEncoder._checkArray(value, input.length, where)
+                return RegisterValueEncoder._checkArray(value, length ?? input.length, where)
                     .map((v) => RegisterValueEncoder._checkRange(v, input.min, input.max, where));
             case 'composite':
                 return RegisterValueEncoder._encodeComposite(template, input.fields, value, where);

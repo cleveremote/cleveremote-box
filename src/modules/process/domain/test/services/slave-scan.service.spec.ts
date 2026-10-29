@@ -29,7 +29,7 @@ describe('SlaveScanService', () => {
             { unitId: 11, register: 0x0005, value: 95 }
         ]);
 
-        const scanned = await Collect(service.scan({ masterDeviceId: MASTER_ID, templates: [DIGITAL_IO_TEMPLATE] }));
+        const scanned = await Collect(service.scan(MASTER_ID, [DIGITAL_IO_TEMPLATE]));
 
         const targets = modbusDeviceService.scanDiscoveryRegisters.mock.calls[0][1] as { unitId: number; register: number }[];
         expect(targets).toHaveLength(10);
@@ -43,7 +43,7 @@ describe('SlaveScanService', () => {
     it('should not readdress a module without template for its type', async () => {
         modbusDeviceService.scanDiscoveryRegisters.mockResolvedValue([{ unitId: 81, register: 0x4000, value: 81 }]);
 
-        const scanned = await Collect(service.scan({ masterDeviceId: MASTER_ID, templates: [DIGITAL_IO_TEMPLATE] }));
+        const scanned = await Collect(service.scan(MASTER_ID, [DIGITAL_IO_TEMPLATE]));
 
         expect(scanned).toEqual([]);
         expect(modbusDeviceService.setSlaveAddress).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe('SlaveScanService', () => {
         modbusDeviceService.scanDiscoveryRegisters.mockResolvedValue([{ unitId: 61, register: 0x4000, value: 61 }]);
         modbusDeviceService.setSlaveAddress.mockRejectedValue(new Error('timeout'));
 
-        const scanned = await Collect(service.scan({ masterDeviceId: MASTER_ID, templates: [DIGITAL_IO_TEMPLATE] }));
+        const scanned = await Collect(service.scan(MASTER_ID, [DIGITAL_IO_TEMPLATE]));
 
         expect(scanned).toEqual([]);
         expect(logger.error).toHaveBeenCalledTimes(1);
@@ -67,7 +67,7 @@ describe('SlaveScanService', () => {
             { unitId: 81, register: 0x4000, value: 81 }
         ]);
 
-        const scan = service.scan({ masterDeviceId: MASTER_ID, templates: [DIGITAL_IO_TEMPLATE, analogInput] });
+        const scan = service.scan(MASTER_ID, [DIGITAL_IO_TEMPLATE, analogInput]);
         await scan.next();
 
         expect(modbusDeviceService.setSlaveAddress).toHaveBeenCalledTimes(1);
@@ -77,8 +77,8 @@ describe('SlaveScanService', () => {
 
     it('should throw when master is missing or not a MASTER', async () => {
         deviceRepository.get.mockResolvedValue(null);
-        await expect(Collect(service.scan({ masterDeviceId: MASTER_ID, templates: [] }))).rejects.toThrow();
+        await expect(Collect(service.scan(MASTER_ID, []))).rejects.toThrow();
         deviceRepository.get.mockResolvedValue({ _id: MASTER_ID, type: DeviceType.SLAVE });
-        await expect(Collect(service.scan({ masterDeviceId: MASTER_ID, templates: [] }))).rejects.toThrow();
+        await expect(Collect(service.scan(MASTER_ID, []))).rejects.toThrow();
     });
 });

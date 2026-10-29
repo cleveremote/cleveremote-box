@@ -1,12 +1,12 @@
 import { CycleModel } from './cycle.model';
-import { DeviceCommandModel } from './device-command.model';
 import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
-import { DeviceModel } from './device.model';
+import { DeviceModel, SlaveTemplate } from './device.model';
 import { ActuatorModel } from './actuator.model';
 export class StructureModel {
-    public deviceCommands: DeviceCommandModel[] = [];
+    // Modèles de slave, chacun avec ses DeviceCommand (params résolus)
+    public models: SlaveTemplate[] = [];
     public devices: DeviceModel[] = [];
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];

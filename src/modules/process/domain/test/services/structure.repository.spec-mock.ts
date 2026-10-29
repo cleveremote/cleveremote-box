@@ -88,7 +88,6 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
     const cycleRepository = { get: jest.fn().mockResolvedValue(structure.cycles) };
     const sensorRepository = { get: jest.fn().mockResolvedValue(structure.sensors) };
     const deviceRepository = { get: jest.fn().mockResolvedValue(structure.devices) };
-    const deviceCommandRepository = { get: jest.fn().mockResolvedValue(structure.deviceCommands) };
     const valueRepository = {
         getValues: jest.fn().mockResolvedValue([]),
         getLastValue: jest.fn().mockResolvedValue(null),
@@ -101,7 +100,6 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
         cycleRepository as any,
         sensorRepository as any,
         deviceRepository as any,
-        deviceCommandRepository as any,
         {} as any,
         valueRepository as any,
         actuatorRepository as any,
