@@ -23,6 +23,7 @@ function CreateMockClient(overrides: Partial<MockClient> = {}): MockClient {
         writeRegisters: jest.fn().mockResolvedValue({}),
         writeCustomFC: jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(null)),
         close: jest.fn((cb?: () => void) => cb?.()),
+        destroy: jest.fn((cb?: () => void) => cb?.()),
         ...overrides
     };
     mockClients.push(client);
@@ -49,7 +50,7 @@ describe('ModbusBusService', () => {
         const data = await service.execute(TCP, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 10, length: 2 });
 
         const [client] = mockClients;
-        expect(client.connectTCP).toHaveBeenCalledWith('10.0.0.2', { port: 502 });
+        expect(client.connectTCP).toHaveBeenCalledWith('10.0.0.2', { port: 502, timeout: 2000 });
         expect(client.setID).toHaveBeenCalledWith(61);
         expect(client.setTimeout).toHaveBeenCalledWith(2000);
         expect(client.readHoldingRegisters).toHaveBeenCalledWith(10, 2);
@@ -86,8 +87,32 @@ describe('ModbusBusService', () => {
 
         await service.execute({ ...TCP, onUnreachable }, { function: RegisterFunction.WRITE_SINGLE_COIL, address: 1, length: 1, value: 1 });
 
-        expect(mockClients[0].connectTCP).toHaveBeenLastCalledWith('10.0.0.9', { port: 502 });
+        expect(mockClients[0].connectTCP).toHaveBeenLastCalledWith('10.0.0.9', { port: 502, timeout: 2000 });
+        expect(mockClients[0].destroy).toHaveBeenCalledTimes(1);
         expect(mockClients[0].writeCoil).toHaveBeenCalledWith(1, true);
+    });
+
+    it('should retry with onUnreachable after a TCP connection timeout', async () => {
+        const timedOut = new Error('TCP Connection Timed Out');
+        (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+            connectTCP: jest.fn().mockRejectedValueOnce(timedOut).mockResolvedValue(undefined)
+        }));
+        const onUnreachable = jest.fn().mockResolvedValue({ ...TCP, host: '10.0.0.9' });
+
+        await service.execute({ ...TCP, timeout: 500, onUnreachable }, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0, length: 1 });
+
+        expect(onUnreachable).toHaveBeenCalled();
+        expect(mockClients[0].connectTCP.mock.calls).toEqual([['10.0.0.2', { port: 502, timeout: 500 }], ['10.0.0.9', { port: 502, timeout: 500 }]]);
+    });
+
+    it('should release the socket and propagate the error when the connection fails without retry', async () => {
+        const refused = Object.assign(new Error('refused'), { code: 'ECONNREFUSED' });
+        (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+            connectTCP: jest.fn().mockRejectedValue(refused)
+        }));
+
+        await expect(service.execute(TCP, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0, length: 1 })).rejects.toBe(refused);
+        expect(mockClients[0].destroy).toHaveBeenCalled();
     });
 
     it('should propagate Modbus errors and still close the connection', async () => {
@@ -132,6 +157,26 @@ describe('ModbusBusService', () => {
         it('should not open any connection without targets', async () => {
             await expect(service.scan(TCP, [])).resolves.toEqual([]);
             expect(mockClients).toHaveLength(0);
+        });
+    });
+
+    describe('checkConnection', () => {
+        it('should open then close a connection without any request', async () => {
+            await service.checkConnection(TCP);
+
+            const [client] = mockClients;
+            expect(client.connectTCP).toHaveBeenCalledWith('10.0.0.2', { port: 502, timeout: 2000 });
+            expect(client.readHoldingRegisters).not.toHaveBeenCalled();
+            expect(client.close).toHaveBeenCalled();
+        });
+
+        it('should propagate connection errors', async () => {
+            const refused = Object.assign(new Error('refused'), { code: 'ECONNREFUSED' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                connectTCP: jest.fn().mockRejectedValue(refused)
+            }));
+
+            await expect(service.checkConnection(TCP)).rejects.toBe(refused);
         });
     });
 

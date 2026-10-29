@@ -41,6 +41,7 @@ import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/co
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
+import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -109,7 +110,8 @@ import { SlaveProvisioningModule } from '@process/domain/services/slave-provisio
             inject: [ForcastSensorStrategy, ComSensorStrategy]
         },
         BleService,
-        CycleGroupService
+        CycleGroupService,
+        DeviceConnectivityService
     ],
     exports: [
         ProcessService,

@@ -1,4 +1,4 @@
-import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceConnectivityModel, DeviceKind, DeviceModel, DeviceType, MasterConfigModel, SlaveConfigModel } from '@process/domain/models/device.model';
 import { Device, DeviceDocument } from '../device.schema';
 
 export class DeviceMapper {
@@ -37,6 +37,10 @@ export class DeviceMapper {
         model.type = device.type;
         model.description = device.description;
         model.config = DeviceMapper._mapConfig(device);
+        if (device.connectivity) {
+            const { connected, changedAt, error } = device.connectivity;
+            model.connectivity = Object.assign(new DeviceConnectivityModel(), { deviceId: device._id, connected, changedAt, error });
+        }
         model.createdAt = (device as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (device as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = device.deletedAt ?? null;

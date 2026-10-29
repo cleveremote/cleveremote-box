@@ -117,12 +117,24 @@ export class PortConfigModel {
     public portCount: number;
 }
 
+// État de connectivité d'un device, persisté par DeviceConnectivityService à chaque changement d'état
+export class DeviceConnectivityModel {
+    public deviceId: string;
+    public connected: boolean;
+    // date du dernier changement d'état (connexion ou perte)
+    public changedAt: Date;
+    // cause de la déconnexion
+    public error?: string;
+}
+
 export class DeviceModel {
     public _id: string;
     public name: string;
     public type: DeviceType;
     public description: string;
     public config: MasterConfigModel | SlaveConfigModel;
+    // absent = jamais vérifié ; écrit uniquement par DeviceConnectivityService (ignoré par save)
+    public connectivity?: DeviceConnectivityModel;
 
     public createdAt?: Date;
     public updatedAt?: Date;

@@ -126,7 +126,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             {} as never,
             {} as never,
             {} as never,
-            { seed: jest.fn().mockResolvedValue(undefined) } as never
+            { seed: jest.fn().mockResolvedValue(undefined) } as never,
+            { watch: jest.fn() } as never
         );
     });
 

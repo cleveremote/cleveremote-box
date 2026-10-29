@@ -11,6 +11,10 @@ import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 const DISCOVERY_TIMEOUT = 200;
 // Registre d'adresse par défaut des modules Waveshare
 const DEFAULT_DISCOVERY_REGISTER = 0x4000;
+// Timeout des tests de connectivité : un device muet ne doit pas bloquer longtemps la file du bus
+const CONNECTIVITY_TIMEOUT = 500;
+// Registre lu pour tester un slave sans registre de découverte (toute réponse, même une exception Modbus, suffit)
+const DEFAULT_CONNECTIVITY_REGISTER = 0x0000;
 
 /**
  * Opérations Modbus liées aux devices (adressage des slaves, découverte) : traduit masters/slaves
@@ -37,6 +41,44 @@ export class ModbusDeviceService {
             return isRefreshed ? this.toConnection(masterConfig, unitId) : undefined;
         };
         return connection;
+    }
+
+    /**
+     * Lève si le master (passerelle TCP ou port RTU) n'est pas joignable. Échec rapide : pas de
+     * redécouverte UDP (~5 s) dans la file du bus ; elle est relancée en arrière-plan et une IP DHCP
+     * retrouvée (persistée par refreshMasterAddress) sera prise en compte au check suivant.
+     */
+    public async checkMaster(master: DeviceModel): Promise<void> {
+        const masterConfig = master.config as MasterConfigModel;
+        const connection = this.toConnection(masterConfig, DEFAULT_UNCONFIGURED_UNIT_ID);
+        try {
+            await this.modbusBus.checkConnection({ ...connection, timeout: CONNECTIVITY_TIMEOUT, onUnreachable: undefined });
+        } catch (err) {
+            this.waveshareDiscoveryService.refreshMasterAddress(masterConfig)
+                .catch((refreshErr) => this.logger.warn(
+                    { masterId: master._id, err: refreshErr instanceof Error ? refreshErr.message : String(refreshErr) },
+                    'master address refresh failed'
+                ));
+            throw err;
+        }
+    }
+
+    /**
+     * Lève si le slave ne répond pas derrière son master. Lit un registre (celui de découverte de son
+     * kind, sinon 0x0000) : une exception Modbus (err.modbusCode) prouve que le slave a répondu.
+     */
+    public async checkSlave(slave: DeviceModel, master: DeviceModel): Promise<void> {
+        const config = slave.config as SlaveConfigModel;
+        const kind = config.kind ?? getDeviceKindByAddress(config.slaveId);
+        const register = (kind && DEVICE_KIND_SPECS[kind]?.discoveryRegister) ?? DEFAULT_CONNECTIVITY_REGISTER;
+        const connection = { ...this.toConnection(master.config as MasterConfigModel, config.slaveId), timeout: CONNECTIVITY_TIMEOUT };
+        try {
+            await this.modbusBus.execute(connection, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: register, length: 1 });
+        } catch (err) {
+            if ((err as { modbusCode?: number })?.modbusCode === undefined) {
+                throw err;
+            }
+        }
     }
 
     /** Écrit `newAddress` dans le registre d'adresse du slave joignable à `currentAddress` (FC06, 1 à 255) */

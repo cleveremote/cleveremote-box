@@ -170,7 +170,7 @@ export class SensorService {
     public async restartAllScheduledSensors(): Promise<void> {
         const sensors = (await this.sensorRepository.get()) as SensorModel[];
         for (const sensor of sensors) {
-            this._createScheduledSensorEvent(sensor);
+            this._createScheduledSensorEvent(sensor); 
         }
     }
 

@@ -32,3 +32,9 @@ export class DiscoverDeviceDTO {
     public masterId: string;
 }
 
+export class CheckDeviceDTO {
+    // absent = tous les devices
+    @IsOptional()
+    @IsString()
+    public deviceId?: string;
+}

@@ -5,6 +5,8 @@ import { ModbusConnection, ModbusScanResponse, ModbusScanTarget, ModbusTransport
 import { RegisterFunction, RegisterRawData, RegisterRequest } from '../models/register-map.model';
 
 const UNREACHABLE_CODES = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH'];
+// Erreur (sans code) levée par modbus-serial quand la connexion TCP dépasse son timeout
+const TCP_CONNECT_TIMEOUT_MESSAGE = 'TCP Connection Timed Out';
 const DEFAULT_TIMEOUT = 2000;
 const DEFAULT_BAUD_RATE = 9600;
 
@@ -62,6 +64,15 @@ export class ModbusBusService {
         });
     }
 
+    /** Ouvre puis referme une connexion (test de joignabilité) ; lève si la connexion échoue */
+    public checkConnection(connection: ModbusConnection): Promise<void> {
+        return this.runExclusive(async () => {
+            const client = new ModbusRTU();
+            await this._connect(client, connection);
+            client.close(() => this.logger.debug({ unitId: connection.unitId }, 'check connection closed'));
+        });
+    }
+
     /** Exécute `run` seul sur le bus, à la suite des transactions en attente */
     public runExclusive<T>(run: () => Promise<T>): Promise<T> {
         const result = this._tail.then(run);
@@ -71,15 +82,17 @@ export class ModbusBusService {
 
     private async _connect(client: ModbusRTU, connection: ModbusConnection): Promise<void> {
         if (connection.transport === ModbusTransport.TCP) {
+            // sans timeout, une connexion vers un hôte éteint attend l'échec de l'OS (jusqu'à ~2 min)
+            const timeout = connection.timeout || DEFAULT_TIMEOUT;
             try {
-                await client.connectTCP(connection.host, { port: connection.port });
+                await this._connectTCP(client, connection.host, connection.port, timeout);
             } catch (err) {
                 // Adresse obsolète : l'appelant peut fournir une connexion corrigée, retentée une fois
-                const retry = UNREACHABLE_CODES.includes(err.code) ? await connection.onUnreachable?.() : undefined;
+                const retry = this._isUnreachable(err) ? await connection.onUnreachable?.() : undefined;
                 if (!retry) {
                     throw err;
                 }
-                await client.connectTCP(retry.host, { port: retry.port });
+                await this._connectTCP(client, retry.host, retry.port, timeout);
             }
         } else if (connection.transport === ModbusTransport.RTU) {
             await client.connectRTUBuffered(connection.path, { baudRate: connection.baudRate || DEFAULT_BAUD_RATE });
@@ -88,6 +101,20 @@ export class ModbusBusService {
         }
         client.setID(connection.unitId);
         client.setTimeout(connection.timeout || DEFAULT_TIMEOUT);
+    }
+
+    // socket libéré si la connexion échoue (sinon la tentative reste ouverte jusqu'à l'échec de l'OS)
+    private async _connectTCP(client: ModbusRTU, host: string, port: number, timeout: number): Promise<void> {
+        try {
+            await client.connectTCP(host, { port, timeout });
+        } catch (err) {
+            client.destroy(() => undefined);
+            throw err;
+        }
+    }
+
+    private _isUnreachable(err: { code?: string; message?: string }): boolean {
+        return UNREACHABLE_CODES.includes(err?.code) || err?.message === TCP_CONNECT_TIMEOUT_MESSAGE;
     }
 
     private async _run(client: ModbusRTU, unitId: number, request: RegisterRequest): Promise<RegisterRawData> {

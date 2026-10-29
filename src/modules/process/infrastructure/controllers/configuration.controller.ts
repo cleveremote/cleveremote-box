@@ -19,7 +19,7 @@ import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { DeviceModel, DeviceWithCommands } from '@process/domain/models/device.model';
+import { DeviceConnectivityModel, DeviceModel, DeviceWithCommands } from '@process/domain/models/device.model';
 import { DeviceSynchronizeUC } from '@process/use-cases/device-synchronize.uc';
 import { DeviceCommandSynchronizeUC } from '@process/use-cases/device-command-synchronize.uc';
 import { DeviceCommandModel } from '@process/domain/models/device-command.model';
@@ -28,7 +28,9 @@ import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.u
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
 import { DeviceService } from '@process/domain/services/device.service';
-import { DiscoverDeviceDTO } from '../dto/discover.dto';
+import { CheckDeviceDTO, DiscoverDeviceDTO } from '../dto/discover.dto';
+import { DeviceConnectivityCheckUC } from '@process/use-cases/device-connectivity-check.uc';
+import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
 function flattenValidationErrors(errors: ValidationError[]): string[] {
@@ -58,6 +60,7 @@ export class ConfigurationController {
         private _configurationService: StructureService,
          private _waveshareDiscoveryService: WaveshareDiscoveryService    ,
         private _synchronizeService: SynchronizeService,
+        private _deviceConnectivityService: DeviceConnectivityService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -83,6 +86,12 @@ export class ConfigurationController {
     ): Promise<DeviceModel[] | DeviceWithCommands[]> {
         const uc = new DeviceDiscoverUC(this._configurationService,this._waveshareDiscoveryService);
         return uc.execute(discoverDeviceDTO.masterId);
+    }
+
+    @MessagePattern(['box/check/device'])
+    public async checkDevice(@Payload() checkDeviceDTO: CheckDeviceDTO): Promise<DeviceConnectivityModel[]> {
+        const uc = new DeviceConnectivityCheckUC(this._deviceConnectivityService);
+        return uc.execute(checkDeviceDTO?.deviceId);
     }
 
     @MessagePattern(['box/synchronize/device-command'])

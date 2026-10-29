@@ -63,6 +63,20 @@ export class DeviceConfig {
 }
 export const DeviceConfigSchema = SchemaFactory.createForClass(DeviceConfig);
 
+@Schema({ _id: false })
+export class DeviceConnectivity {
+    @Prop({ required: true })
+    public connected: boolean;
+
+    // date du dernier changement d'etat (connexion ou perte)
+    @Prop({ required: true })
+    public changedAt: Date;
+
+    @Prop()
+    public error?: string;
+}
+export const DeviceConnectivitySchema = SchemaFactory.createForClass(DeviceConnectivity);
+
 export type DeviceDocument = Device & Document;
 
 @Schema({ collection: 'devices', timestamps: true })
@@ -85,6 +99,11 @@ export class Device {
 
     @Prop({ type: DeviceConfigSchema, required: true })
     public config: DeviceConfig;
+
+    // ecrit uniquement par updateConnectivity : jamais renseigne par DeviceMapper.mapToSchema,
+    // pour qu'un save / upsert de la configuration ne l'ecrase pas
+    @Prop({ type: DeviceConnectivitySchema })
+    public connectivity?: DeviceConnectivity;
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

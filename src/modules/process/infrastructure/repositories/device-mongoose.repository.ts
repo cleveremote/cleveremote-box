@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
+import { DeviceConnectivityModel, DeviceModel, DeviceType } from '@process/domain/models/device.model';
 import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
 import { Device, DeviceDocument } from '../schemas/device.schema';
 import { DeviceMapper } from '../schemas/mappers/device.mapper';
@@ -32,6 +32,16 @@ export class DeviceMongooseRepository {
             { new: true, upsert: true, setDefaultsOnInsert: true }
         );
         return DeviceMapper.mapToModel(saved);
+    }
+
+    // remplace tout le sous-document (un `error` precedent disparait) ; sans timestamps : updatedAt
+    // reste la date de derniere modification de la configuration
+    public async updateConnectivity(id: string, { connected, changedAt, error }: DeviceConnectivityModel): Promise<void> {
+        await this.deviceModel.updateOne(
+            { _id: id },
+            { $set: { connectivity: { connected, changedAt, error } } },
+            { timestamps: false }
+        );
     }
 
     public async delete(id: string): Promise<boolean> {

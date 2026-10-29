@@ -31,6 +31,7 @@ import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
 import { SensorType } from '../interfaces/sensor.interface';
 import { outcomeValues } from '../utils/device-command.util';
 import { SlaveTemplateService } from './slave-template.service';
+import { DeviceConnectivityService } from './device-connectivity.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -64,7 +65,8 @@ export class InitService {
         private readonly deviceCommandRepository: DeviceCommandRepository,
         private readonly deviceCommandService: DeviceCommandService,
         private readonly comSensorStrategy: ComSensorStrategy,
-        private readonly slaveTemplateService: SlaveTemplateService
+        private readonly slaveTemplateService: SlaveTemplateService,
+        private readonly deviceConnectivityService: DeviceConnectivityService
     ) { }
 
 
@@ -89,6 +91,7 @@ export class InitService {
         return wrap('SlaveTemplateService.seed', () => this.slaveTemplateService.seed())
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
             .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
+            .then(() => wrap('DeviceConnectivityService.watch', () => this.deviceConnectivityService.watch()))
             //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             //.then(() => wrap('InitService.testBuildSlaveDeviceCommandsJson', () => this._testBuildSlaveDeviceCommandsJson()))
             .then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    

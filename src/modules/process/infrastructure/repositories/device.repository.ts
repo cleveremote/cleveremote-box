@@ -1,6 +1,6 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { DeviceKind, DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
+import { DeviceConnectivityModel, DeviceKind, DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -132,6 +132,10 @@ export class DeviceRepository {
 
     public async getByType(type: DeviceType): Promise<DeviceModel[]> {
         return this.deviceMongooseRepository.findByType(type);
+    }
+
+    public async updateConnectivity(id: string, connectivity: DeviceConnectivityModel): Promise<void> {
+        return this.deviceMongooseRepository.updateConnectivity(id, connectivity);
     }
 
     public async getSlavesByMasterId(masterDeviceId: string): Promise<DeviceModel[]> {

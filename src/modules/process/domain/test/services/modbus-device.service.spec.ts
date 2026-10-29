@@ -20,13 +20,17 @@ function CreateSlave(slaveId: number): DeviceModel {
 }
 
 describe('ModbusDeviceService', () => {
-    let modbusBus: { execute: jest.Mock; scan: jest.Mock };
+    let modbusBus: { execute: jest.Mock; scan: jest.Mock; checkConnection: jest.Mock };
     let waveshareDiscoveryService: { refreshMasterAddress: jest.Mock };
     let logger: { log: jest.Mock; warn: jest.Mock };
     let service: ModbusDeviceService;
 
     beforeEach(() => {
-        modbusBus = { execute: jest.fn().mockResolvedValue(undefined), scan: jest.fn().mockResolvedValue([]) };
+        modbusBus = {
+            execute: jest.fn().mockResolvedValue(undefined),
+            scan: jest.fn().mockResolvedValue([]),
+            checkConnection: jest.fn().mockResolvedValue(undefined)
+        };
         waveshareDiscoveryService = { refreshMasterAddress: jest.fn() };
         logger = { log: jest.fn(), warn: jest.fn() };
         service = new ModbusDeviceService(modbusBus as never, waveshareDiscoveryService as never, logger as never);
@@ -145,6 +149,68 @@ describe('ModbusDeviceService', () => {
         it('should default to the Waveshare address register and return null when nothing answers', async () => {
             await expect(service.probeMasterForNewSlave(CreateMaster())).resolves.toBeNull();
             expect(modbusBus.scan.mock.calls[0][1].map((t) => t.request.address)).toEqual([0x4000]);
+        });
+    });
+
+    describe('checkMaster', () => {
+        it('should open a short connection to the master, without address refresh in the bus queue', async () => {
+            await service.checkMaster(CreateMaster());
+
+            const [connection] = modbusBus.checkConnection.mock.calls[0];
+            expect(connection).toEqual(expect.objectContaining({
+                transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, timeout: 500, unitId: DEFAULT_UNCONFIGURED_UNIT_ID
+            }));
+            expect(connection.onUnreachable).toBeUndefined();
+            expect(waveshareDiscoveryService.refreshMasterAddress).not.toHaveBeenCalled();
+        });
+
+        it('should propagate connection errors without waiting for the background address refresh', async () => {
+            modbusBus.checkConnection.mockRejectedValue(new Error('refused'));
+            waveshareDiscoveryService.refreshMasterAddress.mockReturnValue(new Promise(() => undefined));
+            const master = CreateMaster();
+
+            await expect(service.checkMaster(master)).rejects.toThrow('refused');
+            expect(waveshareDiscoveryService.refreshMasterAddress).toHaveBeenCalledWith(master.config);
+        });
+
+        it('should log a failed background address refresh', async () => {
+            modbusBus.checkConnection.mockRejectedValue(new Error('refused'));
+            waveshareDiscoveryService.refreshMasterAddress.mockRejectedValue(new Error('udp error'));
+
+            await expect(service.checkMaster(CreateMaster())).rejects.toThrow('refused');
+            await new Promise(process.nextTick);
+            expect(logger.warn).toHaveBeenCalledWith({ masterId: 'master-1', err: 'udp error' }, 'master address refresh failed');
+        });
+    });
+
+    describe('checkSlave', () => {
+        it('should read the discovery register of the slave kind at its address', async () => {
+            await service.checkSlave(CreateSlave(62), CreateMaster());
+
+            const [connection, request] = modbusBus.execute.mock.calls[0];
+            expect(connection).toEqual(expect.objectContaining({ unitId: 62, timeout: 500 }));
+            expect(request).toEqual({ function: RegisterFunction.READ_HOLDING_REGISTERS, address: DEVICE_KIND_SPECS[DeviceKind.DIGITAL_IO_8_CH].discoveryRegister, length: 1 });
+        });
+
+        it('should read register 0 for a slave without discovery register', async () => {
+            const slave = CreateSlave(95);
+            (slave.config as SlaveConfigModel).kind = DeviceKind.MODBUS_SLAVE;
+
+            await service.checkSlave(slave, CreateMaster());
+
+            expect(modbusBus.execute.mock.calls[0][1].address).toBe(0x0000);
+        });
+
+        it('should consider a Modbus exception as an answer', async () => {
+            modbusBus.execute.mockRejectedValue(Object.assign(new Error('Illegal data address'), { modbusCode: 2 }));
+
+            await expect(service.checkSlave(CreateSlave(62), CreateMaster())).resolves.toBeUndefined();
+        });
+
+        it('should propagate a timeout', async () => {
+            modbusBus.execute.mockRejectedValue(Object.assign(new Error('Timed out'), { errno: 'ETIMEDOUT' }));
+
+            await expect(service.checkSlave(CreateSlave(62), CreateMaster())).rejects.toThrow('Timed out');
         });
     });
 });

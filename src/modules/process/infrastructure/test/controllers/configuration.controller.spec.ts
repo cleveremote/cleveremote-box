@@ -45,7 +45,8 @@ describe('ConfigurationController', () => {
         controller = new ConfigurationController(
             configurationService as unknown as StructureService,
             {} as never,
-            synchronizeService as unknown as SynchronizeService
+            synchronizeService as unknown as SynchronizeService,
+            {} as never
         );
     });
 
