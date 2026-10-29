@@ -22,7 +22,10 @@ import { ConditionModel } from '@process/domain/models/condition.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
 import { IActuatorModule, ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorModel, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
-import { CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessType } from '@process/domain/interfaces/executable.interface';
+import {
+    CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessNotification, ProcessType
+} from '@process/domain/interfaces/executable.interface';
+import { ExecutableType } from '@process/domain/models/value.model';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
 import { ProcessInvalidTypeError } from '@process/domain/errors/process-invalid-type-error';
@@ -377,11 +380,61 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
-        it('should throw "Method not implemented" for ProcessType.QUEUED', async () => {
-            const cycle = await SeedCycle('cycle-1', ['module-a']);
-            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED);
+        it('should start a queued cycle immediately when no conflicting cycle is running', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
 
-            await expect(service.execute(process)).rejects.toThrow('Method not implemented.');
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+
+            expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should start a queued cycle right after the end of the conflicting cycle, without interrupting it', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 80 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(cycleB.status).toEqual(ExecutableStatus.QUEUED);
+            expect(eventRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+                elementId: cycleB._id,
+                additionalData: expect.objectContaining({
+                    status: ExecutableStatus.QUEUED,
+                    causes: [expect.objectContaining({ type: ProcessType.QUEUED, cause: 'queued after cycle : cycle-a' })]
+                })
+            }));
+
+            await Flush(200);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(cycleB.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            const calls = actuatorService.execute.mock.calls.map(([mod, action]) => `${mod._id}:${action}`);
+            expect(calls.lastIndexOf('shared-pump:1')).toBeGreaterThan(calls.indexOf('shared-pump:0'));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should cancel a queued cycle that receives OFF before the conflicting cycle ends', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 80 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
+            expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
+
+            await Flush(200);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
         });
 
         it('should be a no-op for ProcessType.CONFIRMATION', async () => {
@@ -640,6 +693,64 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
         });
 
+        it('should notify the front (without persisting an event) when the cycle conditions are not verified', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{ name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000 }] }]);
+            cycle.conditions = [condition];
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            const payloads = wsService.sendMessage.mock.calls.map(([msg]) => JSON.parse(msg.data));
+            expect(payloads).toContainEqual({
+                type: ExecutableType.CYCLE, id: cycle._id, mode: ProcessMode.MANUAL, status: ExecutableStatus.STOPPED,
+                notification: ProcessNotification.CONDITIONS_NOT_VERIFIED,
+                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (current : 2)' }]
+            });
+            expect(eventRepository.save).not.toHaveBeenCalled();
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
+        });
+
+        it('should notify the front with the sequences causes when no sequence is verified', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([
+                { name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 5000, conditions: [condition] }] }
+            ]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(100);
+
+            const payloads = wsService.sendMessage.mock.calls.map(([msg]) => JSON.parse(msg.data));
+            expect(payloads).toContainEqual(expect.objectContaining({
+                type: ExecutableType.CYCLE, id: cycle._id, notification: ProcessNotification.CONDITIONS_NOT_VERIFIED,
+                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: `sequence ${cycle.sequences[0].name} : sensor-1 > 5 (current : 2)` }]
+            }));
+        });
+
+        it('should notify the front once when a sequence is skipped because its conditions are not verified', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [{ moduleIds: ['module-a'], maxDuration: 30, conditions: [condition] }, { moduleIds: ['module-b'], maxDuration: 30 }]
+            }]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(300);
+
+            const notifications = wsService.sendMessage.mock.calls.map(([msg]) => JSON.parse(msg.data))
+                .filter((x) => x.notification === ProcessNotification.CONDITIONS_NOT_VERIFIED);
+            // local + remote
+            expect(notifications).toHaveLength(2);
+            expect(notifications[0]).toEqual(expect.objectContaining({
+                type: ExecutableType.SEQUENCE, id: cycle.sequences[0]._id,
+                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (current : 2)' }]
+            }));
+        });
+
         it('should catch up a skipped sequence that becomes verified while another sequence is running', async () => {
             const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
             const [cycle] = await SeedCycles([{
@@ -661,6 +772,48 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(calls.indexOf('module-a:1')).toBeGreaterThan(calls.indexOf('module-b:1'));
             expect(calls.indexOf('module-b:0')).toBeLessThan(calls.indexOf('module-a:1'));
             expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should run a forced skipped sequence right after the running one, before the next sequence', async () => {
+            const condition = Object.assign(new ConditionModel(), { elementId: 'sensor-1', elementType: 'SENSOR', operator: '>', value: 5 });
+            const [cycle] = await SeedCycles([{
+                name: 'cycle-1',
+                sequences: [
+                    { moduleIds: ['module-a'], maxDuration: 30, conditions: [condition] },
+                    { moduleIds: ['module-b'], maxDuration: 80 },
+                    { moduleIds: ['module-c'], maxDuration: 30 }
+                ]
+            }]);
+            valueRepository.getDeviceValue.mockResolvedValue({ value: 2 });
+
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(30);
+            expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-b' }), 1);
+
+            const forceCycle = new CycleModel();
+            forceCycle._id = cycle.sequences[0]._id;
+            await service.execute(CreateProcess(forceCycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE_SEQUENCE));
+            // la sequence en cours n'est pas interrompue
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
+
+            await Flush(400);
+
+            const calls = actuatorService.execute.mock.calls.map(([mod, action]) => `${mod._id}:${action}`);
+            expect(calls.indexOf('module-b:0')).toBeLessThan(calls.indexOf('module-a:1'));
+            expect(calls.indexOf('module-a:1')).toBeLessThan(calls.indexOf('module-c:1'));
+            expect(calls.indexOf('module-a:0')).toBeLessThan(calls.indexOf('module-c:1'));
+            expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should ignore a forced sequence when its cycle is not running', async () => {
+            const [cycle] = await SeedCycles([{ name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 30 }] }]);
+            const forceCycle = new CycleModel();
+            forceCycle._id = cycle.sequences[0]._id;
+
+            await service.execute(CreateProcess(forceCycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE_SEQUENCE));
+
+            expect(logger.warn).toHaveBeenCalledWith({ sequenceId: cycle.sequences[0]._id }, 'sequence force ignored (owning cycle not running)');
+            expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
         });
 
         it('should stop the cycle at the end even if a skipped sequence is still not verified', async () => {

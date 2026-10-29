@@ -6,7 +6,13 @@ import { SecurityConfig } from '@process/infrastructure/schemas/sequence.schema'
 export enum ExecutableStatus {
     IN_PROCCESS = 'IN_PROCCESS',
     STOPPED = 'STOPPED',
-    WAITTING_CONFIRMATION = 'WAITTING_CONFIRMATION'
+    WAITTING_CONFIRMATION = 'WAITTING_CONFIRMATION',
+    QUEUED = 'QUEUED' // en attente de la fin des cycles en conflit (ProcessType.QUEUED)
+}
+
+// notification ponctuelle envoyee au front (sans changer le statut de l'element)
+export enum ProcessNotification {
+    CONDITIONS_NOT_VERIFIED = 'CONDITIONS_NOT_VERIFIED'
 }
 
 export enum ExecutableAction {
@@ -37,10 +43,11 @@ export enum ProcessType {
     //
     INIT = 'INIT', // declenchement initial
     FORCE = 'FORCE', // deduction par rapport au priorite ou par confirmation
-    QUEUED = 'QUEUED', // par confirmation
+    QUEUED = 'QUEUED', // par confirmation : demarre des la fin des cycles en conflit
     CONFIRMATION = 'CONFIRMATION',
     IGNORE = 'IGNORE', //par confirmation
-    SKIP = 'SKIP' // concerne les sequences ...
+    SKIP = 'SKIP', // concerne les sequences ...
+    FORCE_SEQUENCE = 'FORCE_SEQUENCE' // sequence sautee (conditions fausses) lancee des la fin de la sequence en cours
 }
 
 export enum TASK {

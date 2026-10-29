@@ -12,6 +12,7 @@ import {
     ProcessMode,
     ProcessType,
     CycleType,
+    ProcessNotification,
     SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
@@ -33,9 +34,14 @@ import { ElementType, EventModel } from '../models/event.model';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { evaluateConditions } from '../utils/evaluate-conditions.util';
+import { ConditionFailureReporter, evaluateConditions, sortConditions } from '../utils/evaluate-conditions.util';
+import { ConditionModel } from '../models/condition.model';
+import { SensorValueModel } from '../models/sensor-value.model';
+import { ProcessValueModel } from '../models/proccess-value.model';
 
 type ProcessReport = { id: string; type: ProcessType; cause: string }[];
+// causes d'une notification CONDITIONS_NOT_VERIFIED : id = element de la condition fausse
+type ConditionReport = { id: string; type: 'CONDITION'; cause: string }[];
 
 @Injectable()
 export class ProcessService {
@@ -48,6 +54,12 @@ export class ProcessService {
     // Group ids dont _startGroupChildren est actuellement en train de derouler sa sequence
     // (delayBefore/waitForCompletion/delayAfter) : voir le commentaire sur _startGroupChildren.
     private groupStartsInProgress = new Set<string>();
+    // cycle id -> sequences forcees par le front (ordre des demandes), consommees par _runSequences
+    // a la fin de la sequence en cours ; entree presente uniquement pendant que _runSequences tourne.
+    private forcedSequences = new Map<string, string[]>();
+    // cycle id -> process recu en QUEUED, demarre (FORCE) par _startQueuedCycles quand plus aucun
+    // cycle en cours n'est en conflit avec lui ; ordre d'insertion = ordre de demarrage.
+    private queuedCycles = new Map<string, ProcessModel>();
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
         private configurationService: StructureService,
@@ -82,21 +94,28 @@ export class ProcessService {
 
     private _publishStatusEvent(eventPayload: EventModel, wsData: unknown): Promise<string> {
         return this.eventRepository.save(eventPayload).then(() => {
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, true)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
-            this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, false)
-                .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
+            this._sendStatusSync(wsData);
             return 'sent';
         });
+    }
+
+    private _sendStatusSync(wsData: unknown): void {
+        this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, true)
+            .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (local)'));
+        this.wsService.sendMessage({ pattern: 'agg/synchronize/status', data: JSON.stringify(wsData) }, false)
+            .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
     }
 
     public async reset(process: ProcessModel, causes?: ProcessReport): Promise<void> {
         const index = this.processList.map(x => x.cycle._id).indexOf(process.cycle._id);
         this._clearQueuedSequences(process);
+        // un arret annule la mise en file QUEUED ; un cycle en file sans entree processList (QUEUED
+        // envoye sans confirmation prealable) doit quand meme repasser STOPPED.
+        const wasQueued = this.queuedCycles.delete(process.cycle._id);
         // le statut peut etre reserve (IN_PROCCESS) avant que processList ne contienne l'entree
         // (voir la reservation synchrone de la regle 3) : sans ce fallback, un OFF arrivant dans
         // cette fenetre ne trouverait rien dans processList et ne ferait rien.
-        if (index > -1 || process.cycle.status === ExecutableStatus.IN_PROCCESS) {
+        if (index > -1 || process.cycle.status === ExecutableStatus.IN_PROCCESS || wasQueued) {
             this.processList[index]?.instance?.unsubscribe();
             // flip immediatement (avant tout await) : ce champ est partage (meme CycleModel que
             // configurationService.structure.cycles, cf. _initializeProcess) et sert de signal
@@ -137,8 +156,8 @@ export class ProcessService {
             // (voir _syncParentGroupOffIfAllChildrenStopped) ; volontairement DANS ce if (uniquement
             // quand ce cycle vient reellement de transiter vers STOPPED, pas a chaque appel no-op).
             await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
-
-
+            // en dernier : les actuators de ce cycle sont deja coupes, le cycle en file peut les reprendre
+            await this._startQueuedCycles();
         }
         // unref() : ce rappel differe est "fire and forget", il ne doit pas a lui seul empecher
         // le processus de s'arreter (ex: extinction propre, ou fuite de ce timer dans les tests).
@@ -262,6 +281,7 @@ export class ProcessService {
     }
 
     private _removeIgnoredProcess(process: ProcessModel): Promise<string> {
+        this.queuedCycles.delete(process.cycle._id);
         const index = this.processList.findIndex(x => x.cycle._id === process.cycle._id);
         if (index > -1) {
             this.processList.splice(index, 1);
@@ -291,8 +311,8 @@ export class ProcessService {
     private _initializeProcess(process: ProcessModel): void {
         const struct = this.configurationService.structure;
         const currentCycle = struct.cycles.find(x => x._id === process.cycle._id);
-        if (!currentCycle && process.type === ProcessType.SKIP) {
-            //skip concerne les sequences ... donc pas de cycle existant
+        if (!currentCycle && (process.type === ProcessType.SKIP || process.type === ProcessType.FORCE_SEQUENCE)) {
+            //skip / force sequence concernent les sequences ... donc pas de cycle existant
             process.id = process.cycle._id;
         } else if (currentCycle) {
             process.cycle = currentCycle;
@@ -305,6 +325,8 @@ export class ProcessService {
         if (process.type === ProcessType.SKIP) {
             const sequenceSkipFlag = this.queuedSequences.find(x => x.sequenceId === process.id);
             sequenceSkipFlag.flag.next(null);
+        } else if (process.type === ProcessType.FORCE_SEQUENCE) {
+            this._forceSequence(process.id);
         } else if (process.type === ProcessType.FORCE) {
             if (process.cycle.type === CycleType.MODULE && process.mode !== ProcessMode.AUTO) {
                 await this._cascadeStopConflictingCycles(process);
@@ -383,6 +405,8 @@ export class ProcessService {
                         return; // ne jamais demarrer le cycle ni le Group parent dans ce cas
                     }
                 }
+                // un FORCE recu pendant la mise en file la court-circuite (demarrage immediat)
+                this.queuedCycles.delete(process.cycle._id);
                 process.cycle.status = ExecutableStatus.IN_PROCCESS; // reservation synchrone (ferme la fenetre TOCTOU)
                 // pour un cycle MODULE, _cascadeStopConflictingCycles ci-dessus est deja le
                 // mecanisme de resolution de conflit faisant autorite (exclusion du cycle source,
@@ -400,7 +424,7 @@ export class ProcessService {
                 }
             }
         } else if (process.type === ProcessType.QUEUED) {
-            throw new Error('Method not implemented.');
+            await this._queueCycle(process);
         } else if (process.type === ProcessType.IGNORE) {
             await this._removeIgnoredProcess(process);
         } else if (process.type === ProcessType.CONFIRMATION) {
@@ -416,13 +440,19 @@ export class ProcessService {
         // conditions du cycle fausses : on ne demarre pas le cycle (ni execution, ni confirmation).
         // uniquement pour un demarrage : un OFF doit toujours pouvoir arreter le cycle.
         const isStart = process.action !== ExecutableAction.OFF;
-        if (isStart && !(await this._areCycleConditionsVerified(process))) {
-            this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
-            return;
-        }
-        if (isStart && !(await this._hasAnyVerifiedSequence(process))) {
-            this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
-            return;
+        if (isStart) {
+            const cycleCauses = await this._getCycleConditionCauses(process);
+            if (cycleCauses) {
+                this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
+                this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses);
+                return;
+            }
+            const sequenceCauses = await this._getUnverifiedSequencesCauses(process);
+            if (sequenceCauses) {
+                this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
+                this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses);
+                return;
+            }
         }
         const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
         const report: ProcessReport = [];
@@ -465,17 +495,65 @@ export class ProcessService {
         }
     }
 
+    // null des qu'une sequence est verifiee, sinon les causes de toutes les sequences (prefixees par leur nom).
     // un cycle sans sequence (ex: GROUP) n'est pas concerne
-    private async _hasAnyVerifiedSequence(process: ProcessModel): Promise<boolean> {
-        if (process.cycle.type === CycleType.GROUP || !process.cycle.sequences?.length) { return true; }
+    private async _getUnverifiedSequencesCauses(process: ProcessModel): Promise<ConditionReport | null> {
+        if (process.cycle.type === CycleType.GROUP || !process.cycle.sequences?.length) { return null; }
+        const causes: ConditionReport = [];
         for (const sequence of process.cycle.sequences) {
-            if (await this._checkSequenceCondition(sequence._id)) { return true; }
+            const sequenceCauses = await this._getSequenceConditionCauses(sequence._id);
+            if (!sequenceCauses) { return null; }
+            causes.push(...sequenceCauses.map((x) => ({ ...x, cause: `sequence ${sequence.name} : ${x.cause}` })));
         }
-        return false;
+        return causes;
     }
 
-    private _areCycleConditionsVerified(process: ProcessModel): Promise<boolean> {
-        return evaluateConditions(process.cycle.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId));
+    private _getCycleConditionCauses(process: ProcessModel): Promise<ConditionReport | null> {
+        return this._getConditionCauses(process.cycle.conditions,
+            (detail) => this.logger.warn({ cycleId: process.cycle._id, ...detail }, 'cycle conditions not verified'));
+    }
+
+    // null si les conditions sont verifiees, sinon une cause par condition fausse (ou l'erreur de structure)
+    private async _getConditionCauses(conditions: ConditionModel[] | undefined,
+        onFailure: ConditionFailureReporter): Promise<ConditionReport | null> {
+        const values = new Map<string, SensorValueModel | ProcessValueModel | undefined>();
+        let failure: Parameters<ConditionFailureReporter>[0] | undefined;
+        const isVerified = await evaluateConditions(conditions, async (elementId) => {
+            const value = await this.valueRepository.getDeviceValue(elementId);
+            values.set(elementId, value);
+            return value;
+        }, (detail) => {
+            failure = detail;
+            onFailure(detail);
+        });
+        if (isVerified) { return null; }
+        if (!failure?.results) { return [{ id: null, type: 'CONDITION', cause: failure?.reason ?? 'conditions not verified' }]; }
+        return sortConditions(conditions)
+            .filter((_, i) => !failure.results[i])
+            .map((condition) => ({
+                id: condition.elementId, type: 'CONDITION', cause: this._describeCondition(condition, values.get(condition.elementId))
+            }));
+    }
+
+    private _describeCondition(condition: ConditionModel, current: SensorValueModel | ProcessValueModel | undefined): string {
+        const name = this.configurationService.structure?.sensors?.find((x) => x._id === condition.elementId)?.name
+            ?? this.configurationService.structure?.cycles?.find((x) => x._id === condition.elementId)?.name
+            ?? this.configurationService.sequences?.find((x) => x._id === condition.elementId)?.name
+            ?? condition.elementId;
+        const currentValue = (current as SensorValueModel)?.value ?? (current as ProcessValueModel)?.status;
+        return `${name} ${condition.operator} ${condition.value} (current : ${currentValue ?? 'unknown'})`;
+    }
+
+    // pas d'event persiste : la notification ne doit pas devenir le dernier statut rehydrate au boot
+    // (cf. StructureService._rehydrateProcessStatus) ; le statut envoye reste le statut reel de l'element.
+    private _notifyConditionsNotVerified(type: ExecutableType, id: string, mode: ProcessMode, causes: ConditionReport): void {
+        const element = type === ExecutableType.CYCLE
+            ? this.configurationService.structure?.cycles?.find((cyc) => cyc._id === id)
+            : this.configurationService.sequences?.find((seq) => seq._id === id);
+        this._sendStatusSync({
+            type, id, mode, status: element?.status ?? ExecutableStatus.STOPPED,
+            notification: ProcessNotification.CONDITIONS_NOT_VERIFIED, causes
+        });
     }
 
     private _executeProcess(process: ProcessModel): void {
@@ -698,6 +776,61 @@ export class ProcessService {
         }
     }
 
+    // QUEUED (reponse a une confirmation) : le cycle attend la fin des cycles en conflit sans les
+    // interrompre, puis demarre comme un FORCE (cf. _startQueuedCycles) ; sans conflit en cours il
+    // demarre immediatement.
+    private async _queueCycle(process: ProcessModel): Promise<void> {
+        if (process.action === ExecutableAction.OFF) {
+            this.logger.warn({ cycleId: process.cycle._id }, 'queued OFF ignored');
+            return;
+        }
+        if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
+            return; // regle 3 : deja en cours -> no-op silencieux
+        }
+        const actuators = await this._resolveActuators();
+        const conflicts = this._getRunningConflicts(process.cycle, actuators);
+        if (!conflicts.length) {
+            process.type = ProcessType.FORCE;
+            return this._manageProcessType(process);
+        }
+        // mise en file synchrone apres le calcul des conflits : aucun arret ne peut s'intercaler et etre manque
+        this.queuedCycles.set(process.cycle._id, process);
+        const report: ProcessReport = conflicts
+            .map((cyc) => ({ id: process.id, type: ProcessType.QUEUED, cause: 'queued after cycle : ' + cyc.name }));
+        this.logger.log({ cycleId: process.cycle._id, waitingFor: conflicts.map((cyc) => cyc._id) }, 'cycle queued');
+        await this._publishWaitingStatus(process, ExecutableStatus.QUEUED, report);
+    }
+
+    // demarre, dans l'ordre de mise en file, chaque cycle QUEUED qui n'a plus de conflit en cours ; un
+    // cycle demarre ici (statut reserve IN_PROCCESS de facon synchrone) bloque les suivants qui partagent
+    // ses actuators.
+    private async _startQueuedCycles(): Promise<void> {
+        if (!this.queuedCycles.size) {
+            return;
+        }
+        const actuators = await this._resolveActuators();
+        for (const [cycleId, queued] of [...this.queuedCycles]) {
+            // retire/remplace entretemps (OFF, IGNORE, FORCE, ou un autre _startQueuedCycles concurrent)
+            if (this.queuedCycles.get(cycleId) !== queued || this._getRunningConflicts(queued.cycle, actuators).length) {
+                continue;
+            }
+            this.queuedCycles.delete(cycleId);
+            this.logger.log({ cycleId }, 'conflicts ended, starting queued cycle');
+            queued.type = ProcessType.FORCE;
+            await this._manageProcessType(queued);
+        }
+    }
+
+    // cycles en cours (hors MODULE, cf. _getConflictedExecutables) partageant un actuator avec cycle. Lit le
+    // statut, reserve de facon synchrone au demarrage, plutot que processList qui n'est rempli qu'apres
+    // _resolveActuators : un cycle en train de demarrer compte deja comme conflit.
+    private _getRunningConflicts(cycle: CycleModel, actuators: Map<string, IActuatorModule>): CycleModel[] {
+        const modules = cycle.getModules(actuators);
+        return this.configurationService.structure.cycles.filter((cyc) =>
+            cyc._id !== cycle._id && cyc.type !== CycleType.MODULE && cyc.status === ExecutableStatus.IN_PROCCESS &&
+            modules.some((module) => cyc.exists(module, actuators)));
+    }
+
     // un cycle MODULE partageant un actuator n'est jamais un "conflit" a arbitrer ici (priorite/
     // confirmation) : rule 1 (_cascadeStopConflictingCycles) et rule 2 (_triggerOwningModuleCycle)
     // gerent deja entierement la relation CYCLE<->MODULE sur cet actuator, de facon automatique et
@@ -840,17 +973,71 @@ export class ProcessService {
         );
     }
 
-    // execute les sequences dans l'ordre du cycle : une sequence dont les conditions sont fausses est
-    // sautee (pas de confirmation) ; une sequence sautee qui devient verifiee pendant que le cycle tourne
-    // est rattrapee des la fin de la sequence en cours (ordre du cycle). Fin de la derniere sequence
-    // (rattrapages compris) => fin du cycle, meme si des sequences sautees restent non verifiees.
+    // force une sequence sautee (conditions fausses, deja notifiee au front) : sans interrompre la sequence
+    // en cours, elle est lancee des sa fin, sans reevaluer ses conditions (cf. _runOrderedSequences).
+    private _forceSequence(sequenceId: string): void {
+        const cycle = this.configurationService.structure.cycles.find((cyc) =>
+            cyc.status === ExecutableStatus.IN_PROCCESS && cyc.sequences?.some((seq) => seq._id === sequenceId));
+        const forced = cycle && this.forcedSequences.get(cycle._id);
+        if (!forced) {
+            this.logger.warn({ sequenceId }, 'sequence force ignored (owning cycle not running)');
+            return;
+        }
+        if (!forced.includes(sequenceId)) {
+            forced.push(sequenceId);
+        }
+        this.logger.log({ cycleId: cycle._id, sequenceId }, 'sequence forced, queued after the running sequence');
+    }
+
+    // le try/finally est isole ici (meme principe que _startGroupChildren) : la file des sequences
+    // forcees n'existe que le temps de l'execution des sequences du cycle.
     private async _runSequences(process: ProcessModel, executionLst: SequenceExecutionEntry[], modules: IActuatorModule[],
         timings: Map<string, ModuleTimingConfig>, sourceCycleId?: string): Promise<null> {
+        const forced: string[] = [];
+        this.forcedSequences.set(process.cycle._id, forced);
+        try {
+            return await this._runOrderedSequences(process, executionLst, modules, timings, forced, sourceCycleId);
+        } finally {
+            // un redemarrage du cycle a pu deja enregistrer sa propre file
+            if (this.forcedSequences.get(process.cycle._id) === forced) {
+                this.forcedSequences.delete(process.cycle._id);
+            }
+        }
+    }
+
+    // execute les sequences dans l'ordre du cycle : une sequence dont les conditions sont fausses est
+    // sautee (pas de confirmation) ; une sequence sautee qui devient verifiee pendant que le cycle tourne
+    // est rattrapee des la fin de la sequence en cours (ordre du cycle). Une sequence sautee forcee par
+    // le front passe avant tout le reste (suivante ou rattrapage). Fin de la derniere sequence
+    // (rattrapages compris) => fin du cycle, meme si des sequences sautees restent non verifiees.
+    private async _runOrderedSequences(process: ProcessModel, executionLst: SequenceExecutionEntry[], modules: IActuatorModule[],
+        timings: Map<string, ModuleTimingConfig>, forced: string[], sourceCycleId?: string): Promise<null> {
         const cycle = process.cycle;
         const isCancelled = (): boolean => cycle.status !== ExecutableStatus.IN_PROCCESS;
         const skipped = new Set<number>();
         // seule la derniere sequence reellement lancee doit couper ses modules au passage a la suivante
         let lastRun: SequenceExecutionEntry | undefined;
+
+        // sequences forcees pendant la sequence qui vient de se terminer (ou pendant une forcee) : dans
+        // l'ordre des demandes, sans reevaluer leurs conditions ; seule une sequence encore sautee est concernee.
+        const runForced = async (): Promise<void> => {
+            while (forced.length && !isCancelled()) {
+                const sequenceId = forced.shift();
+                const i = executionLst.findIndex((x, index) => x.sequenceId === sequenceId && skipped.has(index));
+                if (i < 0) {
+                    this.logger.warn({ cycleId: cycle._id, sequenceId }, 'forced sequence ignored (not skipped)');
+                    continue;
+                }
+                skipped.delete(i);
+                this.logger.log({ cycleId: cycle._id, sequenceId }, 'forced sequence launched');
+                lastRun = await this._runSequence(lastRun, executionLst[i], modules, timings, process.mode, cycle, sourceCycleId);
+            }
+        };
+
+        const run = async (sequence: SequenceExecutionEntry): Promise<void> => {
+            lastRun = await this._runSequence(lastRun, sequence, modules, timings, process.mode, cycle, sourceCycleId);
+            await runForced();
+        };
 
         const runCatchUps = async (upTo: number): Promise<void> => {
             let next = [...skipped].sort((x, y) => x - y).filter((i) => i <= upTo);
@@ -861,7 +1048,7 @@ export class ProcessService {
                     if (await this._checkSequenceCondition(executionLst[i].sequenceId)) {
                         skipped.delete(i);
                         this.logger.log({ cycleId: cycle._id, sequenceId: executionLst[i].sequenceId }, 'skipped sequence now verified, catching up');
-                        lastRun = await this._runSequence(lastRun, executionLst[i], modules, timings, process.mode, cycle, sourceCycleId);
+                        await run(executionLst[i]);
                         isLaunched = true;
                         break; // reprendre depuis la premiere sequence sautee (ordre du cycle)
                     }
@@ -874,13 +1061,16 @@ export class ProcessService {
         for (let i = 0; i < executionLst.length; i++) {
             if (isCancelled()) { return null; }
             const sequence = executionLst[i];
-            if (await this._checkSequenceCondition(sequence.sequenceId)) {
+            const sequenceCauses = await this._getSequenceConditionCauses(sequence.sequenceId);
+            if (!sequenceCauses) {
                 if (isCancelled()) { return null; }
-                lastRun = await this._runSequence(lastRun, sequence, modules, timings, process.mode, cycle, sourceCycleId);
+                await run(sequence);
             } else {
                 skipped.add(i);
                 this.logger.log({ cycleId: cycle._id, sequenceId: sequence.sequenceId }, 'sequence skipped (conditions not verified)');
                 await this._processProgress(sequence.sequenceId, ExecutableAction.OFF, process.mode);
+                // uniquement au premier saut : les rattrapages reevaluent en boucle et spammeraient le front
+                this._notifyConditionsNotVerified(ExecutableType.SEQUENCE, sequence.sequenceId, process.mode, sequenceCauses);
             }
             // rattrapages des sequences sautees precedentes (i exclu quand elle vient d'etre sautee)
             await runCatchUps(skipped.has(i) ? i - 1 : i);
@@ -924,9 +1114,13 @@ export class ProcessService {
         return currentSeq;
     }
 
-    private _checkSequenceCondition(sequenceId: string): Promise<boolean> {
+    private async _checkSequenceCondition(sequenceId: string): Promise<boolean> {
+        return !(await this._getSequenceConditionCauses(sequenceId));
+    }
+
+    private _getSequenceConditionCauses(sequenceId: string): Promise<ConditionReport | null> {
         const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
-        return evaluateConditions(sequence?.securityConfig?.conditions, (elementId) => this.valueRepository.getDeviceValue(elementId),
+        return this._getConditionCauses(sequence?.securityConfig?.conditions,
             (detail) => this.logger.warn({ sequenceId, ...detail }, 'sequence conditions not verified'));
     }
 
@@ -1039,10 +1233,16 @@ export class ProcessService {
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
-        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status: ExecutableStatus.WAITTING_CONFIRMATION, causes };
+        return this._publishWaitingStatus(processModel, ExecutableStatus.WAITTING_CONFIRMATION, causes);
+    }
+
+    // statut pose de facon synchrone (avant toute attente) : un demarrage qui suit ne doit pas etre ecrase
+    private _publishWaitingStatus(processModel: ProcessModel, status: ExecutableStatus.WAITTING_CONFIRMATION | ExecutableStatus.QUEUED,
+        causes: { type: ProcessType; cause: string }[]): Promise<string> {
+        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes };
         const cycFound = this.configurationService.structure.cycles.find((cyc) => cyc._id === data.id);
         if (cycFound) {
-            cycFound.status = ExecutableStatus.WAITTING_CONFIRMATION;
+            cycFound.status = status;
         }
         return this._publishStatusEvent({
             elementId: data.id,
