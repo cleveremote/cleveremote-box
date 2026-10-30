@@ -78,11 +78,12 @@ export class DeviceRepository {
         return this.deviceMongooseRepository.delete(id);
     }
 
-    // modelId et initDoneCommandIds non fournis (ex: synchro client) : conserves depuis la base, pour ne
-    // pas rejouer les init deja appliquees ni detacher le slave de son modele
+    // kind, modelId et initDoneCommandIds non fournis (ex: synchro client) : conserves depuis la base, pour ne
+    // pas perdre la strategie du slave, rejouer les init deja appliquees ni detacher le slave de son modele
     private async _keepSlaveState(model: DeviceModel): Promise<DeviceModel> {
         const config = model.config as SlaveConfigModel;
-        if (model.type !== DeviceType.SLAVE || (config.modelId !== undefined && config.initDoneCommandIds !== undefined)) {
+        if (model.type !== DeviceType.SLAVE
+            || (config.kind !== undefined && config.modelId !== undefined && config.initDoneCommandIds !== undefined)) {
             return model;
         }
         const existing = (await this.deviceMongooseRepository.findById(model._id))?.config as SlaveConfigModel | undefined;
@@ -90,6 +91,7 @@ export class DeviceRepository {
             ...model,
             config: {
                 ...config,
+                kind: config.kind ?? existing?.kind,
                 modelId: config.modelId ?? existing?.modelId,
                 initDoneCommandIds: config.initDoneCommandIds ?? existing?.initDoneCommandIds
             }

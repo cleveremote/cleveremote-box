@@ -901,6 +901,11 @@ export class DeviceConfigDTO {
     public masterDeviceId?: string;
 
     @IsOptional()
+    @IsEnum(DeviceKind)
+    @ApiProperty({ description: 'Nature de l\'équipement (esclave Modbus générique, onduleur, ...)', required: false })
+    public kind?: DeviceKind;
+
+    @IsOptional()
     @IsString()
     @ApiProperty({ description: 'Modèle (slave template) dont le slave partage les commandes', required: false })
     public modelId?: string;
@@ -926,11 +931,6 @@ export class DeviceSynchronizeDTO {
     @IsNotEmpty()
     public type: DeviceType;
 
-    @IsOptional()
-    @IsEnum(DeviceKind)
-    @ApiProperty({ description: 'Nature de l\'équipement (esclave Modbus générique, onduleur, ...)' })
-    public kind?: DeviceKind;
-
     @ValidateNested()
     @Type(() => DeviceConfigDTO)
     public config: DeviceConfigDTO;
@@ -953,10 +953,9 @@ export class DeviceSynchronizeDTO {
         model.name = dto.name;
         model.description = dto.description;
         model.type = dto.type;
-        // kind reste au niveau racine du DTO (contrat client inchangé) mais n'a de sens que pour un SLAVE
         model.config = dto.type === DeviceType.MASTER
             ? Object.assign(new MasterConfigModel(), dto.config)
-            : Object.assign(new SlaveConfigModel(), dto.config, { kind: dto.kind });
+            : Object.assign(new SlaveConfigModel(), dto.config);
         model.delete = dto.delete ?? false;
         // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
         model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);

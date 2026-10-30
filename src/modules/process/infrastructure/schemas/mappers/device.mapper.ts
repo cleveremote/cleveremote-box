@@ -20,7 +20,7 @@ export class DeviceMapper {
         config.slaveId = device.config.slaveId;
         config.masterDeviceId = device.config.masterDeviceId;
         // 'INVERTER' : ancienne valeur de DeviceKind encore présente en base
-        const kind = device.config.kind ?? device.kind;
+        const kind = device.config.kind;
         config.kind = (kind as string) === 'INVERTER' ? DeviceKind.INVERTER_VEICHI_SI23_V1 : kind;
         config.modelId = device.config.modelId;
         config.initDoneCommandIds = device.config.initDoneCommandIds && [...device.config.initDoneCommandIds];

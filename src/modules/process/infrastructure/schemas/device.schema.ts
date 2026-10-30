@@ -90,10 +90,6 @@ export class Device {
     @Prop({ required: true, enum: DeviceType })
     public type: DeviceType;
 
-    // Legacy : kind est désormais stocké dans config.kind (slaves uniquement), lu en fallback par DeviceMapper
-    @Prop({ enum: DeviceKind })
-    public kind?: DeviceKind;
-
     @Prop()
     public description: string;
 
