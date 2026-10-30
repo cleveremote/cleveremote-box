@@ -1,13 +1,54 @@
 import { Injectable } from '@nestjs/common';
-import { DeviceKind } from '@process/domain/models/device.model';
-import { AutoCreatedElements, AutoCreationStrategy } from '../auto-creation-strategy.interface';
+import { Logger } from 'nestjs-pino';
+import { randomUUID } from 'node:crypto';
+import { ActuatorModel, ActuatorType, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { DeviceKind, DeviceModel, SlaveConfigModel, SlaveTemplate } from '@process/domain/models/device.model';
+import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
+import { hasCommandType } from '@process/domain/utils/device-command.util';
+import { DeviceCommandService } from '../../../device-command.service';
+import { AutoCreatedElements, AutoCreationContext, AutoCreationStrategy } from '../auto-creation-strategy.interface';
 
+// Module analog output : un actuator CTRL (vanne) par sortie ; cycles et boucles de régulation non auto-créés
 @Injectable()
 export class AnalogOutputAutoCreationStrategy implements AutoCreationStrategy {
     public readonly kinds = [DeviceKind.ANALOG_OUTPUT_8_CH, DeviceKind.ANALOG_OUTPUT_8_CH_MA];
 
-    // TODO: auto-création analog output non implémentée, le slave est créé seul
-    public async build(): Promise<AutoCreatedElements> {
-        return { actuators: [], cycles: [], sensors: [] };
+    public constructor(
+        private deviceCommandService: DeviceCommandService,
+        private readonly logger: Logger
+    ) { }
+
+    public async build({ device, template }: AutoCreationContext): Promise<AutoCreatedElements> {
+        const actuators = this._buildAnalogOutputActuators(device, template.kind, template.deviceCommands);
+        return { actuators, cycles: [], sensors: [] };
+    }
+
+    // Un actuator CTRL par port de sortie (portNumStart -> portNumStart + portCount - 1), piloté sur sa voie
+    // par la commande set du modèle qui écrit la consigne numérique d'une voie
+    private _buildAnalogOutputActuators(device: DeviceModel, kind: DeviceKind, deviceCommands: SlaveTemplate['deviceCommands']): ActuatorModel[] {
+        const portConfig = (device.config as SlaveConfigModel).portConfig;
+        if (!portConfig) return [];
+        const outputCommand = deviceCommands.find((command) =>
+            command._id && hasCommandType(command, DeviceCommandType.SET) && this.deviceCommandService.isAnalogOutputOf(kind, command));
+        if (!outputCommand) {
+            this.logger.warn({ deviceId: device._id }, 'no analog output command, analog output actuators not created');
+            return [];
+        }
+        return Array.from({ length: portConfig.portCount }, (_, i) => {
+            const portNumber = portConfig.portNumStart + i;
+            const config = new CtrlActuatorConfigModel();
+            config.deviceId = device._id;
+            config.channel = portNumber;
+            config.actions = [{ commandId: outputCommand._id, channel: portNumber }];
+            return {
+                _id: randomUUID(),
+                status: ModuleStatus.OFF,
+                name: `AO${portNumber}`,
+                type: ActuatorType.CTRL,
+                config,
+                deletedAt: null
+            };
+        });
     }
 }

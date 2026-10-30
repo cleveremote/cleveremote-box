@@ -150,6 +150,12 @@ export class DeviceCommandService {
         return this.registerMapService.findOperation(this.getTemplate(kind), command.blockId, command.operationId).block.area === 'coil';
     }
 
+    /** La commande vise une sortie analogique : écriture d'une consigne numérique par voie dans un holding register */
+    public isAnalogOutputOf(kind: string, command: Pick<DeviceCommandModel, 'blockId' | 'operationId'>): boolean {
+        const { block, operation } = this.registerMapService.findOperation(this.getTemplate(kind), command.blockId, command.operationId);
+        return block.area === 'holdingRegister' && operation.scope === 'channel' && operation.input?.type === 'number';
+    }
+
     /** Plage [min, max] de la saisie numérique de l'opération (ex: consigne analogique en mV) ; undefined si non numérique */
     public async numberRange(commandId: string, deviceId: string): Promise<{ min: number; max: number } | undefined> {
         const { command, template } = await this._resolve(commandId, deviceId);

@@ -48,7 +48,7 @@ export class SlaveScanService {
                 this.logger.warn({ masterDeviceId, kind: detected.kind }, 'no free slaveId left in range');
                 continue;
             }
-            if (!await this._readdress(master, response, newSlaveId)) continue;
+            if (!await this._re_address(master, response, newSlaveId)) continue;
             yield { template: detected.template, kind: detected.kind, slaveId: newSlaveId };
             existingSlaveIds.add(newSlaveId);
         }
@@ -78,7 +78,7 @@ export class SlaveScanService {
         return newSlaveId > max ? undefined : newSlaveId;
     }
 
-    private async _readdress(master: DeviceModel, { unitId, register }: DiscoveryResponse, newSlaveId: number): Promise<boolean> {
+    private async _re_address(master: DeviceModel, { unitId, register }: DiscoveryResponse, newSlaveId: number): Promise<boolean> {
         try {
             await this.modbusDeviceService.setSlaveAddress(master, register, unitId, newSlaveId);
             return true;

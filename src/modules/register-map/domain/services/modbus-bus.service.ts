@@ -50,11 +50,16 @@ export class ModbusBusService {
             const responses: ModbusScanResponse[] = [];
             try {
                 for (const target of targets) {
+                    const startedAt = Date.now();
                     try {
                         client.setID(target.unitId);
                         responses.push({ ...target, data: await this._run(client, target.unitId, target.request) });
-                    } catch {
+                        this.logger.log({ unitId: target.unitId, elapsedMs: Date.now() - startedAt }, 'scan target responded');
+                    } catch (err) {
                         // cas nominal : rien ne répond à cet unit id / registre
+                        // erreurs modbus-serial (TransactionTimedOutError...) : objets simples, pas des Error
+                        const { name, message, errno, modbusCode } = (err ?? {}) as { name?: string; message?: string; errno?: string; modbusCode?: number };
+                        this.logger.log({ unitId: target.unitId, elapsedMs: Date.now() - startedAt, name, message, errno, modbusCode }, 'scan target without response');
                     }
                 }
             } finally {

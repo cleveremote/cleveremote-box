@@ -8,7 +8,7 @@ import { DEFAULT_UNCONFIGURED_UNIT_ID } from '../utils/modbus-registers.util';
 import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 
 // Timeout court des sondes de découverte : ne pas bloquer la file du bus quand rien ne répond (cas nominal)
-const DISCOVERY_TIMEOUT = 200;
+const DISCOVERY_TIMEOUT = 500;
 // Registre d'adresse par défaut des modules Waveshare
 const DEFAULT_DISCOVERY_REGISTER = 0x4000;
 // Timeout des tests de connectivité : un device muet ne doit pas bloquer longtemps la file du bus

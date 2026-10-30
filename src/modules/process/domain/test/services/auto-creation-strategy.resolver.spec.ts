@@ -17,7 +17,7 @@ describe('AutoCreationStrategyResolver', () => {
 
     it('should resolve the strategy declaring the kind', () => {
         const digitalIo = CreateStrategy([DeviceKind.DIGITAL_IO_8_CH]);
-        const analogOutput = new AnalogOutputAutoCreationStrategy();
+        const analogOutput = new AnalogOutputAutoCreationStrategy({} as never, {} as never);
         const resolver = new AutoCreationStrategyResolver([digitalIo, analogOutput], fallback);
 
         expect(resolver.resolve(DeviceKind.DIGITAL_IO_8_CH)).toBe(digitalIo);
