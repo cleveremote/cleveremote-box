@@ -5,6 +5,7 @@ import { Logger } from 'nestjs-pino';
 import { CycleModel } from '../models/cycle.model';
 import {
     SynchronizeActuatorModel,
+    SynchronizeControlLoopModel,
     SynchronizeCycleModel,
     SynchronizeDeviceCommandModel,
     SynchronizeDeviceModel,
@@ -32,6 +33,8 @@ import { DeviceCommandService } from './device-command.service';
 import { SensorService } from './sensor.service';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ControlLoopModel } from '../models/control-loop.model';
+import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 
 @Injectable()
 export class SynchronizeService {
@@ -49,7 +52,8 @@ export class SynchronizeService {
         private sensorService: SensorService,
         private readonly logger: Logger,
         private deviceCommandRepository: DeviceCommandRepository,
-        private deviceCommandService: DeviceCommandService
+        private deviceCommandService: DeviceCommandService,
+        private controlLoopRepository: ControlLoopRepository
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -110,6 +114,14 @@ export class SynchronizeService {
     private async _deleteValve(id: string): Promise<void> {
         await this.actuatorRepository.delete(id);
         await this.configurationService.getStructure();
+    }
+
+    public async synchronizeControlLoop(controlLoopModel: SynchronizeControlLoopModel): Promise<ControlLoopModel> {
+        if (controlLoopModel.delete) {
+            await this.controlLoopRepository.delete(controlLoopModel._id);
+            return { ...controlLoopModel, deletedAt: new Date() } as ControlLoopModel;
+        }
+        return this.controlLoopRepository.save(controlLoopModel);
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {

@@ -12,7 +12,7 @@ import { EventQueryDTO } from '../dto/event-query.dto';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO, ControlLoopSynchronizeDTO } from '../dto/synchronize.dto';
 import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
@@ -26,6 +26,8 @@ import { DeviceCommandModel } from '@process/domain/models/device-command.model'
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
 import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.uc';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
+import { ControlLoopSynchronizeUC } from '@process/use-cases/control-loop-synchronize.uc';
+import { ControlLoopModel } from '@process/domain/models/control-loop.model';
 import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
 import { DeviceService } from '@process/domain/services/device.service';
 import { CheckDeviceDTO, DiscoverDeviceDTO } from '../dto/discover.dto';
@@ -135,6 +137,13 @@ export class ConfigurationController {
     public async synchroniseValve(@Payload() valveSynchronizeDTO: ValveSynchronizeDTO): Promise<ActuatorModel> {
         const uc = new ValveSynchronizeUC(this._synchronizeService);
         const input = ValveSynchronizeDTO.mapToValveModel(valveSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/control-loop'])
+    public async synchroniseControlLoop(@Payload() controlLoopSynchronizeDTO: ControlLoopSynchronizeDTO): Promise<ControlLoopModel> {
+        const uc = new ControlLoopSynchronizeUC(this._synchronizeService);
+        const input = ControlLoopSynchronizeDTO.mapToControlLoopModel(controlLoopSynchronizeDTO);
         return uc.execute(input);
     }
 

@@ -46,15 +46,9 @@ export class ActuatorMapper {
                 commandId: action.commandId,
                 channel: action.channel
             }));
-            config.flowMeterId = ctrlConfig.flowMeterId;
-            config.maxFlowRate = ctrlConfig.maxFlowRate;
-            config.kP = ctrlConfig.kP;
             config.minOpening = ctrlConfig.minOpening;
             config.maxOpening = ctrlConfig.maxOpening;
             config.openingPercent = ctrlConfig.openingPercent;
-            config.tolerance = ctrlConfig.tolerance;
-            config.maxIterations = ctrlConfig.maxIterations;
-            config.iterationDelayMs = ctrlConfig.iterationDelayMs;
             config.fullStrokeMs = ctrlConfig.fullStrokeMs;
             config.valveType = ctrlConfig.valveType;
             model.config = config;
@@ -94,15 +88,9 @@ export class ActuatorMapper {
                 deviceId: config.deviceId,
                 channel: config.channel,
                 actions: config.actions,
-                flowMeterId: config.flowMeterId,
-                maxFlowRate: config.maxFlowRate,
-                kP: config.kP,
                 minOpening: config.minOpening,
                 maxOpening: config.maxOpening,
                 openingPercent: config.openingPercent,
-                tolerance: config.tolerance,
-                maxIterations: config.maxIterations,
-                iterationDelayMs: config.iterationDelayMs,
                 fullStrokeMs: config.fullStrokeMs,
                 valveType: config.valveType
             }

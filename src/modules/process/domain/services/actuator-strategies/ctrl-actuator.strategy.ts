@@ -10,6 +10,7 @@ import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domai
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { DeviceCommandService } from '../device-command.service';
+import { RegulationService } from '../regulation.service';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -25,15 +26,6 @@ const MAX_OUTPUT_MA = 20;
 const MIN_OUTPUT_UA = MIN_OUTPUT_MA * 1000;
 const MAX_OUTPUT_UA = MAX_OUTPUT_MA * 1000;
 
-export interface ValveAdjustmentResult {
-    targetFlowRate: number;
-    measuredFlowRate: number;
-    openingPercent: number;
-    outputCurrentMa: number;
-    isStabilized: boolean;
-    iterations: number;
-}
-
 @Injectable()
 export class CtrlActuatorStrategy implements ActuatorStrategy {
     public readonly type = ActuatorType.CTRL;
@@ -42,7 +34,8 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         private deviceRepository: DeviceRepository,
         private waveshareDiscoveryService: WaveshareDiscoveryService,
         private readonly logger: Logger,
-        private deviceCommandService: DeviceCommandService
+        private deviceCommandService: DeviceCommandService,
+        private regulationService: RegulationService
     ) { }
 
     // commandes init de la vanne (ex: plage de sortie du module AO)
@@ -63,74 +56,48 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     }
 
     /**
-     * Point d'entree ActuatorStrategy : `action` est la valeur de débit cible à atteindre
-     * (pas un simple 0/1 comme pour RPI/COM). Délègue à setFlowRate() et ignore le résultat
-     * détaillé (ValveAdjustmentResult), déjà loggé par setFlowRate.
+     * ON sous ControlLoop active : régulation sur la consigne de la boucle (RegulationService / module control),
+     * la vanne étant pilotée via position(). Sinon `action` est l'ouverture cible en % (positionnement direct).
      */
     public async set(actuator: ActuatorModel, action: number): Promise<void> {
-        await this.setFlowRate(actuator as ValveActuatorModel, action);
+        const loop = action !== 0 ? await this.regulationService.findLoop(actuator) : null;
+        if (!loop) {
+            return this.position(actuator, action);
+        }
+        await this.regulationService.regulate(actuator, loop, {
+            write: (openingPercent: number) => this.position(actuator, openingPercent),
+            settleMs: (delta: number) => this.positioningDelayMs(actuator, delta)
+        });
+    }
+
+    // positionnement direct, borné à [minOpening, maxOpening]
+    public async position(actuator: ActuatorModel, openingPercent: number): Promise<void> {
+        const config = (actuator as ValveActuatorModel).config;
+        const clamped = Math.min(config.maxOpening, Math.max(config.minOpening, openingPercent));
+        await this._writeOpening(config.deviceId, config.actions, clamped);
+        config.openingPercent = clamped;
+        this.logger.debug(
+            { valveId: actuator._id, openingPercent: clamped, outputCurrentMa: this._openingToMilliAmps(clamped) },
+            'valve opening written'
+        );
     }
 
     public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as CtrlActuatorConfigModel).openingPercent;
     }
 
-    /**
-     * Régule l'ouverture de la vanne proportionnelle jusqu'à atteindre le débit souhaité.
-     * Itère : lit le débit mesuré (capteur RS485), corrige l'ouverture (commande proportionnelle)
-     * et pilote la vanne 4-20mA via le module Waveshare Modbus RTU Analog Output 8CH,
-     * jusqu'à ce que l'écart soit dans la tolérance ou que le nombre d'itérations max soit atteint.
-     */
-    public async setFlowRate(valve: ValveActuatorModel, targetFlowRate: number): Promise<ValveAdjustmentResult> {
-        let result: ValveAdjustmentResult;
-
-        for (let iteration = 1; iteration <= valve.config.maxIterations; iteration++) {
-            const openingBeforeAdjust = valve.config.openingPercent;
-            result = await this._adjustOnce(valve, targetFlowRate, iteration);
-            if (result.isStabilized) break;
-            // en plus du delai de boucle, on attend le temps que met physiquement la vanne a
-            // atteindre sa nouvelle position (cf. _positioningDelayMs) avant de relire le debit.
-            const positioningDelayMs = this._positioningDelayMs(valve, valve.config.openingPercent - openingBeforeAdjust);
-            await this._delay(valve.config.iterationDelayMs + positioningDelayMs);
-        }
-
-        this.logger.log({ valveId: valve._id, ...result }, 'valve flow rate regulation finished');
-        return result;
-    }
-
-    private async _adjustOnce(valve: ValveActuatorModel, targetFlowRate: number, iteration: number): Promise<ValveAdjustmentResult> {
-        const measuredFlowRate = await this._readFlowMeterTest(valve, iteration);
-        const error = targetFlowRate - measuredFlowRate;
-        const isStabilized = Math.abs(error) <= valve.config.tolerance;
-
-        if (!isStabilized) {
-            valve.config.openingPercent = Math.min(
-                valve.config.maxOpening,
-                Math.max(valve.config.minOpening, valve.config.openingPercent + error * (valve.config.kP / 10))
-            );
-            await this._writeOpening(valve.config.deviceId, valve.config.actions, valve.config.openingPercent);
-        }
-
-        const outputCurrentMa = this._openingToMilliAmps(valve.config.openingPercent);
-        this.logger.debug(
-            { valveId: valve._id, iteration, targetFlowRate, measuredFlowRate, openingPercent: valve.config.openingPercent, isStabilized },
-            'valve flow rate adjustment step'
-        );
-
-        return { targetFlowRate, measuredFlowRate, openingPercent: valve.config.openingPercent, outputCurrentMa, isStabilized, iterations: iteration };
+    // temps physique estime pour que la vanne rejoigne sa nouvelle position : course complete
+    // (minOpening <-> maxOpening) en config.fullStrokeMs, proportionnellement moins pour un
+    // deplacement partiel.
+    public positioningDelayMs(actuator: ActuatorModel, openingDeltaPercent: number): number {
+        const config = (actuator as ValveActuatorModel).config;
+        const fullRange = config.maxOpening - config.minOpening;
+        if (fullRange <= 0) return 0;
+        return (Math.abs(openingDeltaPercent) / fullRange) * config.fullStrokeMs;
     }
 
     private _delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    // temps physique estime pour que la vanne rejoigne sa nouvelle position : course complete
-    // (minOpening <-> maxOpening) en config.fullStrokeMs, proportionnellement moins pour un
-    // deplacement partiel.
-    private _positioningDelayMs(valve: ValveActuatorModel, openingDeltaPercent: number): number {
-        const fullRange = valve.config.maxOpening - valve.config.minOpening;
-        if (fullRange <= 0) return 0;
-        return (Math.abs(openingDeltaPercent) / fullRange) * valve.config.fullStrokeMs;
     }
 
     // 0% -> 4mA, 100% -> 20mA (live zero, jamais en dessous de MIN_OUTPUT_MA)
@@ -156,28 +123,6 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         }
         const value = Math.round(range.min + (openingPercent / 100) * (range.max - range.min));
         await this.deviceCommandService.execute(set.command, deviceId, { channel: set.action.channel, value });
-    }
-
-    /**
-     * FAKE - en attendant la documentation officielle du débitmètre RS485.
-     * Simule la lecture Modbus du capteur : le débit suit l'ouverture de la vanne avec un peu de
-     * bruit de mesure. Lue seulement après que setFlowRate ait attendu _positioningDelayMs, donc
-     * openingPercent reflete deja la position physique reelle de la vanne a cet instant.
-     */
-    private async _readFlowMeter(valve: ValveActuatorModel): Promise<number> {
-        const theoreticalFlowRate = (valve.config.openingPercent / 100) * valve.config.maxFlowRate;
-        const measurementNoise = (Math.random() - 0.5) * 2;
-        const measuredFlowRate = Math.max(0, theoreticalFlowRate + measurementNoise);
-
-        this.logger.debug({ flowMeterId: valve.config.flowMeterId, measuredFlowRate }, 'flow meter read (fake)');
-        return measuredFlowRate;
-    }
-
-    private async _readFlowMeterTest(valve: ValveActuatorModel, iteration: number): Promise<number> {
-
-        return iteration * 10;
-
-
     }
 
     private async _connectClient(deviceId: string, unitIdOverride?: number): Promise<ModbusRTU> {
@@ -254,7 +199,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
             this.logger.log({ deviceId, channel, milliAmps, microAmps }, 'waveshare AO8CH channel output written');
         } catch (err) {
-            this.logger.error({ deviceId, channel, err: err.message }, 'valve output write error');
+            this.logger.error({ deviceId, channel, err: err instanceof Error ? err.message : String(err) }, 'valve output write error');
             const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
             if (err.modbusCode !== undefined) return;
             if (!networkCodes.includes(err.code)) throw err;

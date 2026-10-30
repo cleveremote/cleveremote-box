@@ -11,6 +11,7 @@ import { getGPIO } from 'src/common/tools/find_gipio';
 import { BleService } from './ble.service';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { CtrlActuatorStrategy } from './actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from './actuator.service';
 import { DeviceService } from './device.service';
@@ -66,7 +67,8 @@ export class InitService {
         private readonly deviceCommandService: DeviceCommandService,
         private readonly comSensorStrategy: ComSensorStrategy,
         private readonly slaveTemplateService: SlaveTemplateService,
-        private readonly deviceConnectivityService: DeviceConnectivityService
+        private readonly deviceConnectivityService: DeviceConnectivityService,
+        private readonly controlLoopRepository: ControlLoopRepository
     ) { }
 
 
@@ -89,6 +91,7 @@ export class InitService {
         //     .then(async () => { 
 
         return wrap('SlaveTemplateService.seed', () => this.slaveTemplateService.seed())
+            .then(() => wrap('ControlLoopRepository.migrateFromCtrlActuators', () => this.controlLoopRepository.migrateFromCtrlActuators()))
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
             .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
             .then(() => wrap('DeviceConnectivityService.watch', () => this.deviceConnectivityService.watch()))

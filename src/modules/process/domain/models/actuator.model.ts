@@ -32,18 +32,14 @@ export class ActuatorConfigModel {
 export class ComActuatorConfigModel extends ActuatorConfigModel {
 }
 
+// paramètres physiques de la vanne uniquement : la régulation (capteur de retour, algorithme,
+// consigne) est portée par ControlLoopModel (cf. RegulationService).
 export class CtrlActuatorConfigModel extends ComActuatorConfigModel {
 
     public channel: number;
-    public flowMeterId: string;
-    public maxFlowRate: number = 100;
-    public kP: number = 5;
     public minOpening: number = 0;
     public maxOpening: number = 100;
     public openingPercent: number = 0;
-    public tolerance: number = 1;
-    public maxIterations: number = 20;
-    public iterationDelayMs: number = 500;
     // temps que met la vanne pour parcourir toute sa course (minOpening <-> maxOpening), en ms.
     public fullStrokeMs: number = 7000;
     public valveType: string = 'PROPORTIONAL';

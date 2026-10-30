@@ -12,6 +12,7 @@ import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interface
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ControlAlgorithm, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import {
@@ -20,6 +21,7 @@ import {
     SynchronizeDeviceModel,
     SynchronizeDeviceCommandModel,
     SynchronizeActuatorModel,
+    SynchronizeControlLoopModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
     SynchronizeSequenceModel,
@@ -678,22 +680,12 @@ export class ValveConfigDTO {
     public deviceId: string;
     @IsNumber()
     public channel: number;
-    @IsString()
-    public flowMeterId: string;
-    @IsNumber()
-    public maxFlowRate?: number;
-    @IsNumber()
-    public kP?: number;
+    @IsOptional()
     @IsNumber()
     public minOpening?: number;
+    @IsOptional()
     @IsNumber()
     public maxOpening?: number;
-    @IsNumber()
-    public tolerance?: number;
-    @IsNumber()
-    public maxIterations?: number;
-    @IsNumber()
-    public iterationDelayMs?: number;
     @IsOptional()
     @IsNumber()
     public fullStrokeMs?: number;
@@ -733,6 +725,70 @@ export class ValveSynchronizeDTO {
         valveModel.config = config;
         valveModel.delete = valveSynchronizeDTO.delete ?? false;
         return valveModel;
+    }
+}
+
+export class ControlLoopParamsDTO {
+    @IsOptional()
+    @IsNumber()
+    public kP?: number;
+    @IsOptional()
+    @IsNumber()
+    public kI?: number;
+    @IsOptional()
+    @IsNumber()
+    public kD?: number;
+    @IsOptional()
+    @IsNumber()
+    public tolerance?: number;
+    @IsOptional()
+    @IsNumber()
+    public maxIterations?: number;
+    @IsOptional()
+    @IsNumber()
+    public iterationDelayMs?: number;
+}
+
+export class ControlLoopSynchronizeDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    public _id?: string;
+    @IsString()
+    public name: string;
+    @IsString()
+    @IsNotEmpty()
+    public actuatorId: string;
+    @IsString()
+    @IsNotEmpty()
+    public sensorId: string;
+    @IsOptional()
+    @IsEnum(ControlAlgorithm)
+    public algorithm?: ControlAlgorithm;
+    @IsNumber()
+    public setpoint: number;
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ControlLoopParamsDTO)
+    public params?: ControlLoopParamsDTO;
+    @IsOptional()
+    @IsBoolean()
+    public isEnabled?: boolean = true;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToControlLoopModel(controlLoopSynchronizeDTO: ControlLoopSynchronizeDTO): SynchronizeControlLoopModel {
+        const controlLoopModel = new SynchronizeControlLoopModel();
+        controlLoopModel._id = controlLoopSynchronizeDTO._id;
+        controlLoopModel.name = controlLoopSynchronizeDTO.name;
+        controlLoopModel.actuatorId = controlLoopSynchronizeDTO.actuatorId;
+        controlLoopModel.sensorId = controlLoopSynchronizeDTO.sensorId;
+        controlLoopModel.algorithm = controlLoopSynchronizeDTO.algorithm ?? ControlAlgorithm.P;
+        controlLoopModel.setpoint = controlLoopSynchronizeDTO.setpoint;
+        controlLoopModel.params = Object.assign(new PidParamsModel(), controlLoopSynchronizeDTO.params);
+        controlLoopModel.isEnabled = controlLoopSynchronizeDTO.isEnabled ?? true;
+        controlLoopModel.delete = controlLoopSynchronizeDTO.delete ?? false;
+        return controlLoopModel;
     }
 }
 

@@ -58,15 +58,6 @@ export class CtrlActuatorConfig {
     @Prop({ type: [ComActuatorActionConfigSchema], default: [] })
     public actions?: ComActuatorActionConfig[];
 
-    @Prop()
-    public flowMeterId?: string;
-
-    @Prop({ default: 100 })
-    public maxFlowRate?: number;
-
-    @Prop({ default: 5 })
-    public kP?: number;
-
     @Prop({ default: 0 })
     public minOpening?: number;
 
@@ -75,15 +66,6 @@ export class CtrlActuatorConfig {
 
     @Prop({ default: 0 })
     public openingPercent?: number;
-
-    @Prop({ default: 1 })
-    public tolerance?: number;
-
-    @Prop({ default: 20 })
-    public maxIterations?: number;
-
-    @Prop({ default: 500 })
-    public iterationDelayMs?: number;
 
     @Prop({ default: 7000 })
     public fullStrokeMs?: number;

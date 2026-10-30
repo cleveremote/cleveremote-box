@@ -214,7 +214,8 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             sensorService as unknown as SensorService,
             logger as never,
             deviceCommandRepository as never,
-            deviceCommandService as never
+            deviceCommandService as never,
+            {} as never
         );
     });
 

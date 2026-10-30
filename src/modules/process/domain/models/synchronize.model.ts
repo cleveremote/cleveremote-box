@@ -3,6 +3,7 @@ import { CycleModel } from './cycle.model';
 import { DeviceModel } from './device.model';
 import { DeviceCommandModel } from './device-command.model';
 import { ActuatorModel } from './actuator.model';
+import { ControlLoopModel } from './control-loop.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
@@ -46,5 +47,9 @@ export class SynchronizeDeviceCommandModel extends DeviceCommandModel {
 }
 
 export class SynchronizeActuatorModel extends ActuatorModel {
+    public delete?: boolean = false;
+}
+
+export class SynchronizeControlLoopModel extends ControlLoopModel {
     public delete?: boolean = false;
 }

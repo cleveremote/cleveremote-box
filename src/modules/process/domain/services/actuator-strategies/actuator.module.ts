@@ -14,6 +14,7 @@ import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedu
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
 import { SlaveTemplate, SlaveTemplateSchema } from '@process/infrastructure/schemas/slave-template.schema';
 import { Sensor, SensorSchema } from '@process/infrastructure/schemas/sensor.schema';
+import { ControlLoop, ControlLoopSchema } from '@process/infrastructure/schemas/control-loop.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
@@ -32,11 +33,16 @@ import { DeviceCommandMongooseRepository } from '@process/infrastructure/reposit
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { SensorMongooseRepository } from '@process/infrastructure/repositories/sensor-mongoose.repository';
+import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
+import { ControlLoopMongooseRepository } from '@process/infrastructure/repositories/control-loop-mongoose.repository';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
+import { ControlModule } from '@control/infrastructure/control.module';
 import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { ActuatorService } from '../actuator.service';
+import { RegulationService } from '../regulation.service';
+import { ComSensorStrategy } from '../sensor-strategies/com-sensor.strategy';
 import { RpiActuatorStrategy } from './rpi-actuator.strategy';
 import { ComActuatorStrategy } from './com-actuator.strategy';
 import { CtrlActuatorStrategy } from './ctrl-actuator.strategy';
@@ -61,9 +67,11 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             { name: Schedule.name, schema: ScheduleSchema },
             { name: Trigger.name, schema: TriggerSchema },
             { name: SlaveTemplate.name, schema: SlaveTemplateSchema },
-            { name: Sensor.name, schema: SensorSchema }
+            { name: Sensor.name, schema: SensorSchema },
+            { name: ControlLoop.name, schema: ControlLoopSchema }
         ]),
-        RegisterMapModule
+        RegisterMapModule,
+        ControlModule
     ],
     providers: [
         ActuatorService,
@@ -89,6 +97,11 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         TriggerMongooseRepository,
         ModbusDeviceService,
         WaveshareDiscoveryService,
+        // régulation des actionneurs CTRL (ControlLoop + module control) ; ComSensorStrategy lit le sensor de retour
+        ControlLoopRepository,
+        ControlLoopMongooseRepository,
+        ComSensorStrategy,
+        RegulationService,
         RpiActuatorStrategy,
         ComActuatorStrategy,
         CtrlActuatorStrategy,
@@ -101,7 +114,8 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
     exports: [
         ActuatorService, ActuatorRepository, DeviceRepository, SensorRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
         ModbusDeviceService, WaveshareDiscoveryService, CtrlActuatorStrategy,
-        CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository
+        CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository,
+        ControlLoopRepository
     ]
 })
 export class ActuatorModule { }

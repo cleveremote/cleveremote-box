@@ -28,8 +28,11 @@
       ],
       "@register-map/*": [
         "src/modules/register-map/*"
+      ],
+      "@control/*": [
+        "src/modules/control/*"
       ]
-      
+
     }
   }
 }
