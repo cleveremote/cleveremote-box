@@ -9,7 +9,8 @@ import { validateConditionStructure } from '@process/domain/utils/evaluate-condi
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
-import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
+import { AnalogScalingModel, AnalogSensorConfigModel, AnalogSignalType, ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
+import { OutOfRangePolicy } from '@process/domain/utils/linear-scale.util';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
@@ -597,6 +598,65 @@ export class TriggerSynchronizeDTO {
 
 }
 
+// plage d'entrée non dégénérée : inputMax !== inputMin (division par zéro de la mise à l'échelle)
+@ValidatorConstraint({ name: 'distinct-input-bounds', async: false })
+export class IsDistinctInputBounds implements ValidatorConstraintInterface {
+    public validate(value: unknown, args: ValidationArguments) {
+        return value !== (args.object as AnalogScalingDTO).inputMin;
+    }
+
+    public defaultMessage() {
+        return 'inputMax ($value) must differ from inputMin';
+    }
+}
+
+// mise à l'échelle requise pour un sensor ANALOG (validée sur le sensor : SensorConfigDTO ne connaît pas son type)
+@ValidatorConstraint({ name: 'analog-sensor-scaling', async: false })
+export class HasAnalogScaling implements ValidatorConstraintInterface {
+    public validate(config: SensorConfigDTO | undefined, args: ValidationArguments) {
+        return (args.object as SensorSynchronizeDTO).type !== SensorType.ANALOG || !!config?.scaling;
+    }
+
+    public defaultMessage() {
+        return 'config.scaling is required for an ANALOG sensor';
+    }
+}
+
+// ANALOG : mise à l'échelle valeur brute -> grandeur physique (cf. AnalogScalingModel)
+export class AnalogScalingDTO {
+    @IsEnum(AnalogSignalType)
+    public signalType: AnalogSignalType;
+    // bornes d'entrée en V (VOLTAGE), mA (CURRENT) ou unité brute (RAW)
+    @IsNumber()
+    public inputMin: number;
+    @IsNumber()
+    @Validate(IsDistinctInputBounds)
+    public inputMax: number;
+    @IsNumber()
+    public outputMin: number;
+    @IsNumber()
+    public outputMax: number;
+    // unité physique (bar, °C, %...)
+    @IsString()
+    @IsNotEmpty()
+    public unit: string;
+    @IsOptional()
+    @IsEnum(OutOfRangePolicy)
+    public outOfRange?: OutOfRangePolicy;
+
+    public static toModel(dto: AnalogScalingDTO): AnalogScalingModel {
+        const model = new AnalogScalingModel();
+        model.signalType = dto.signalType;
+        model.inputMin = dto.inputMin;
+        model.inputMax = dto.inputMax;
+        model.outputMin = dto.outputMin;
+        model.outputMax = dto.outputMax;
+        model.unit = dto.unit;
+        model.outOfRange = dto.outOfRange ?? model.outOfRange;
+        return model;
+    }
+}
+
 export class SensorConfigDTO {
     // requis pour FORCAST/COM ; absent quand le sensor est un enfant (field sans commandId)
     @ValidateIf(o => !o.field || !!o.commandId)
@@ -622,6 +682,11 @@ export class SensorConfigDTO {
     @IsOptional()
     @IsString()
     public field?: string;
+    // ANALOG (racine ou enfant)
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => AnalogScalingDTO)
+    public scaling?: AnalogScalingDTO;
 }
 
 export class SensorSynchronizeDTO {
@@ -644,6 +709,7 @@ export class SensorSynchronizeDTO {
     @IsString()
     public parentId?: string = null;
     @ValidateNested()
+    @Validate(HasAnalogScaling)
     @Type(() => SensorConfigDTO)
     public config: SensorConfigDTO;
     @IsOptional()
@@ -666,11 +732,21 @@ export class SensorSynchronizeDTO {
         sensorModel.parentId = sensorSynchronizeDTO.parentId ?? null;
         sensorModel.isEnabled = sensorSynchronizeDTO.isEnabled ?? true;
         sensorModel.display = sensorSynchronizeDTO.display ?? true;
-        sensorModel.config = sensorSynchronizeDTO.type === SensorType.FORCAST
-            ? Object.assign(new ForcastSensorConfigModel(), sensorSynchronizeDTO.config)
-            : Object.assign(new ComSensorConfigModel(), sensorSynchronizeDTO.config);
+        sensorModel.config = SensorSynchronizeDTO._mapConfigToModel(sensorSynchronizeDTO);
         sensorModel.delete = sensorSynchronizeDTO.delete ?? false;
         return sensorModel;
+    }
+
+    private static _mapConfigToModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SynchronizeSensorModel['config'] {
+        const { type, config } = sensorSynchronizeDTO;
+        if (type === SensorType.FORCAST) {
+            return Object.assign(new ForcastSensorConfigModel(), config);
+        }
+        if (type === SensorType.ANALOG) {
+            const { scaling, ...comConfig } = config;
+            return Object.assign(new AnalogSensorConfigModel(), comConfig, { scaling: scaling && AnalogScalingDTO.toModel(scaling) });
+        }
+        return Object.assign(new ComSensorConfigModel(), config);
     }
 }
 

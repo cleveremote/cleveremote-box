@@ -8,7 +8,10 @@ import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.int
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ControlLoopModel } from '../models/control-loop.model';
 import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
+import { SensorType } from '../interfaces/sensor.interface';
 import { ComSensorStrategy } from './sensor-strategies/com-sensor.strategy';
+import { AnalogSensorStrategy } from './sensor-strategies/analog-sensor.strategy';
+import { SensorStrategy } from './sensor-strategies/sensor-strategy.interface';
 
 // pilotage de l'actionneur fourni par sa stratégie (CtrlActuatorStrategy) : évite toute dépendance inverse
 export type ActuatorPort = Pick<ControlPlant, 'write' | 'settleMs'>;
@@ -28,6 +31,7 @@ export class RegulationService {
         private controlLoopRepository: ControlLoopRepository,
         private sensorRepository: SensorRepository,
         private comSensorStrategy: ComSensorStrategy,
+        private analogSensorStrategy: AnalogSensorStrategy,
         private controlLoopRunner: ControlLoopRunner
     ) { }
 
@@ -96,7 +100,7 @@ export class RegulationService {
         return {
             min: config.minOpening,
             max: config.maxOpening,
-            read: async () => (await this.comSensorStrategy.read(sensor))[0]?.value,
+            read: async () => (await this._sensorStrategy(sensor).read(sensor))[0]?.value,
             write: port.write,
             current: () => config.openingPercent,
             settleMs: port.settleMs
@@ -113,8 +117,13 @@ export class RegulationService {
         if (!parent) {
             return sensor;
         }
-        const { field } = sensor.config as ComSensorConfigModel;
-        return { ...sensor, config: { ...(parent.config as ComSensorConfigModel), field } };
+        // config de l'enfant prioritaire : field, et scaling pour un sensor ANALOG
+        return { ...sensor, config: { ...(parent.config as ComSensorConfigModel), ...sensor.config } };
+    }
+
+    // sensor ANALOG : lecture COM convertie en grandeur physique ; sinon lecture COM brute
+    private _sensorStrategy(sensor: SensorModel): SensorStrategy {
+        return sensor.type === SensorType.ANALOG ? this.analogSensorStrategy : this.comSensorStrategy;
     }
 
 }

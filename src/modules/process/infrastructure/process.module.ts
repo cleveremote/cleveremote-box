@@ -38,6 +38,7 @@ import { ActuatorModule } from '@process/domain/services/actuator-strategies/act
 import { DeviceModule } from '@process/domain/services/device-strategies/device.module';
 import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategies/forcast-sensor.strategy';
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
+import { AnalogSensorStrategy } from '@process/domain/services/sensor-strategies/analog-sensor.strategy';
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
@@ -104,10 +105,11 @@ import { DeviceConnectivityService } from '@process/domain/services/device-conne
         SensorService,
         ForcastSensorStrategy,
         ComSensorStrategy,
+        AnalogSensorStrategy,
         {
             provide: SENSOR_STRATEGIES,
-            useFactory: (forcast: ForcastSensorStrategy, com: ComSensorStrategy): SensorStrategy[] => [forcast, com],
-            inject: [ForcastSensorStrategy, ComSensorStrategy]
+            useFactory: (forcast: ForcastSensorStrategy, com: ComSensorStrategy, analog: AnalogSensorStrategy): SensorStrategy[] => [forcast, com, analog],
+            inject: [ForcastSensorStrategy, ComSensorStrategy, AnalogSensorStrategy]
         },
         BleService,
         CycleGroupService,

@@ -43,6 +43,7 @@ import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-di
 import { ActuatorService } from '../actuator.service';
 import { RegulationService } from '../regulation.service';
 import { ComSensorStrategy } from '../sensor-strategies/com-sensor.strategy';
+import { AnalogSensorStrategy } from '../sensor-strategies/analog-sensor.strategy';
 import { RpiActuatorStrategy } from './rpi-actuator.strategy';
 import { ComActuatorStrategy } from './com-actuator.strategy';
 import { CtrlActuatorStrategy } from './ctrl-actuator.strategy';
@@ -97,10 +98,11 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         TriggerMongooseRepository,
         ModbusDeviceService,
         WaveshareDiscoveryService,
-        // régulation des actionneurs CTRL (ControlLoop + module control) ; ComSensorStrategy lit le sensor de retour
+        // régulation des actionneurs CTRL (ControlLoop + module control) ; ComSensorStrategy (AnalogSensorStrategy si ANALOG) lit le sensor de retour
         ControlLoopRepository,
         ControlLoopMongooseRepository,
         ComSensorStrategy,
+        AnalogSensorStrategy,
         RegulationService,
         RpiActuatorStrategy,
         ComActuatorStrategy,

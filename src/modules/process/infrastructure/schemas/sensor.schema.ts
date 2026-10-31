@@ -2,8 +2,35 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
-import { forcastDataName } from '@process/domain/models/sensor.model';
+import { AnalogSignalType, forcastDataName } from '@process/domain/models/sensor.model';
+import { OutOfRangePolicy } from '@process/domain/utils/linear-scale.util';
 import { CycleStyle, CycleStyleSchema } from './style.schema';
+
+// ANALOG : mise à l'échelle de la valeur brute lue vers la grandeur physique (cf. AnalogScalingModel)
+@Schema({ _id: false })
+export class AnalogScaling {
+    @Prop({ required: true, enum: AnalogSignalType })
+    public signalType: AnalogSignalType;
+
+    @Prop({ required: true })
+    public inputMin: number;
+
+    @Prop({ required: true })
+    public inputMax: number;
+
+    @Prop({ required: true })
+    public outputMin: number;
+
+    @Prop({ required: true })
+    public outputMax: number;
+
+    @Prop({ required: true })
+    public unit: string;
+
+    @Prop({ enum: OutOfRangePolicy, default: OutOfRangePolicy.CLAMP })
+    public outOfRange: OutOfRangePolicy;
+}
+export const AnalogScalingSchema = SchemaFactory.createForClass(AnalogScaling);
 
 @Schema({ _id: false })
 export class SensorConfig {
@@ -26,6 +53,10 @@ export class SensorConfig {
     // nom du champ decode a retenir (racine ou enfant)
     @Prop()
     public field?: string;
+
+    // ANALOG (racine ou enfant)
+    @Prop({ type: AnalogScalingSchema })
+    public scaling?: AnalogScaling;
 }
 export const SensorConfigSchema = SchemaFactory.createForClass(SensorConfig);
 

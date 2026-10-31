@@ -1,6 +1,6 @@
-import { ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
+import { AnalogScalingModel, AnalogSensorConfigModel, ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
-import { Sensor, SensorDocument } from '../sensor.schema';
+import { AnalogScaling, Sensor, SensorConfig, SensorDocument } from '../sensor.schema';
 
 export class SensorMapper {
 
@@ -21,24 +21,40 @@ export class SensorMapper {
         return model;
     }
 
-    private static _mapConfigToModel(sensor: SensorDocument): ForcastSensorConfigModel | ComSensorConfigModel {
+    private static _mapConfigToModel(sensor: SensorDocument): ForcastSensorConfigModel | ComSensorConfigModel | AnalogSensorConfigModel {
         if (sensor.type === SensorType.FORCAST) {
             const config = new ForcastSensorConfigModel();
             config.cronPattern = sensor.config.cronPattern;
             config.forcastData = sensor.config.forcastData;
             return config;
         }
-        if (sensor.parentId) {
-            const config = new ComSensorConfigModel();
-            config.field = sensor.config.field;
-            return config;
-        }
-        const config = new ComSensorConfigModel();
-        config.cronPattern = sensor.config.cronPattern;
-        config.commandId = sensor.config.commandId;
-        config.deviceId = sensor.config.deviceId;
+        // ANALOG : config COM (racine ou enfant) + mise à l'échelle
+        const config = sensor.type === SensorType.ANALOG ? new AnalogSensorConfigModel() : new ComSensorConfigModel();
         config.field = sensor.config.field;
+        if (!sensor.parentId) {
+            config.cronPattern = sensor.config.cronPattern;
+            config.commandId = sensor.config.commandId;
+            config.deviceId = sensor.config.deviceId;
+        }
+        if (config instanceof AnalogSensorConfigModel) {
+            config.scaling = SensorMapper._mapScalingToModel(sensor.config.scaling);
+        }
         return config;
+    }
+
+    private static _mapScalingToModel(scaling: AnalogScaling | undefined): AnalogScalingModel | undefined {
+        if (!scaling) {
+            return undefined;
+        }
+        const model = new AnalogScalingModel();
+        model.signalType = scaling.signalType;
+        model.inputMin = scaling.inputMin;
+        model.inputMax = scaling.inputMax;
+        model.outputMin = scaling.outputMin;
+        model.outputMax = scaling.outputMax;
+        model.unit = scaling.unit;
+        model.outOfRange = scaling.outOfRange ?? model.outOfRange;
+        return model;
     }
 
     public static mapToSchema(model: SensorModel): Sensor {
@@ -53,14 +69,24 @@ export class SensorMapper {
         if (model.type === SensorType.FORCAST) {
             const config = model.config as ForcastSensorConfigModel;
             sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData };
-        } else if (sensor.parentId) {
-            const config = model.config as ComSensorConfigModel;
-            sensor.config = { field: config.field };
-        } else {
-            const config = model.config as ComSensorConfigModel;
-            sensor.config = { cronPattern: config.cronPattern, commandId: config.commandId, deviceId: config.deviceId, field: config.field };
+            return sensor;
+        }
+        const config = model.config as ComSensorConfigModel;
+        sensor.config = sensor.parentId
+            ? { field: config.field }
+            : { cronPattern: config.cronPattern, commandId: config.commandId, deviceId: config.deviceId, field: config.field };
+        if (model.type === SensorType.ANALOG) {
+            sensor.config.scaling = SensorMapper._mapScalingToSchema((model.config as AnalogSensorConfigModel).scaling);
         }
         return sensor;
+    }
+
+    private static _mapScalingToSchema(scaling: AnalogScalingModel | undefined): SensorConfig['scaling'] {
+        if (!scaling) {
+            return undefined;
+        }
+        const { signalType, inputMin, inputMax, outputMin, outputMax, unit, outOfRange } = scaling;
+        return { signalType, inputMin, inputMax, outputMin, outputMax, unit, outOfRange };
     }
 
 }

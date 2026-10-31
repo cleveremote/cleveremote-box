@@ -10,7 +10,7 @@ import { ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '../
 import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { NotImplementedError } from '../errors/not-implemented.error';
-import { SENSOR_STRATEGIES, SensorStrategy } from './sensor-strategies/sensor-strategy.interface';
+import { ReadResult, SENSOR_STRATEGIES, SensorStrategy } from './sensor-strategies/sensor-strategy.interface';
 
 @Injectable()
 export class SensorService {
@@ -75,9 +75,12 @@ export class SensorService {
             if (children.length) {
                 for (let index = 0; index < children.length; index++) {
                     const childSensor = children[index];
-                    const config = childSensor.config as ComSensorConfigModel;
-                    const value = results.find((result) => result.name === config.field)?.value;
-                    this.emitReceivedData(childSensor,value);
+                    // erreur isolée par enfant : une voie mal configurée n'empêche pas l'émission des autres
+                    try {
+                        this.emitReceivedData(childSensor, this._childValue(childSensor, results));
+                    } catch (error) {
+                        this.logger.warn({ error, sensorId: childSensor._id, parentId: sensor._id }, 'child sensor value conversion failed');
+                    }
                     //this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
                 }
             } else {
@@ -89,6 +92,14 @@ export class SensorService {
         } catch (error) {
             this.logger.warn({ error, sensorId: sensor._id }, 'sensor read failed');
         }
+    }
+
+    // valeur du champ de l'enfant dans la lecture du parent, transformée par la stratégie de l'enfant (ex: ANALOG)
+    private _childValue(childSensor: SensorModel, results: ReadResult): number {
+        const config = childSensor.config as ComSensorConfigModel;
+        const item = results.find((result) => result.name === config.field);
+        const strategy = this._strategies.get(childSensor.type);
+        return strategy?.transform ? strategy.transform(childSensor, item).value : item?.value;
     }
 
     private _resolveStrategy(type: SensorType): SensorStrategy {
