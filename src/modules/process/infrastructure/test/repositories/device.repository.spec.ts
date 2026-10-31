@@ -187,13 +187,17 @@ describe('DeviceRepository', () => {
             const master = { _id: 'master', type: DeviceType.MASTER };
             const io = { _id: 'slave-io', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 61, kind: DeviceKind.DIGITAL_IO_8_CH } };
             const flow = { _id: 'slave-flow', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 11, kind: DeviceKind.FLOWMETER_V1 } };
+            const ai = { _id: 'slave-ai', type: DeviceType.SLAVE, config: { masterDeviceId: 'master', slaveId: 81, kind: DeviceKind.ANALOG_INPUT_8_CH } };
             mongooseRepository.findById.mockResolvedValue(master);
-            mongooseRepository.findSlavesByMasterId.mockImplementation(async (id: string) => (id === 'master' ? [io, flow] : []));
+            mongooseRepository.findSlavesByMasterId.mockImplementation(async (id: string) => (id === 'master' ? [io, flow, ai] : []));
 
             await repository.delete('master');
 
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('slave-io');
             expect(sensorRepository.deleteForDevice).toHaveBeenCalledWith('slave-flow');
+            expect(sensorRepository.deleteForDevice).toHaveBeenCalledWith('slave-ai');
+            expect(mongooseRepository.delete).toHaveBeenCalledWith('slave-ai');
+            expect(actuatorRepository.deleteForDevice).not.toHaveBeenCalledWith('slave-ai');
             expect(actuatorRepository.deleteForDevice).not.toHaveBeenCalledWith('slave-flow');
             expect(sensorRepository.deleteForDevice).not.toHaveBeenCalledWith('slave-io');
             expect(actuatorRepository.deleteForDevice).toHaveBeenCalledWith('master');

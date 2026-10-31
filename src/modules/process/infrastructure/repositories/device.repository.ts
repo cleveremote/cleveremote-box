@@ -34,11 +34,12 @@ export class DeviceRepository {
         [DeviceKind.EC_METER_V1]: this._sensorCascade,
         [DeviceKind.FLOWMETER_ULTRASONIC_V1]: this._sensorCascade,
         [DeviceKind.TEMPERATURE_MOISTURE_V1]: this._sensorCascade,
-        // TODO: a adapter quand l'auto-creation variateur / analog sera implementee
+        // sensors ANALOG racines (un par voie, config.deviceId = slave)
+        [DeviceKind.ANALOG_INPUT_8_CH]: this._sensorCascade,
+        // TODO: a adapter quand l'auto-creation variateur / analog output sera implementee
         [DeviceKind.INVERTER_VEICHI_SI23_V1]: this._defaultCascade,
         [DeviceKind.ANALOG_OUTPUT_8_CH]: this._defaultCascade,
         [DeviceKind.ANALOG_OUTPUT_8_CH_MA]: this._defaultCascade,
-        [DeviceKind.ANALOG_INPUT_8_CH]: this._defaultCascade,
         [DeviceKind.MODBUS_SLAVE]: this._defaultCascade,
         [DeviceKind.UNKNOWN_DEVICE]: this._defaultCascade
     };

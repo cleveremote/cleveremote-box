@@ -152,7 +152,7 @@ export class SynchronizeService {
     // devices slaves imbriques. Les commandes register map appartiennent au modele, pas au device.
     private async _synchronizeDeviceTree(model: SynchronizeDeviceModel): Promise<DeviceModel> {
         if (model.delete) {
-            await this.deviceRepository.delete(model._id);
+            await this._deleteDevice(model._id);
             return { ...model, deletedAt: new Date() } as DeviceModel;
         }
         const device = await this.deviceRepository.save(model);
@@ -170,7 +170,7 @@ export class SynchronizeService {
         const incomingIds = new Set(childModels.filter(child => child._id).map(child => child._id));
         for (const existingChild of existing) {
             if (!incomingIds.has(existingChild._id)) {
-                await this.deviceRepository.delete(existingChild._id);
+                await this._deleteDevice(existingChild._id);
             }
         }
         const saved: DeviceModel[] = [];
@@ -181,6 +181,17 @@ export class SynchronizeService {
             saved.push(await this._synchronizeDeviceTree(childModel));
         }
         return saved;
+    }
+
+    // la cascade (DeviceRepository.delete) soft-supprime les sensors rattaches au device et a ses slaves : leurs
+    // crons sont arretes ici, sinon ils continuent a lire un slave supprime jusqu'au prochain redemarrage
+    private async _deleteDevice(id: string): Promise<void> {
+        const sensorIds = (await this.sensorRepository.get() as SensorModel[]).map((sensor) => sensor._id);
+        await this.deviceRepository.delete(id);
+        const remainingIds = new Set((await this.sensorRepository.get() as SensorModel[]).map((sensor) => sensor._id));
+        for (const sensorId of sensorIds.filter((sensorId) => !remainingIds.has(sensorId))) {
+            await this.sensorService.initScheduledSensor({ _id: sensorId } as SensorModel, true);
+        }
     }
 
     public async synchronizeDeviceCommandList(models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {

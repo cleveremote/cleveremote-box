@@ -395,6 +395,20 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(await deviceRepository.get(created._id)).toBeNull();
         });
 
+        it('should stop the cron jobs of the sensors soft deleted by a device deletion cascade', async () => {
+            const created = await deviceRepository.save(CreateMasterDeviceModel());
+            sensorRepository.get
+                .mockResolvedValueOnce([{ _id: 'sensor-ai1' }, { _id: 'sensor-ai2' }, { _id: 'sensor-other' }])
+                .mockResolvedValueOnce([{ _id: 'sensor-other' }]);
+
+            const deleteModel = Object.assign(new SynchronizeDeviceModel(), { _id: created._id, delete: true });
+            await service.synchronizeDeviceList([deleteModel]);
+
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith({ _id: 'sensor-ai1' }, true);
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith({ _id: 'sensor-ai2' }, true);
+            expect(sensorService.initScheduledSensor).not.toHaveBeenCalledWith({ _id: 'sensor-other' }, true);
+        });
+
         it('should cascade a master deletion to its slaves, their actuators and their MODULE cycles only', async () => {
             const master = Object.assign(new SynchronizeDeviceModel(), CreateMasterDeviceModel());
             master.devices = [Object.assign(new SynchronizeDeviceModel(), CreateSlaveDeviceModel())];
