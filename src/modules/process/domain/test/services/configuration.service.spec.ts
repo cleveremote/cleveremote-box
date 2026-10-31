@@ -96,7 +96,8 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             actuatorRepository as never,
             deviceCommandService as never,
             slaveScanService as never,
-            autoCreationService as never
+            autoCreationService as never,
+            { get: jest.fn().mockResolvedValue([]) } as never
         );
     });
 

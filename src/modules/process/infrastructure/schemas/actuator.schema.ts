@@ -72,6 +72,12 @@ export class CtrlActuatorConfig {
 
     @Prop({ default: 'PROPORTIONAL' })
     public valveType?: string;
+
+    @Prop()
+    public minOutputValue?: number;
+
+    @Prop()
+    public maxOutputValue?: number;
 }
 export const CtrlActuatorConfigSchema = SchemaFactory.createForClass(CtrlActuatorConfig);
 

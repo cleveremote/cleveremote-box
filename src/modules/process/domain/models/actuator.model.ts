@@ -43,6 +43,10 @@ export class CtrlActuatorConfigModel extends ComActuatorConfigModel {
     // temps que met la vanne pour parcourir toute sa course (minOpening <-> maxOpening), en ms.
     public fullStrokeMs: number = 7000;
     public valveType: string = 'PROPORTIONAL';
+    // valeurs brutes de la sortie analogique (unité de la commande set, ex: mV ou µA) correspondant
+    // à 0% et 100% d'ouverture (ex: 4000/20000 µA en 4-20mA) ; à défaut, plage de saisie de la commande.
+    public minOutputValue?: number;
+    public maxOutputValue?: number;
 
 }
 

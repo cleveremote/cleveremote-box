@@ -3,7 +3,7 @@ import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ActuatorActionConfig, ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { ActuatorStrategy } from './actuator-strategy.interface';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
@@ -48,7 +48,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     public async reset(actuator: ActuatorModel): Promise<void> {
         const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
         if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
-            await this._writeOpening(deviceId, actions, 0);
+            await this._writeOpening(actuator.config as CtrlActuatorConfigModel, 0);
             (actuator.config as CtrlActuatorConfigModel).openingPercent = 0;
             return;
         }
@@ -74,12 +74,9 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     public async position(actuator: ActuatorModel, openingPercent: number): Promise<void> {
         const config = (actuator as ValveActuatorModel).config;
         const clamped = Math.min(config.maxOpening, Math.max(config.minOpening, openingPercent));
-        await this._writeOpening(config.deviceId, config.actions, clamped);
+        const outputValue = await this._writeOpening(config, clamped);
         config.openingPercent = clamped;
-        this.logger.debug(
-            { valveId: actuator._id, openingPercent: clamped, outputCurrentMa: this._openingToMilliAmps(clamped) },
-            'valve opening written'
-        );
+        this.logger.debug({ valveId: actuator._id, openingPercent: clamped, outputValue }, 'valve opening written');
     }
 
     public async read(actuator: ActuatorModel): Promise<number> {
@@ -100,19 +97,17 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // 0% -> 4mA, 100% -> 20mA (live zero, jamais en dessous de MIN_OUTPUT_MA)
-    private _openingToMilliAmps(openingPercent: number): number {
-        return MIN_OUTPUT_MA + (openingPercent / 100) * (MAX_OUTPUT_MA - MIN_OUTPUT_MA);
-    }
-
     private _toClampedMicroAmps(milliAmps: number): number {
         const clampedMa = Math.min(Math.max(milliAmps, MIN_OUTPUT_MA), MAX_OUTPUT_MA);
         return Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
     }
 
-    // DeviceCommand set (register map) : l'ouverture est projetee sur la plage de saisie du template
-    // (ex: AO8CH B outputs.set 0-10000 mV). Passe par la file de ModbusBusService (bus RS485 partagé).
-    private async _writeOpening(deviceId: string, actions: ActuatorActionConfig[], openingPercent: number): Promise<void> {
+    // DeviceCommand set (register map) : l'ouverture est projetee sur [minOutputValue, maxOutputValue]
+    // (0% -> minOutputValue, 100% -> maxOutputValue), à défaut sur la plage de saisie du template
+    // (ex: AO8CH B outputs.set 0-10000 mV), puis bornée à cette plage. Passe par la file de
+    // ModbusBusService (bus RS485 partagé). Renvoie la valeur écrite.
+    private async _writeOpening(config: CtrlActuatorConfigModel, openingPercent: number): Promise<number> {
+        const { deviceId, actions } = config;
         const [set] = await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.SET);
         if (!set) {
             throw new Error('CtrlActuatorStrategy: vanne sans commande set');
@@ -121,8 +116,11 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         if (!range) {
             throw new Error(`CtrlActuatorStrategy: DeviceCommand ${set.command._id} sans saisie numérique`);
         }
-        const value = Math.round(range.min + (openingPercent / 100) * (range.max - range.min));
+        const min = config.minOutputValue ?? range.min;
+        const max = config.maxOutputValue ?? range.max;
+        const value = Math.min(range.max, Math.max(range.min, Math.round(min + (openingPercent / 100) * (max - min))));
         await this.deviceCommandService.execute(set.command, deviceId, { channel: set.action.channel, value });
+        return value;
     }
 
     private async _connectClient(deviceId: string, unitIdOverride?: number): Promise<ModbusRTU> {

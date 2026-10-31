@@ -149,7 +149,7 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/actuator'])
     public async synchroniseActuator(
-        @Payload(new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
             actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
     ): Promise<ActuatorModel[]> {
         const uc = new ActuatorSynchronizeUC(this._synchronizeService);

@@ -105,7 +105,8 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
         actuatorRepository as any,
         { withParams: (commands: unknown) => Promise.resolve(commands) } as any,
         {} as any,
-        {} as any
+        {} as any,
+        { get: jest.fn().mockResolvedValue([]) } as any
     );
 
     return { structureService, structureRepository, actuatorRegistry: structureRepository.actuatorRegistry, cycleRepository, logger };

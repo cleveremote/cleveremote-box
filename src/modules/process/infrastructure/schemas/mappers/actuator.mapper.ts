@@ -51,6 +51,8 @@ export class ActuatorMapper {
             config.openingPercent = ctrlConfig.openingPercent;
             config.fullStrokeMs = ctrlConfig.fullStrokeMs;
             config.valveType = ctrlConfig.valveType;
+            config.minOutputValue = ctrlConfig.minOutputValue;
+            config.maxOutputValue = ctrlConfig.maxOutputValue;
             model.config = config;
         }
         model.createdAt = (actuator as unknown as { createdAt?: Date }).createdAt;
@@ -92,7 +94,9 @@ export class ActuatorMapper {
                 maxOpening: config.maxOpening,
                 openingPercent: config.openingPercent,
                 fullStrokeMs: config.fullStrokeMs,
-                valveType: config.valveType
+                valveType: config.valveType,
+                minOutputValue: config.minOutputValue,
+                maxOutputValue: config.maxOutputValue
             }
         };
     }

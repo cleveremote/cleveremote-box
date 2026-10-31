@@ -188,7 +188,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             emptyGetRepo as never,
             { withParams: (commands: unknown) => Promise.resolve(commands) } as never,
             {} as never,
-            {} as never
+            {} as never,
+            emptyGetRepo as never
         );
 
         actuatorService = {

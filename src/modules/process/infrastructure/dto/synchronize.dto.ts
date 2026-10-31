@@ -689,6 +689,13 @@ export class ValveConfigDTO {
     @IsOptional()
     @IsNumber()
     public fullStrokeMs?: number;
+    // valeurs de sortie (unité de la commande set) pour 0% et 100% d'ouverture
+    @IsOptional()
+    @IsNumber()
+    public minOutputValue?: number;
+    @IsOptional()
+    @IsNumber()
+    public maxOutputValue?: number;
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })

@@ -5,6 +5,7 @@ import { SensorRepository } from '@process/infrastructure/repositories/sensor.re
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { CycleModel } from '../models/cycle.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
@@ -42,7 +43,8 @@ export class StructureService {
         private actuatorRepository: ActuatorRepository,
         private deviceCommandService: DeviceCommandService,
         private slaveScanService: SlaveScanService,
-        private autoCreationService: AutoCreationService
+        private autoCreationService: AutoCreationService,
+        private controlLoopRepository: ControlLoopRepository
     ) {
     }
 
@@ -57,6 +59,7 @@ export class StructureService {
         structureModel.models = await this.deviceCommandService.modelsWithParams();
         this._attachSensorCommands(structureModel.sensors, structureModel.models);
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
+        structureModel.controlLoops = await this.controlLoopRepository.get() as StructureModel['controlLoops'];
         this.structure = structureModel;
 
         // la derniere lecture connue d'un capteur ne vit qu'en Mongo (collection `events`) :

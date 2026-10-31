@@ -4,6 +4,8 @@ import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
 import { DeviceModel, SlaveTemplate } from './device.model';
 import { ActuatorModel } from './actuator.model';
+import { ControlLoopModel } from './control-loop.model';
+import { isRaspberryPi } from '../utils/platform.util';
 export class StructureModel {
     // Modèles de slave, chacun avec ses DeviceCommand (params résolus)
     public models: SlaveTemplate[] = [];
@@ -11,7 +13,10 @@ export class StructureModel {
     public cycles: CycleModel[] = [];
     public sensors: SensorModel[] = [];
     public actuators: ActuatorModel[] = [];
+    public controlLoops: ControlLoopModel[] = [];
     public values: any[] = [];
+    // box identifiée comme un Raspberry Pi (device tree)
+    public isRPI: boolean = isRaspberryPi();
     public getModuleIds(): string[] {
         return this.cycles.flatMap((cycle) => cycle.getModuleIds());
     }
