@@ -12,7 +12,7 @@ import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interface
 import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
-import { ControlAlgorithm, PidParamsModel } from '@process/domain/models/control-loop.model';
+import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import {
@@ -756,6 +756,18 @@ export class ControlLoopParamsDTO {
     public iterationDelayMs?: number;
 }
 
+export class ControlLoopFollowDTO {
+    @IsOptional()
+    @IsNumber()
+    public inputMin?: number;
+    @IsOptional()
+    @IsNumber()
+    public inputMax?: number;
+    @IsOptional()
+    @IsNumber()
+    public deadband?: number;
+}
+
 export class ControlLoopSynchronizeDTO {
     @IsOptional()
     @IsNotEmpty()
@@ -769,14 +781,23 @@ export class ControlLoopSynchronizeDTO {
     @IsNotEmpty()
     public sensorId: string;
     @IsOptional()
+    @IsEnum(ControlLoopMode)
+    public mode?: ControlLoopMode;
+    @IsOptional()
     @IsEnum(ControlAlgorithm)
     public algorithm?: ControlAlgorithm;
+    // ignorée en mode FOLLOW (la vanne recopie la mesure du sensor)
+    @ValidateIf(o => o.mode !== ControlLoopMode.FOLLOW)
     @IsNumber()
-    public setpoint: number;
+    public setpoint?: number;
     @IsOptional()
     @ValidateNested()
     @Type(() => ControlLoopParamsDTO)
     public params?: ControlLoopParamsDTO;
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ControlLoopFollowDTO)
+    public follow?: ControlLoopFollowDTO;
     @IsOptional()
     @IsBoolean()
     public isEnabled?: boolean = true;
@@ -790,9 +811,11 @@ export class ControlLoopSynchronizeDTO {
         controlLoopModel.name = controlLoopSynchronizeDTO.name;
         controlLoopModel.actuatorId = controlLoopSynchronizeDTO.actuatorId;
         controlLoopModel.sensorId = controlLoopSynchronizeDTO.sensorId;
+        controlLoopModel.mode = controlLoopSynchronizeDTO.mode ?? ControlLoopMode.REGULATION;
         controlLoopModel.algorithm = controlLoopSynchronizeDTO.algorithm ?? ControlAlgorithm.P;
         controlLoopModel.setpoint = controlLoopSynchronizeDTO.setpoint;
         controlLoopModel.params = Object.assign(new PidParamsModel(), controlLoopSynchronizeDTO.params);
+        controlLoopModel.follow = Object.assign(new FollowParamsModel(), controlLoopSynchronizeDTO.follow);
         controlLoopModel.isEnabled = controlLoopSynchronizeDTO.isEnabled ?? true;
         controlLoopModel.delete = controlLoopSynchronizeDTO.delete ?? false;
         return controlLoopModel;

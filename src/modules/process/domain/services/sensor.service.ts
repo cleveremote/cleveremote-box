@@ -81,10 +81,10 @@ export class SensorService {
                     //this.emitReceivedData(childSensor, Number((Math.random() * 100).toFixed(2)));
                 }
             } else {
-                //for (const result of results) {
-                // this.emitReceivedData(sensor, result.value);
-                this.emitReceivedData(sensor,  Number((Math.random() * 100).toFixed(2)));
-                // }
+                for (const result of results) {
+                this.emitReceivedData(sensor, result.value);
+                //this.emitReceivedData(sensor,  Number((Math.random() * 100).toFixed(2)));
+                }
             }
         } catch (error) {
             this.logger.warn({ error, sensorId: sensor._id }, 'sensor read failed');

@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { ControlAlgorithm } from '@process/domain/models/control-loop.model';
+import { ControlAlgorithm, ControlLoopMode } from '@process/domain/models/control-loop.model';
 
 @Schema({ _id: false })
 export class ControlLoopParams {
@@ -25,6 +25,19 @@ export class ControlLoopParams {
 }
 export const ControlLoopParamsSchema = SchemaFactory.createForClass(ControlLoopParams);
 
+@Schema({ _id: false })
+export class ControlLoopFollow {
+    @Prop({ default: 0 })
+    public inputMin: number;
+
+    @Prop({ default: 100 })
+    public inputMax: number;
+
+    @Prop({ default: 1 })
+    public deadband: number;
+}
+export const ControlLoopFollowSchema = SchemaFactory.createForClass(ControlLoopFollow);
+
 export type ControlLoopDocument = ControlLoop & Document;
 
 @Schema({ collection: 'control_loops', timestamps: true })
@@ -41,6 +54,9 @@ export class ControlLoop {
     @Prop({ required: true })
     public sensorId: string;
 
+    @Prop({ type: String, required: true, enum: ControlLoopMode, default: ControlLoopMode.REGULATION })
+    public mode: ControlLoopMode;
+
     @Prop({ type: String, required: true, enum: ControlAlgorithm, default: ControlAlgorithm.P })
     public algorithm: ControlAlgorithm;
 
@@ -49,6 +65,9 @@ export class ControlLoop {
 
     @Prop({ type: ControlLoopParamsSchema, default: () => ({}) })
     public params: ControlLoopParams;
+
+    @Prop({ type: ControlLoopFollowSchema, default: () => ({}) })
+    public follow: ControlLoopFollow;
 
     @Prop({ type: Boolean, default: true })
     public isEnabled: boolean;

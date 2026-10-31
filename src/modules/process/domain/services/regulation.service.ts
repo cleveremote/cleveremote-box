@@ -13,10 +13,15 @@ import { ComSensorStrategy } from './sensor-strategies/com-sensor.strategy';
 // pilotage de l'actionneur fourni par sa stratégie (CtrlActuatorStrategy) : évite toute dépendance inverse
 export type ActuatorPort = Pick<ControlPlant, 'write' | 'settleMs'>;
 
+// suivi en cours d'un actionneur (mode FOLLOW) ; active passe à false à l'arrêt pour neutraliser une itération en vol
+type FollowState = { active: boolean; timer?: NodeJS.Timeout };
+
 // Adaptateur process <-> control : expose un actionneur CTRL et le sensor de retour d'une ControlLoop
 // sous forme de ControlPlant, puis délègue la régulation au module control.
 @Injectable()
 export class RegulationService {
+
+    private readonly _follows = new Map<string, FollowState>();
 
     public constructor(
         private readonly logger: Logger,
@@ -39,6 +44,51 @@ export class RegulationService {
         const result = await this.controlLoopRunner.run(this._plant(actuator, sensor, port), loop.algorithm, loop.params, loop.setpoint);
         this.logger.log({ controlLoopId: loop._id, actuatorId: actuator._id, sensorId: loop.sensorId, ...result }, 'control loop finished');
         return result;
+    }
+
+    /**
+     * Mode FOLLOW : l'ouverture recopie la mesure du sensor (ex: potentiomètre), projetée de
+     * [follow.inputMin, follow.inputMax] sur [0, 100]%, toutes les params.iterationDelayMs jusqu'à stopFollow().
+     * Non bloquant (contrairement à regulate) : la séquence continue pendant le suivi.
+     */
+    public async follow(actuator: ActuatorModel, loop: ControlLoopModel, port: ActuatorPort): Promise<void> {
+        this.stopFollow(actuator._id);
+        const state: FollowState = { active: true };
+        this._follows.set(actuator._id, state);
+        const plant = this._plant(actuator, await this._resolveFeedbackSensor(loop.sensorId), port);
+        const { inputMin, inputMax, deadband } = loop.follow;
+
+        const tick = async (): Promise<void> => {
+            try {
+                const measured = await plant.read();
+                if (state.active && Number.isFinite(measured) && inputMax !== inputMin) {
+                    const target = ((measured - inputMin) / (inputMax - inputMin)) * 100;
+                    const output = Math.min(plant.max, Math.max(plant.min, target));
+                    if (Math.abs(output - plant.current()) >= deadband) {
+                        await plant.write(output);
+                    }
+                }
+            } catch (error) {
+                this.logger.warn({ error, controlLoopId: loop._id, actuatorId: actuator._id }, 'control loop follow step failed');
+            }
+            if (state.active) {
+                state.timer = setTimeout(tick, loop.params.iterationDelayMs);
+            }
+        };
+
+        this.logger.log({ controlLoopId: loop._id, actuatorId: actuator._id, sensorId: loop.sensorId }, 'control loop follow started');
+        await tick();
+    }
+
+    public stopFollow(actuatorId: string): void {
+        const state = this._follows.get(actuatorId);
+        if (!state) {
+            return;
+        }
+        state.active = false;
+        clearTimeout(state.timer);
+        this._follows.delete(actuatorId);
+        this.logger.log({ actuatorId }, 'control loop follow stopped');
     }
 
     private _plant(actuator: ActuatorModel, sensor: SensorModel, port: ActuatorPort): ControlPlant {

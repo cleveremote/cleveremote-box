@@ -6,6 +6,7 @@ import { ActuatorType } from '@process/domain/interfaces/actuator-module.interfa
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { ControlLoopMode, ControlLoopModel } from '@process/domain/models/control-loop.model';
 
 interface MockModbusClient {
     connectTCP: jest.Mock;
@@ -95,6 +96,7 @@ describe('CtrlActuatorStrategy (DeviceCommandService mocked)', () => {
     // usages des commandes des actions de la vanne (par défaut : la commande set de la sortie AO)
     let commandTypes: Record<string, DeviceCommandType[]>;
     let logger: ReturnType<typeof CreateLoggerMock>;
+    let regulationService: { findLoop: jest.Mock; regulate: jest.Mock; follow: jest.Mock; stopFollow: jest.Mock };
     let strategy: CtrlActuatorStrategy;
     let masterDevice: DeviceModel;
     let slaveDevice: DeviceModel;
@@ -118,12 +120,18 @@ describe('CtrlActuatorStrategy (DeviceCommandService mocked)', () => {
             runActions: jest.fn().mockResolvedValue([])
         };
         logger = CreateLoggerMock();
+        regulationService = {
+            findLoop: jest.fn().mockResolvedValue(null),
+            regulate: jest.fn().mockResolvedValue(undefined),
+            follow: jest.fn().mockResolvedValue(undefined),
+            stopFollow: jest.fn()
+        };
         strategy = new CtrlActuatorStrategy(
             deviceRepository as unknown as DeviceRepository,
             { refreshMasterAddress: jest.fn().mockResolvedValue(false) } as never,
             logger as never,
             deviceCommandService as never,
-            { findLoop: () => Promise.resolve(null) } as never
+            regulationService as never
         );
     });
 
@@ -160,6 +168,53 @@ describe('CtrlActuatorStrategy (DeviceCommandService mocked)', () => {
 
             expect(deviceCommandService.runActions).not.toHaveBeenCalled();
             expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 0, value: 0 });
+            expect(valve.config.openingPercent).toEqual(0);
+        });
+
+        it('should stop a running follow', async () => {
+            await strategy.reset(CreateValveModel());
+
+            expect(regulationService.stopFollow).toHaveBeenCalledWith('valve-1');
+        });
+    });
+
+    describe('set (control loop)', () => {
+        function CreateLoop(mode: ControlLoopMode): ControlLoopModel {
+            return Object.assign(new ControlLoopModel(), { _id: 'loop-1', actuatorId: 'valve-1', sensorId: 'pot-1', mode, setpoint: 10 });
+        }
+
+        it('should regulate on the loop setpoint in REGULATION mode', async () => {
+            const valve = CreateValveModel();
+            const loop = CreateLoop(ControlLoopMode.REGULATION);
+            regulationService.findLoop.mockResolvedValue(loop);
+
+            await strategy.set(valve, 1);
+
+            expect(regulationService.regulate).toHaveBeenCalledWith(valve, loop, expect.objectContaining({ write: expect.any(Function) }));
+            expect(regulationService.follow).not.toHaveBeenCalled();
+        });
+
+        it('should follow the loop sensor in FOLLOW mode, writing through position()', async () => {
+            const valve = CreateValveModel();
+            const loop = CreateLoop(ControlLoopMode.FOLLOW);
+            regulationService.findLoop.mockResolvedValue(loop);
+
+            await strategy.set(valve, 1);
+
+            expect(regulationService.follow).toHaveBeenCalledWith(valve, loop, expect.objectContaining({ write: expect.any(Function) }));
+            expect(regulationService.regulate).not.toHaveBeenCalled();
+            await regulationService.follow.mock.calls[0][2].write(30);
+            expect(deviceCommandService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'ao8ch-outputs-set' }), 'ao8ch-device', { channel: 0, value: 3000 });
+            expect(valve.config.openingPercent).toEqual(30);
+        });
+
+        it('should stop the follow and close the valve on OFF without looking up the loop', async () => {
+            const valve = CreateValveModel({ openingPercent: 60 });
+
+            await strategy.set(valve, 0);
+
+            expect(regulationService.stopFollow).toHaveBeenCalledWith('valve-1');
+            expect(regulationService.findLoop).not.toHaveBeenCalled();
             expect(valve.config.openingPercent).toEqual(0);
         });
     });

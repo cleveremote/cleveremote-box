@@ -115,7 +115,7 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         ActuatorService, ActuatorRepository, DeviceRepository, SensorRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
         ModbusDeviceService, WaveshareDiscoveryService, CtrlActuatorStrategy,
         CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository,
-        ControlLoopRepository
+        ControlLoopRepository, RegulationService
     ]
 })
 export class ActuatorModule { }

@@ -215,7 +215,8 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             logger as never,
             deviceCommandRepository as never,
             deviceCommandService as never,
-            {} as never
+            {} as never,
+            { stopFollow: jest.fn() } as never
         );
     });
 

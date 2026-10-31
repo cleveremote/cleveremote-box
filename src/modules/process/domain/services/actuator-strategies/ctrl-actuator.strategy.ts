@@ -11,6 +11,7 @@ import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/d
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { DeviceCommandService } from '../device-command.service';
 import { RegulationService } from '../regulation.service';
+import { ControlLoopMode } from '../../models/control-loop.model';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -46,6 +47,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
     // commandes reset de la vanne ; à défaut, ouverture minimale (set 0 -> 4mA)
     public async reset(actuator: ActuatorModel): Promise<void> {
+        this.regulationService.stopFollow(actuator._id);
         const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
         if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
             await this._writeOpening(actuator.config as CtrlActuatorConfigModel, 0);
@@ -56,18 +58,28 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     }
 
     /**
-     * ON sous ControlLoop active : régulation sur la consigne de la boucle (RegulationService / module control),
-     * la vanne étant pilotée via position(). Sinon `action` est l'ouverture cible en % (positionnement direct).
+     * ON sous ControlLoop active, la vanne étant pilotée via position() :
+     * - REGULATION : régulation sur la consigne de la boucle (RegulationService / module control) ;
+     * - FOLLOW : l'ouverture suit la mesure du sensor de la boucle (ex: potentiomètre) jusqu'au OFF/reset.
+     * Sinon `action` est l'ouverture cible en % (positionnement direct). OFF arrête un suivi en cours.
      */
     public async set(actuator: ActuatorModel, action: number): Promise<void> {
-        const loop = action !== 0 ? await this.regulationService.findLoop(actuator) : null;
+        if (action === 0) {
+            this.regulationService.stopFollow(actuator._id);
+            return this.position(actuator, action);
+        }
+        const loop = await this.regulationService.findLoop(actuator);
         if (!loop) {
             return this.position(actuator, action);
         }
-        await this.regulationService.regulate(actuator, loop, {
+        const port = {
             write: (openingPercent: number) => this.position(actuator, openingPercent),
             settleMs: (delta: number) => this.positioningDelayMs(actuator, delta)
-        });
+        };
+        if (loop.mode === ControlLoopMode.FOLLOW) {
+            return this.regulationService.follow(actuator, loop, port);
+        }
+        await this.regulationService.regulate(actuator, loop, port);
     }
 
     // positionnement direct, borné à [minOpening, maxOpening]

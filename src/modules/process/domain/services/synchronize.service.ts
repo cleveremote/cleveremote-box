@@ -33,8 +33,9 @@ import { DeviceCommandService } from './device-command.service';
 import { SensorService } from './sensor.service';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
-import { ControlLoopModel } from '../models/control-loop.model';
+import { ControlLoopMode, ControlLoopModel } from '../models/control-loop.model';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
+import { RegulationService } from './regulation.service';
 
 @Injectable()
 export class SynchronizeService {
@@ -53,7 +54,8 @@ export class SynchronizeService {
         private readonly logger: Logger,
         private deviceCommandRepository: DeviceCommandRepository,
         private deviceCommandService: DeviceCommandService,
-        private controlLoopRepository: ControlLoopRepository
+        private controlLoopRepository: ControlLoopRepository,
+        private regulationService: RegulationService
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -116,12 +118,21 @@ export class SynchronizeService {
         await this.configurationService.getStructure();
     }
 
+    // un suivi (FOLLOW) en cours s'arrête si la boucle est supprimée, désactivée, change de mode ou
+    // d'actionneur ; les autres modifications (bornes, deadband...) s'appliquent au prochain ON.
     public async synchronizeControlLoop(controlLoopModel: SynchronizeControlLoopModel): Promise<ControlLoopModel> {
+        const previous = controlLoopModel._id ? await this.controlLoopRepository.get(controlLoopModel._id) as ControlLoopModel : null;
         if (controlLoopModel.delete) {
             await this.controlLoopRepository.delete(controlLoopModel._id);
+            if (previous) this.regulationService.stopFollow(previous.actuatorId);
             return { ...controlLoopModel, deletedAt: new Date() } as ControlLoopModel;
         }
-        return this.controlLoopRepository.save(controlLoopModel);
+        const controlLoop = await this.controlLoopRepository.save(controlLoopModel);
+        const isFollowing = controlLoop.mode === ControlLoopMode.FOLLOW && controlLoop.isEnabled !== false;
+        if (previous && (!isFollowing || previous.actuatorId !== controlLoop.actuatorId)) {
+            this.regulationService.stopFollow(previous.actuatorId);
+        }
+        return controlLoop;
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {
