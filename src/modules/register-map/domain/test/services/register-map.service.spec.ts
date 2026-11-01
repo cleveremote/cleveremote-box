@@ -421,6 +421,42 @@ describe('RegisterMapService (module register-map)', () => {
             expect(positiveFlow && positiveFlow.value).toBeCloseTo(12345678.95, 2);
         });
 
+        describe('scopeFrom cache', () => {
+            const UNITS = [0, 0, 2, 0, 0, 1];
+            const TOTALS = Array.from({ length: 24 }, () => 0);
+            const addresses = (): number[] => modbusBus.execute.mock.calls.map(([, request]) => request.address);
+
+            it('should reuse the scopeFrom read for the next executions on the same device', async () => {
+                modbusBus.execute.mockResolvedValueOnce(UNITS).mockResolvedValue(TOTALS);
+
+                await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+                const outcome = await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+
+                expect(addresses().filter((address) => address === 1436)).toHaveLength(1);
+                expect(outcome.scope).toEqual(expect.objectContaining({ flowDecimal: 2 }));
+            });
+
+            it('should not share the scopeFrom read between two devices', async () => {
+                modbusBus.execute.mockImplementation(async (_connection, request) => (request.address === 1436 ? UNITS : TOTALS));
+
+                await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+                await service.execute(meter, { ...CONNECTION, unitId: 62 }, { blockId: 'totalizers', operationId: 'read' });
+
+                expect(addresses().filter((address) => address === 1436)).toHaveLength(2);
+            });
+
+            it('should read scopeFrom again after a failure on the device', async () => {
+                modbusBus.execute.mockImplementation(async (_connection, request) => (request.address === 1436 ? UNITS : TOTALS));
+                await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+                modbusBus.execute.mockRejectedValueOnce(Object.assign(new Error('Timed out'), { name: 'TransactionTimedOutError' }));
+                await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+
+                await service.execute(meter, CONNECTION, { blockId: 'totalizers', operationId: 'read' });
+
+                expect(addresses().filter((address) => address === 1436)).toHaveLength(2);
+            });
+        });
+
         it('should resolve the unit from the unit code read on the device (unitFrom)', async () => {
             modbusBus.execute
                 .mockResolvedValueOnce([0, 1, 3, 4, 2, 1]) // units : cumulativeFlowUnit = 1 (L), heatUnit = 2 (GJ)

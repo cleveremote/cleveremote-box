@@ -20,6 +20,6 @@ export class AnalogSensorStrategy implements SensorStrategy {
     // valeur brute (unité de l'acquisition, ex: µA) -> grandeur physique (config.scaling.unit) ; AnalogConversionError si invalide
     public transform(sensor: SensorModel, item: ReadResultItem, isFromLoopCtrl?:boolean): ReadResultItem {
         const { scaling } = sensor.config as AnalogSensorConfigModel;
-        return { value: toPhysicalValue(item?.value, item?.unit, scaling,isFromLoopCtrl), isFormated: true, unit: scaling.unit, name: item.name };
+        return { value: Number(toPhysicalValue(item?.value, item?.unit, scaling,isFromLoopCtrl)?.toFixed(2)), isFormated: true, unit: scaling.unit, name: item.name };
     }
 }

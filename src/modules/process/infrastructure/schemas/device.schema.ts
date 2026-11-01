@@ -37,6 +37,9 @@ export class DeviceConfig {
     @Prop()
     public timeout?: number;
 
+    @Prop()
+    public interFrameDelay?: number;
+
     @Prop({ type: [Number] })
     public discoveryRegisters?: number[];
 

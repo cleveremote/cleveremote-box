@@ -1049,6 +1049,11 @@ export class DeviceConfigDTO {
     @ApiProperty({ description: 'timeout de connexion (ms)' })
     public timeout?: number;
 
+    @IsOptional()
+    @IsNumber()
+    @ApiProperty({ description: 'silence imposé entre deux trames sur le bus (ms, défaut 30)', required: false })
+    public interFrameDelay?: number;
+
     // SLAVE
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()

@@ -16,6 +16,8 @@ export interface ModbusConnection {
     baudRate?: number;
     // ms, défaut 2000
     timeout?: number;
+    // ms de silence imposé sur le bus entre deux transactions (capteurs lents à se remettre à l'écoute), défaut 30
+    interFrameDelay?: number;
     // Adresse de l'esclave sur le bus
     unitId: number;
     // TCP injoignable : l'appelant peut fournir une connexion corrigée (ex: IP DHCP retrouvée),

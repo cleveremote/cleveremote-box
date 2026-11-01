@@ -158,7 +158,7 @@ describe('ModbusDeviceService', () => {
 
             const [connection] = modbusBus.checkConnection.mock.calls[0];
             expect(connection).toEqual(expect.objectContaining({
-                transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, timeout: 500, unitId: DEFAULT_UNCONFIGURED_UNIT_ID
+                transport: ModbusTransport.TCP, host: '192.168.1.26', port: 4196, timeout: 1500, unitId: DEFAULT_UNCONFIGURED_UNIT_ID
             }));
             expect(connection.onUnreachable).toBeUndefined();
             expect(waveshareDiscoveryService.refreshMasterAddress).not.toHaveBeenCalled();
@@ -188,7 +188,7 @@ describe('ModbusDeviceService', () => {
             await service.checkSlave(CreateSlave(62), CreateMaster());
 
             const [connection, request] = modbusBus.execute.mock.calls[0];
-            expect(connection).toEqual(expect.objectContaining({ unitId: 62, timeout: 500 }));
+            expect(connection).toEqual(expect.objectContaining({ unitId: 62, timeout: 1500 }));
             expect(request).toEqual({ function: RegisterFunction.READ_HOLDING_REGISTERS, address: DEVICE_KIND_SPECS[DeviceKind.DIGITAL_IO_8_CH].discoveryRegister, length: 1 });
         });
 

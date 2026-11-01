@@ -6,7 +6,10 @@ import { RegisterFunction, RegisterMapTemplate, RegisterOperationOutcome } from 
 const IO_TEMPLATE = {
     kind: DeviceKind.DIGITAL_IO_8_CH,
     registerMap: [
-        { id: 'outputs', area: 'coil', operations: [{ id: 'read', function: RegisterFunction.READ_COILS }, { id: 'set', function: RegisterFunction.WRITE_SINGLE_COIL }] },
+        {
+            id: 'outputs', area: 'coil',
+            operations: [{ id: 'read', function: RegisterFunction.READ_COILS }, { id: 'set', function: RegisterFunction.WRITE_SINGLE_COIL }]
+        },
         { id: 'allOutputs', area: 'coil', operations: [{ id: 'set', function: RegisterFunction.WRITE_SINGLE_COIL }] },
         { id: 'inputs', area: 'discreteInput', operations: [{ id: 'read', function: RegisterFunction.READ_DISCRETE_INPUTS }] },
         { id: 'version', area: 'holdingRegister', operations: [{ id: 'read', function: RegisterFunction.READ_HOLDING_REGISTERS }] }

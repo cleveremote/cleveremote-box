@@ -149,28 +149,12 @@ export class DigitalIoMonitorService {
 
     // Échec de lecture : loggé, état précédent conservé, aucun événement
     private async _readBlock(deviceId: string, block: DigitalBlock, longPressMs: number): Promise<void> {
-        let states: boolean[];
-        try {
-            const outcome = await this.deviceCommandService.executeOnDevice(deviceId, { blockId: block.blockId, operationId: block.operationId });
-            if (!outcome.isOk || outcome.value?.type !== 'boolean[]') {
-                this.logger.warn({ deviceId, blockId: block.blockId, err: outcome.error?.message }, 'digital io monitor read failed');
-                return;
-            }
-            states = [...outcome.value.channels].sort((a, b) => a.index - b.index).map((c) => Boolean(c.value));
-        } catch (err) {
-            this.logger.warn({ deviceId, blockId: block.blockId, err: err?.message }, 'digital io monitor read failed');
-            return;
-        }
-
+        const states = await this._read(deviceId, block);
+        if (!states) return;
         const key = `${deviceId}/${block.blockId}`;
         const previous = this._blockStates.get(key);
         if (!previous) {
-            this._blockStates.set(key, {
-                states,
-                pressStartedAt: states.map((current) => (current ? Date.now() : null)),
-                longPressFired: states.map(() => false)
-            });
-            this.logger.log({ deviceId, blockId: block.blockId, direction: block.direction, states }, 'digital io monitor started');
+            this._startBlock(key, deviceId, block, states);
             return;
         }
 
@@ -188,6 +172,30 @@ export class DigitalIoMonitorService {
         this.logger.log({ deviceId, blockId: block.blockId, changes, states }, `digital ${isInput ? 'input' : 'output'} state changed`);
         const subject = isInput ? this._inputChanges : this._outputChanges;
         changes.forEach((change) => subject.next(change));
+    }
+
+    // Première lecture d'un bloc : état de référence, aucun événement
+    private _startBlock(key: string, deviceId: string, block: DigitalBlock, states: boolean[]): void {
+        this._blockStates.set(key, {
+            states,
+            pressStartedAt: states.map((current) => (current ? Date.now() : null)),
+            longPressFired: states.map(() => false)
+        });
+        this.logger.log({ deviceId, blockId: block.blockId, direction: block.direction, states }, 'digital io monitor started');
+    }
+
+    // États des voies triés par index ; undefined (warn) si la lecture échoue
+    private async _read(deviceId: string, block: DigitalBlock): Promise<boolean[] | undefined> {
+        try {
+            const outcome = await this.deviceCommandService.executeOnDevice(deviceId, { blockId: block.blockId, operationId: block.operationId });
+            if (outcome.isOk && outcome.value?.type === 'boolean[]') {
+                return [...outcome.value.channels].sort((a, b) => a.index - b.index).map((c) => Boolean(c.value));
+            }
+            this.logger.warn({ deviceId, blockId: block.blockId, err: outcome.error?.message }, 'digital io monitor read failed');
+        } catch (err) {
+            this.logger.warn({ deviceId, blockId: block.blockId, err: err?.message }, 'digital io monitor read failed');
+        }
+        return undefined;
     }
 
     // Une voie restée à true sans interruption pendant au moins longPressMs déclenche l'événement une seule

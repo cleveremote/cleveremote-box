@@ -3,12 +3,17 @@ import { ModbusConnection, ModbusTransport } from '@register-map/domain/models/m
 import { RegisterFunction } from '@register-map/domain/models/register-map.model';
 import { ModbusBusService } from '@register-map/domain/services/modbus-bus.service';
 
-type MockClient = Record<string, jest.Mock>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MockClient = Record<string, any>;
 
 // 'modbus-serial' entièrement mocké : aucun test n'ouvre un vrai port série/TCP
 const mockClients: MockClient[] = [];
 function CreateMockClient(overrides: Partial<MockClient> = {}): MockClient {
+    const listeners: Record<string, (...args: unknown[]) => void> = {};
     const client: MockClient = {
+        isOpen: true,
+        listeners,
+        on: jest.fn((event: string, listener: (...args: unknown[]) => void) => { listeners[event] = listener; }),
         connectTCP: jest.fn().mockResolvedValue(undefined),
         connectRTUBuffered: jest.fn().mockResolvedValue(undefined),
         setID: jest.fn(),
@@ -22,8 +27,8 @@ function CreateMockClient(overrides: Partial<MockClient> = {}): MockClient {
         writeRegister: jest.fn().mockResolvedValue({}),
         writeRegisters: jest.fn().mockResolvedValue({}),
         writeCustomFC: jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: Error | null) => void) => next(null)),
-        close: jest.fn((cb?: () => void) => cb?.()),
-        destroy: jest.fn((cb?: () => void) => cb?.()),
+        close: jest.fn((cb?: () => void) => { client.isOpen = false; cb?.(); }),
+        destroy: jest.fn((cb?: () => void) => { client.isOpen = false; cb?.(); }),
         ...overrides
     };
     mockClients.push(client);
@@ -46,7 +51,11 @@ describe('ModbusBusService', () => {
         service = new ModbusBusService({ log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() } as any);
     });
 
-    it('should connect over TCP, set the unit id and close the connection after a read', async () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('should connect over TCP, set the unit id and keep the connection open after a read', async () => {
         const data = await service.execute(TCP, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 10, length: 2 });
 
         const [client] = mockClients;
@@ -55,7 +64,7 @@ describe('ModbusBusService', () => {
         expect(client.setTimeout).toHaveBeenCalledWith(2000);
         expect(client.readHoldingRegisters).toHaveBeenCalledWith(10, 2);
         expect(data).toEqual([1, 2]);
-        expect(client.close).toHaveBeenCalled();
+        expect(client.close).not.toHaveBeenCalled();
     });
 
     it('should connect over RTU with the default baud rate', async () => {
@@ -115,7 +124,7 @@ describe('ModbusBusService', () => {
         expect(mockClients[0].destroy).toHaveBeenCalled();
     });
 
-    it('should propagate Modbus errors and still close the connection', async () => {
+    it('should propagate Modbus errors and keep the connection open', async () => {
         const exception = Object.assign(new Error('Modbus exception 2'), { modbusCode: 2 });
         (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
             writeRegister: jest.fn().mockRejectedValue(exception)
@@ -123,11 +132,162 @@ describe('ModbusBusService', () => {
 
         await expect(service.execute(TCP, { function: RegisterFunction.WRITE_SINGLE_REGISTER, address: 0, length: 1, value: 5 }))
             .rejects.toBe(exception);
-        expect(mockClients[0].close).toHaveBeenCalled();
+        expect(mockClients[0].close).not.toHaveBeenCalled();
+        await service.execute(TCP, { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0, length: 1 });
+        expect(mockClients).toHaveLength(1);
+    });
+
+    describe('pooled connection', () => {
+        const read = { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0, length: 1 };
+
+        it('should reuse one connection per gateway for every unit id behind it', async () => {
+            await service.execute(TCP, read);
+            await service.execute({ ...TCP, unitId: 62, timeout: 500 }, read);
+
+            expect(mockClients).toHaveLength(1);
+            expect(mockClients[0].connectTCP).toHaveBeenCalledTimes(1);
+            expect(mockClients[0].setID).toHaveBeenLastCalledWith(62);
+            expect(mockClients[0].setTimeout).toHaveBeenLastCalledWith(500);
+        });
+
+        it('should open a separate connection per gateway', async () => {
+            await service.execute(TCP, read);
+            await service.execute({ ...TCP, host: '10.0.0.3' }, read);
+
+            expect(mockClients).toHaveLength(2);
+        });
+
+        it('should reopen the connection after the gateway closed it', async () => {
+            await service.execute(TCP, read);
+            mockClients[0].isOpen = false;
+            mockClients[0].listeners.close();
+            await service.execute(TCP, read);
+
+            expect(mockClients).toHaveLength(2);
+            expect(mockClients[1].readHoldingRegisters).toHaveBeenCalled();
+        });
+
+        it('should reconnect and replay the request once on PortNotOpenError', async () => {
+            const portNotOpen = Object.assign(new Error('Port Not Open'), { name: 'PortNotOpenError' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                writeCustomFC: jest.fn((_id: number, _fc: number, _data: Buffer, next: (err: unknown) => void) => next(portNotOpen))
+            }));
+
+            await service.execute(TCP, { function: RegisterFunction.CUSTOM_SINGLE_COIL, address: 0, length: 1, value: 0x5500 });
+
+            expect(mockClients).toHaveLength(2);
+            expect(mockClients[0].close).toHaveBeenCalled();
+            expect(mockClients[1].writeCustomFC).toHaveBeenCalledTimes(1);
+        });
+
+        it('should give up after a single replay when the new connection is not open either', async () => {
+            const portNotOpen = Object.assign(new Error('Port Not Open'), { name: 'PortNotOpenError' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockRejectedValue(portNotOpen)
+            }));
+
+            try {
+                await expect(service.execute(TCP, read)).rejects.toBe(portNotOpen);
+                expect(mockClients).toHaveLength(2);
+            } finally {
+                (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateMockClient());
+            }
+        });
+
+        it('should close the connection on a timeout without replaying the request, then reopen on the next one', async () => {
+            const timedOut = Object.assign(new Error('Timed out'), { name: 'TransactionTimedOutError', errno: 'ETIMEDOUT' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                writeCoil: jest.fn().mockRejectedValue(timedOut)
+            }));
+
+            await expect(service.execute(TCP, { function: RegisterFunction.WRITE_SINGLE_COIL, address: 0, length: 1, value: 1 }))
+                .rejects.toBe(timedOut);
+            expect(mockClients[0].writeCoil).toHaveBeenCalledTimes(1);
+            expect(mockClients[0].close).toHaveBeenCalled();
+
+            await service.execute(TCP, read);
+            expect(mockClients).toHaveLength(2);
+        });
+
+        it('should replay a timed out read once, on a new connection', async () => {
+            const timedOut = Object.assign(new Error('Timed out'), { name: 'TransactionTimedOutError', errno: 'ETIMEDOUT' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockRejectedValue(timedOut)
+            }));
+
+            await expect(service.execute(TCP, read)).resolves.toEqual([1, 2]);
+            expect(mockClients).toHaveLength(2);
+        });
+
+        it('should propagate the error when the replayed read times out again', async () => {
+            const timedOut = Object.assign(new Error('Timed out'), { name: 'TransactionTimedOutError', errno: 'ETIMEDOUT' });
+            (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateMockClient({
+                readHoldingRegisters: jest.fn().mockRejectedValue(timedOut)
+            }));
+
+            try {
+                await expect(service.execute(TCP, read)).rejects.toBe(timedOut);
+                expect(mockClients.map((client) => client.readHoldingRegisters.mock.calls.length)).toEqual([1, 1]);
+            } finally {
+                (ModbusRTU as unknown as jest.Mock).mockImplementation(() => CreateMockClient());
+            }
+        });
+
+        it('should keep a silence of interFrameDelay between two transactions on the same gateway', async () => {
+            const sentAt: number[] = [];
+            (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
+                readHoldingRegisters: jest.fn(async () => { sentAt.push(Date.now()); return { data: [1] }; })
+            }));
+
+            await service.execute({ ...TCP, interFrameDelay: 60 }, read);
+            await service.execute({ ...TCP, interFrameDelay: 60 }, read);
+
+            expect(sentAt[1] - sentAt[0]).toBeGreaterThanOrEqual(55);
+        });
+
+        it('should drop the connection on a socket error event without crashing', async () => {
+            await service.execute(TCP, read);
+            mockClients[0].listeners.error(new Error('read ECONNRESET'));
+            await service.execute(TCP, read);
+
+            expect(mockClients[0].close).toHaveBeenCalled();
+            expect(mockClients).toHaveLength(2);
+        });
+
+        it('should close the connection after 30 s without transaction', async () => {
+            jest.useFakeTimers('modern');
+            await service.execute(TCP, read);
+
+            jest.advanceTimersByTime(29999);
+            await service.runExclusive(() => Promise.resolve());
+            expect(mockClients[0].close).not.toHaveBeenCalled();
+
+            jest.advanceTimersByTime(1);
+            await service.runExclusive(() => Promise.resolve());
+            expect(mockClients[0].close).toHaveBeenCalled();
+        });
+
+        it('should close every connection on module destroy', async () => {
+            await service.execute(TCP, read);
+            await service.execute(RTU, read);
+
+            await service.onModuleDestroy();
+
+            expect(mockClients.every((client) => client.close.mock.calls.length === 1)).toBe(true);
+        });
     });
 
     describe('scan', () => {
         const read = { function: RegisterFunction.READ_HOLDING_REGISTERS, address: 0x4000, length: 1 };
+
+        it('should close the pooled connection of the gateway before scanning', async () => {
+            await service.execute(RTU, { function: RegisterFunction.READ_INPUT_REGISTERS, address: 0, length: 1 });
+
+            await service.scan(RTU, [{ unitId: 1, request: read }]);
+
+            expect(mockClients).toHaveLength(2);
+            expect(mockClients[0].close).toHaveBeenCalled();
+        });
 
         it('should query every target on a single connection and return only the responders', async () => {
             (ModbusRTU as unknown as jest.Mock).mockImplementationOnce(() => CreateMockClient({
@@ -161,13 +321,15 @@ describe('ModbusBusService', () => {
     });
 
     describe('checkConnection', () => {
-        it('should open then close a connection without any request', async () => {
+        it('should open the gateway connection without any request, then reuse it', async () => {
+            await service.checkConnection(TCP);
             await service.checkConnection(TCP);
 
             const [client] = mockClients;
+            expect(mockClients).toHaveLength(1);
             expect(client.connectTCP).toHaveBeenCalledWith('10.0.0.2', { port: 502, timeout: 2000 });
             expect(client.readHoldingRegisters).not.toHaveBeenCalled();
-            expect(client.close).toHaveBeenCalled();
+            expect(client.close).not.toHaveBeenCalled();
         });
 
         it('should propagate connection errors', async () => {

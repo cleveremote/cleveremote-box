@@ -94,6 +94,8 @@ export class MasterConfigModel {
     public baudRate?: number;
     public path?: string;
     public timeout?: number;
+    // ms de silence entre deux trames sur ce bus (absent = défaut du ModbusBusService)
+    public interFrameDelay?: number;
     // Registres à sonder (unit id DEFAULT_UNCONFIGURED_UNIT_ID) pour détecter un nouveau slave
     // non configuré : vide/absent = découverte désactivée pour ce Master.
     public discoveryRegisters?: number[];

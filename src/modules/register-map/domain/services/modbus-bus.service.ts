@@ -1,36 +1,51 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
 import { ModbusConnection, ModbusScanResponse, ModbusScanTarget, ModbusTransport } from '../models/modbus-connection.model';
-import { RegisterFunction, RegisterRawData, RegisterRequest } from '../models/register-map.model';
+import { READ_FUNCTIONS, RegisterFunction, RegisterRawData, RegisterRequest } from '../models/register-map.model';
+import { ModbusConnectionPool, ModbusGatewayKey } from './modbus-connection-pool';
 
 const UNREACHABLE_CODES = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH'];
 // Erreur (sans code) levée par modbus-serial quand la connexion TCP dépasse son timeout
 const TCP_CONNECT_TIMEOUT_MESSAGE = 'TCP Connection Timed Out';
+// Erreur levée par modbus-serial quand le slave ne répond pas dans le timeout
+const TRANSACTION_TIMED_OUT_ERROR = 'TransactionTimedOutError';
 const DEFAULT_TIMEOUT = 2000;
 const DEFAULT_BAUD_RATE = 9600;
+const DEFAULT_INTER_FRAME_DELAY = 30;
 
 /**
  * Exécution technique de requêtes Modbus brutes. Le bus RS485 est half-duplex : toutes les
  * transactions passent par une file unique (une requête concurrente se ferait écraser).
- * Les erreurs (exceptions Modbus comprises, cf. err.modbusCode) sont propagées.
+ * Une connexion par passerelle reste ouverte entre deux transactions (cf. ModbusConnectionPool), séparées
+ * par un silence (connection.interFrameDelay) : les capteurs lents ratent une trame qui suit de trop près la précédente.
+ * Une lecture sans réponse est redemandée une fois. Les erreurs (exceptions Modbus comprises, cf. err.modbusCode) sont propagées.
  */
 @Injectable()
-export class ModbusBusService {
+export class ModbusBusService implements OnModuleDestroy {
     // Fin de la dernière transaction en file : chaque nouvelle transaction s'y enchaîne
     private _tail: Promise<void> = Promise.resolve();
+    private readonly _pool: ModbusConnectionPool;
+    // Par passerelle : instant avant lequel aucune trame ne doit être émise
+    private readonly _quietUntil = new Map<string, number>();
 
-    public constructor(private readonly logger: Logger) { }
+    public constructor(private readonly logger: Logger) {
+        this._pool = new ModbusConnectionPool((client, connection) => this._connect(client, connection), (run) => this.runExclusive(run), logger);
+    }
 
     /** Lecture : données lues (bits tronqués à `length`) ; écriture : rien */
     public execute(connection: ModbusConnection, request: RegisterRequest): Promise<RegisterRawData> {
         return this.runExclusive(async () => {
-            const client = new ModbusRTU();
-            await this._connect(client, connection);
             try {
-                return await this._run(client, connection.unitId, request);
-            } finally {
-                client.close(() => this.logger.debug({ unitId: connection.unitId }, 'register request connection closed'));
+                return await this._transaction(connection, request);
+            } catch (err) {
+                // Une lecture est sans effet de bord : réponse perdue (parasite, capteur lent) redemandée une fois. Jamais une écriture.
+                if (!READ_FUNCTIONS.includes(request.function) || (err as { name?: string })?.name !== TRANSACTION_TIMED_OUT_ERROR) {
+                    throw err;
+                }
+                const { unitId } = connection;
+                this.logger.warn({ unitId, function: request.function, address: request.address }, 'modbus read timed out, retrying once');
+                return this._transaction(connection, request);
             }
         });
     }
@@ -44,38 +59,22 @@ export class ModbusBusService {
         if (targets.length === 0) {
             return Promise.resolve([]);
         }
-        return this.runExclusive(async () => {
+        return this.runExclusive(() => this._afterSilence(connection, async () => {
+            // Connexion dédiée (cibles muettes = cas nominal), celle du pool fermée avant : un port série ne s'ouvre qu'une fois
+            await this._pool.evict(connection);
             const client = new ModbusRTU();
             await this._connect(client, connection);
-            const responses: ModbusScanResponse[] = [];
             try {
-                for (const target of targets) {
-                    const startedAt = Date.now();
-                    try {
-                        client.setID(target.unitId);
-                        responses.push({ ...target, data: await this._run(client, target.unitId, target.request) });
-                        this.logger.log({ unitId: target.unitId, elapsedMs: Date.now() - startedAt }, 'scan target responded');
-                    } catch (err) {
-                        // cas nominal : rien ne répond à cet unit id / registre
-                        // erreurs modbus-serial (TransactionTimedOutError...) : objets simples, pas des Error
-                        const { name, message, errno, modbusCode } = (err ?? {}) as { name?: string; message?: string; errno?: string; modbusCode?: number };
-                        this.logger.log({ unitId: target.unitId, elapsedMs: Date.now() - startedAt, name, message, errno, modbusCode }, 'scan target without response');
-                    }
-                }
+                return await this._scanTargets(client, targets, this._interFrameDelay(connection));
             } finally {
                 client.close(() => this.logger.debug({ targets: targets.length }, 'scan connection closed'));
             }
-            return responses;
-        });
+        }));
     }
 
-    /** Ouvre puis referme une connexion (test de joignabilité) ; lève si la connexion échoue */
+    /** Ouvre la connexion de la passerelle si besoin (test de joignabilité) ; lève si la connexion échoue */
     public checkConnection(connection: ModbusConnection): Promise<void> {
-        return this.runExclusive(async () => {
-            const client = new ModbusRTU();
-            await this._connect(client, connection);
-            client.close(() => this.logger.debug({ unitId: connection.unitId }, 'check connection closed'));
-        });
+        return this.runExclusive(() => this._pool.withClient(connection, () => Promise.resolve()));
     }
 
     /** Exécute `run` seul sur le bus, à la suite des transactions en attente */
@@ -83,6 +82,57 @@ export class ModbusBusService {
         const result = this._tail.then(run);
         this._tail = result.then(() => undefined, () => undefined);
         return result;
+    }
+
+    public onModuleDestroy(): Promise<void> {
+        return this.runExclusive(() => this._pool.closeAll());
+    }
+
+    private _transaction(connection: ModbusConnection, request: RegisterRequest): Promise<RegisterRawData> {
+        return this._afterSilence(connection, () => this._pool.withClient(connection, (client) => this._run(client, connection.unitId, request)));
+    }
+
+    // Attend la fin du silence imposé sur la passerelle, exécute `run`, puis réarme le silence (compté depuis la fin de la transaction)
+    private async _afterSilence<T>(connection: ModbusConnection, run: () => Promise<T>): Promise<T> {
+        const key = ModbusGatewayKey(connection);
+        await this._sleep((this._quietUntil.get(key) ?? 0) - Date.now());
+        try {
+            return await run();
+        } finally {
+            this._quietUntil.set(key, Date.now() + this._interFrameDelay(connection));
+        }
+    }
+
+    private _interFrameDelay(connection: ModbusConnection): number {
+        return connection.interFrameDelay ?? DEFAULT_INTER_FRAME_DELAY;
+    }
+
+    private _sleep(ms: number): Promise<void> {
+        return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+    }
+
+    private async _scanTargets(client: ModbusRTU, targets: ModbusScanTarget[], interFrameDelay: number): Promise<ModbusScanResponse[]> {
+        const responses: ModbusScanResponse[] = [];
+        for (const [index, target] of targets.entries()) {
+            if (index > 0) {
+                await this._sleep(interFrameDelay);
+            }
+            const startedAt = Date.now();
+            try {
+                client.setID(target.unitId);
+                responses.push({ ...target, data: await this._run(client, target.unitId, target.request) });
+                this.logger.log({ unitId: target.unitId, elapsedMs: Date.now() - startedAt }, 'scan target responded');
+            } catch (err) {
+                // cas nominal : rien ne répond à cet unit id / registre
+                // erreurs modbus-serial (TransactionTimedOutError...) : objets simples, pas des Error
+                const { name, message, errno, modbusCode } = (err ?? {}) as { name?: string; message?: string; errno?: string; modbusCode?: number };
+                this.logger.log(
+                    { unitId: target.unitId, elapsedMs: Date.now() - startedAt, name, message, errno, modbusCode },
+                    'scan target without response'
+                );
+            }
+        }
+        return responses;
     }
 
     private async _connect(client: ModbusRTU, connection: ModbusConnection): Promise<void> {

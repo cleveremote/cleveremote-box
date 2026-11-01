@@ -13,6 +13,7 @@ export class DeviceMapper {
             config.baudRate = device.config.baudRate;
             config.path = device.config.path;
             config.timeout = device.config.timeout;
+            config.interFrameDelay = device.config.interFrameDelay;
             config.discoveryRegisters = device.config.discoveryRegisters;
             return config;
         }
@@ -62,6 +63,7 @@ export class DeviceMapper {
                 baudRate: config.baudRate,
                 path: config.path,
                 timeout: config.timeout,
+                interFrameDelay: config.interFrameDelay,
                 discoveryRegisters: config.discoveryRegisters
             };
         } else {

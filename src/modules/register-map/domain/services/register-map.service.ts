@@ -11,11 +11,16 @@ import { RegisterOperationDescriber, RegisterValueEncoder } from '../utils/regis
 import { FormulaEvaluator, RegisterFieldDecoder } from '../utils/register-field.util';
 import { FormulaEngine } from './formula-engine.service';
 import { ModbusBusService } from './modbus-bus.service';
+import { ModbusGatewayKey } from './modbus-connection-pool';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { REGISTER_MAPS_DIR } from './register-map-loader.service';
 
 type ChannelResult = Extract<OperationResult, { type: 'boolean[]' | 'enum[]' }>;
+
+// Lectures scopeFrom (paramètres de décodage quasi fixes, ex: position décimale) : relues au plus toutes les
+// SCOPE_CACHE_MS par équipement, et après toute écriture ou tout échec sur cet équipement
+const SCOPE_CACHE_MS = 5 * 60 * 1000;
 
 export interface BlockOperation {
     block: RegisterBlock;
@@ -30,6 +35,8 @@ export interface BlockOperation {
 @Injectable()
 export class RegisterMapService {
     private readonly _evaluate: FormulaEvaluator = (formula, scope) => this.formulaEngine.evaluate(formula, scope);
+    // Clé `${équipement}|${kind}|${bloc}.${opération}` (cf. _scopeKey)
+    private readonly _scopeCache = new Map<string, { raw: RegisterRawData; expiresAt: number }>();
 
     public constructor(
         private readonly modbusBus: ModbusBusService,
@@ -951,6 +958,9 @@ export class RegisterMapService {
             this.logger.warn({ kind: template.kind, unitId: connection.unitId, ...command, request, err: err.message, modbusCode: err.modbusCode },
                 'register map operation failed');
         }
+        if (!outcome.isOk || !READ_FUNCTIONS.includes(request.function)) {
+            this._forgetScope(connection);
+        }
         outcome.durationMs = Date.now() - start;
         return outcome;
     }
@@ -966,7 +976,7 @@ export class RegisterMapService {
         for (const ref of operation.scopeFrom ?? []) {
             const [blockId, operationId] = ref.split('.');
             const { operation: source } = this.findOperation(template, blockId, operationId);
-            const raw = await this.modbusBus.execute(connection, this.buildRequest(template, { blockId, operationId }));
+            const raw = await this._readScope(template, connection, blockId, operationId);
             const decoded = this.decodeResult(template, source, raw, scope);
             if (decoded.type === 'fields') {
                 fields.push(...decoded.fields);
@@ -974,6 +984,27 @@ export class RegisterMapService {
             }
         }
         return { scope, fields };
+    }
+
+    private async _readScope(template: RegisterMapTemplate, connection: ModbusConnection, blockId: string, operationId: string): Promise<RegisterRawData> {
+        const key = `${this._scopeKey(connection)}|${template.kind}|${blockId}.${operationId}`;
+        const cached = this._scopeCache.get(key);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.raw;
+        }
+        const raw = await this.modbusBus.execute(connection, this.buildRequest(template, { blockId, operationId }));
+        this._scopeCache.set(key, { raw, expiresAt: Date.now() + SCOPE_CACHE_MS });
+        return raw;
+    }
+
+    private _forgetScope(connection: ModbusConnection): void {
+        const prefix = `${this._scopeKey(connection)}|`;
+        [...this._scopeCache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => this._scopeCache.delete(key));
+    }
+
+    // Équipement : slave `unitId` derrière sa passerelle
+    private _scopeKey(connection: ModbusConnection): string {
+        return `${ModbusGatewayKey(connection)}#${connection.unitId}`;
     }
 
     // Écriture persistante demandée : décalage déclaré par l'opération (lève si l'opération ne le prévoit pas)

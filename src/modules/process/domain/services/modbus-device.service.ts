@@ -11,8 +11,9 @@ import { WaveshareDiscoveryService } from './waveshare-discovery.service';
 const DISCOVERY_TIMEOUT = 500;
 // Registre d'adresse par défaut des modules Waveshare
 const DEFAULT_DISCOVERY_REGISTER = 0x4000;
-// Timeout des tests de connectivité : un device muet ne doit pas bloquer longtemps la file du bus
-const CONNECTIVITY_TIMEOUT = 500;
+// Timeout des tests de connectivité : un device muet ne doit pas bloquer longtemps la file du bus, mais un capteur
+// lent (4800 bauds, réveil) doit avoir le temps de répondre sans être marqué déconnecté à tort
+const CONNECTIVITY_TIMEOUT = 1500;
 // Registre lu pour tester un slave sans registre de découverte (toute réponse, même une exception Modbus, suffit)
 const DEFAULT_CONNECTIVITY_REGISTER = 0x0000;
 
@@ -35,6 +36,7 @@ export class ModbusDeviceService {
             ? { transport: ModbusTransport.RTU, path: masterConfig.path, baudRate: masterConfig.baudRate, unitId }
             : { transport: ModbusTransport.TCP, host: masterConfig.ipAddress, port: masterConfig.port, unitId };
         connection.timeout = masterConfig.timeout;
+        connection.interFrameDelay = masterConfig.interFrameDelay;
         // IP obsolète (master en DHCP) : retrouvée par son deviceId Waveshare, masterConfig mis à jour en place
         connection.onUnreachable = async (): Promise<ModbusConnection | undefined> => {
             const isRefreshed = await this.waveshareDiscoveryService.refreshMasterAddress(masterConfig);

@@ -66,7 +66,7 @@ export class RegulationService {
             try {
                 const measured = await plant.read();
                 if (state.active && Number.isFinite(measured) && inputMax !== inputMin) {
-                    const target = ((measured - inputMin) / (inputMax - inputMin)) * 100;
+                    const target = ((measured - inputMin) / (inputMax - inputMin))*100;
                     const output = Math.min(plant.max, Math.max(plant.min, target));
                     if (Math.abs(output - plant.current()) >= deadband) {
                         await plant.write(output);
@@ -100,7 +100,7 @@ export class RegulationService {
         return {
             min: config.minOpening,
             max: config.maxOpening,
-            read: async () => (await this._sensorStrategy(sensor).read(sensor,true))[0]?.value,
+            read: async () => (await this._sensorStrategy(sensor).read(sensor))[0]?.value,
             write: port.write,
             current: () => config.openingPercent,
             settleMs: port.settleMs
