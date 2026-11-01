@@ -5,7 +5,7 @@ import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { TriggerModel } from '../models/trigger.model';
 import { StructureService } from './configuration.service';
-import { ProcessMode, ProcessType } from '../interfaces/executable.interface';
+import { ProcessMode } from '../interfaces/executable.interface';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { ScheduleModel } from '../models/schedule.model';
 import { ComputeSunEventDate, ResolveCoordinates } from './sun-event.util';
@@ -191,7 +191,7 @@ export class TriggerService {
         scheduleModel.duration = trigger.duration;
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
 
-        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, ProcessType.FORCE, trigger.action);
+        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, trigger.action);
         const methode = async (): Promise<void> => {
             await this.scheduleService.clearAllSchedules();
             await this.processService.execute({ ...process });
@@ -199,6 +199,6 @@ export class TriggerService {
             this.checkTriggerQueueProcess.next({ trigger, data })
         };
 
-        this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, ProcessType.FORCE, methode);
+        this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, methode);
     }
 }

@@ -8,7 +8,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
-import { ExecutableAction, ProcessMode, ProcessType } from '../interfaces/executable.interface';
+import { ExecutableAction, ProcessMode, StartPolicy } from '../interfaces/executable.interface';
 import { ProcessService } from './execution.service';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { CycleModel } from '../models/cycle.model';
@@ -137,7 +137,7 @@ export class ScheduleService {
         if (this.schedulerRegistry.doesExist('cron', schedule._id)) {
             this._applyPausedState(saved, isPaused);
         } else if (!isPaused) {
-            await this.initSchedule(saved, false, ProcessMode.SCHEDULED, ProcessType.INIT);
+            await this.initSchedule(saved, false, ProcessMode.SCHEDULED);
         }
         return saved;
     }
@@ -158,7 +158,7 @@ export class ScheduleService {
         }
         job.start();
         if (saved.cron.sunBehavior) {
-            const process = this.preapreScheduleProcess(saved, ProcessMode.SCHEDULED, ProcessType.INIT);
+            const process = this.preapreScheduleProcess(saved, ProcessMode.SCHEDULED);
             this._armSunInstant(saved, saved.cron.sunBehavior, this._buildExecutionMethode(saved, process));
         }
     }
@@ -180,7 +180,7 @@ export class ScheduleService {
     }
 
     public async initSchedule(schedule: ScheduleModel, isDeleted: boolean = false,
-        mode: ProcessMode = ProcessMode.SCHEDULED, type: ProcessType = ProcessType.INIT, overridedMethode?: () => void): Promise<ScheduleModel> {
+        mode: ProcessMode = ProcessMode.SCHEDULED, overridedMethode?: () => void): Promise<ScheduleModel> {
 
         if (isDeleted) {
             const index = this.configurationService.schedules.findIndex(x => x._id === schedule._id);
@@ -195,7 +195,7 @@ export class ScheduleService {
         if (!this.configurationService.schedules.some(x => x._id === schedule._id)) {
             this.configurationService.schedules.push(schedule);
         }
-        const process = this.preapreScheduleProcess(schedule, mode, type);
+        const process = this.preapreScheduleProcess(schedule, mode);
         const methode = overridedMethode ?? this._buildExecutionMethode(schedule, process);
         return this.createSchedule(schedule, methode);
     }
@@ -222,12 +222,13 @@ export class ScheduleService {
         return this.configurationService.schedules.find(x => x._id === schedule._id) ?? schedule;
     }
 
+    // un declenchement planifie (schedule ou trigger) passe toujours par l'arbitrage des rangs
     public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULED,
-        type: ProcessType = ProcessType.FORCE, action: ExecutableAction = ExecutableAction.ON): ProcessModel {
+        action: ExecutableAction = ExecutableAction.ON): ProcessModel {
         const process = new ProcessModel();
         process.cycle = this.configurationService.structure.cycles.find(x => x._id === schedule.cycleId);
         process.action = action;
-        process.type = ProcessType.INIT;
+        process.policy = StartPolicy.ARBITRATE;
         process.mode = mode;
         process.schedule = schedule;
         process.duration = schedule.duration;
@@ -244,7 +245,7 @@ export class ScheduleService {
                 const process = new ProcessModel();
                 process.cycle = cycleModel;
                 process.action = ExecutableAction.ON;
-                process.type = ProcessType.INIT;
+                process.policy = StartPolicy.ARBITRATE;
                 process.mode = ProcessMode.SCHEDULED;
                 process.duration = schedule.duration;
                 process.schedule = schedule;

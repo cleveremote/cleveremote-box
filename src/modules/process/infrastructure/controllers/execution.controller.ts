@@ -15,8 +15,11 @@ export class ExecutionController {
     @MessagePattern(['box/execution/process', 'box/execution/process/local'])
     public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<boolean> {
         const uc = new ProcessExecuteUC(this._processService);
-        const input = ProcessExecuteDTO.mapToProcessModel(processExecuteDTO);
-        return uc.execute(input)
+        const sequenceCommand = ProcessExecuteDTO.mapToSequenceCommand(processExecuteDTO);
+        const execution = sequenceCommand
+            ? uc.executeSequence(processExecuteDTO._id, sequenceCommand)
+            : uc.execute(ProcessExecuteDTO.mapToProcessModel(processExecuteDTO));
+        return execution
             .then(() => true)
             .catch(() => false);
     }

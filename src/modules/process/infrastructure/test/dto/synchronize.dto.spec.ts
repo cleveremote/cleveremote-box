@@ -6,7 +6,6 @@ import {
     ConditionSync,
     ChildCycleSync,
     ChildCycleConfigSync,
-    ModePriority,
     ScheduleSynchronizeDTO,
     CronSync,
     SunBehavior,
@@ -29,8 +28,7 @@ import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import {
     CycleType,
     ExecutableAction,
-    ExecutionMode,
-    ProcessMode
+    ExecutionMode
 } from '@process/domain/interfaces/executable.interface';
 import { ConditionConnector, ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { SunState } from '@process/domain/interfaces/schedule.interface';
@@ -89,23 +87,6 @@ describe('synchronize.dto (mapping vers les modeles domaine)', () => {
             const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto({ display: false }));
 
             expect(model.display).toBe(false);
-        });
-
-        it('should default modePriority to MANUAL/SCHEDULED/TRIGGER (0/1/2) when absent', () => {
-            const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto());
-
-            expect(model.modePriority).toEqual([
-                { mode: ProcessMode.MANUAL, priority: 0 },
-                { mode: ProcessMode.SCHEDULED, priority: 1 },
-                { mode: ProcessMode.TRIGGER, priority: 2 }
-            ]);
-        });
-
-        it('should keep the explicit modePriority array when provided', () => {
-            const priority: ModePriority = Object.assign(new ModePriority(), { mode: ProcessMode.MANUAL, priority: 5 });
-            const model = CycleSynchronizeDTO.mapToCycleModel(CreateMinimalDto({ modePriority: [priority] }));
-
-            expect(model.modePriority).toEqual([{ mode: ProcessMode.MANUAL, priority: 5 }]);
         });
 
         it('should map every condition, including order/connector/symbolStart/symbolEnd', () => {

@@ -1,5 +1,6 @@
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
-import { GlobalSettingsModel } from '@process/domain/models/global-settings.model';
+import { DEFAULT_MODE_RANKS, GlobalSettingsModel } from '@process/domain/models/global-settings.model';
+import { ProcessMode } from '@process/domain/interfaces/executable.interface';
 import { APP_VERSION } from '@framework/utils/app-version.util';
 
 describe('GlobalSettingsService', () => {
@@ -53,6 +54,37 @@ describe('GlobalSettingsService', () => {
             await service.update(input);
 
             expect(service.localCoordinates).toEqual({ latitude: 34.1, longitude: -6.47 });
+        });
+    });
+
+    describe('modeRanks', () => {
+        it('should rank with the defaults until settings are loaded', () => {
+            expect(service.rankOf(ProcessMode.MANUAL)).toBe(0);
+            expect(service.rankOf(ProcessMode.SCHEDULED)).toBe(1);
+            expect(service.rankOf(ProcessMode.TRIGGER)).toBe(2);
+        });
+
+        it('should rank SYSTEM (or a missing mode) last', () => {
+            expect(service.rankOf(ProcessMode.SYSTEM)).toBe(Number.POSITIVE_INFINITY);
+            expect(service.rankOf(undefined)).toBe(Number.POSITIVE_INFINITY);
+        });
+
+        it('should return and cache the stored ranks', async () => {
+            const ranks = { MANUAL: 2, SCHEDULE: 0, TRIGGER: 1 };
+            globalSettingsRepository.get.mockResolvedValue(Object.assign(new GlobalSettingsModel(), { modeRanks: ranks }));
+
+            const result = await service.get();
+
+            expect(result.modeRanks).toEqual(ranks);
+            expect(service.rankOf(ProcessMode.SCHEDULED)).toBe(0);
+        });
+
+        it('should fill the defaults when nothing is stored', async () => {
+            globalSettingsRepository.get.mockResolvedValue(new GlobalSettingsModel());
+
+            const result = await service.get();
+
+            expect(result.modeRanks).toEqual(DEFAULT_MODE_RANKS);
         });
     });
 });

@@ -14,6 +14,20 @@ export class LocalCoordinates {
 }
 export const LocalCoordinatesSchema = SchemaFactory.createForClass(LocalCoordinates);
 
+// cles = valeurs de ProcessMode (cf. ModeRanksModel)
+@Schema({ _id: false })
+export class ModeRanks {
+    @Prop({ required: true })
+    public MANUAL: number;
+
+    @Prop({ required: true })
+    public SCHEDULE: number;
+
+    @Prop({ required: true })
+    public TRIGGER: number;
+}
+export const ModeRanksSchema = SchemaFactory.createForClass(ModeRanks);
+
 @Schema({ collection: 'globalsettings', timestamps: true })
 export class GlobalSettings {
     @Prop({ type: String, default: () => randomUUID() })
@@ -21,5 +35,8 @@ export class GlobalSettings {
 
     @Prop({ type: LocalCoordinatesSchema })
     public localCoordinates?: LocalCoordinates;
+
+    @Prop({ type: ModeRanksSchema })
+    public modeRanks?: ModeRanks;
 }
 export const GlobalSettingsSchema = SchemaFactory.createForClass(GlobalSettings);

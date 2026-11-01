@@ -20,7 +20,6 @@ export class CycleMapper {
         model.style = cycle.style;
         model.executionMode = cycle.executionMode;
         model.conditions = ConditionMapper.mapListToModel(cycle.conditions);
-        model.modePriority = (cycle.modePriority ?? []).map((mp) => ({ mode: mp.mode, priority: mp.priority }));
         model.sequences = [];
         model.schedules = [];
         model.triggers = [];
@@ -42,7 +41,6 @@ export class CycleMapper {
         cycle.style = model.style as Cycle['style'];
         cycle.executionMode = model.executionMode;
         cycle.conditions = (model.conditions ?? []).map(ConditionMapper.mapToSchema);
-        cycle.modePriority = model.modePriority ?? [];
         cycle.parentCycleId = model.parentCycleId ?? null;
         cycle.childCycles = (model.childCycles ?? []).map(ChildCycleMapper.mapToSchema);
         return cycle;

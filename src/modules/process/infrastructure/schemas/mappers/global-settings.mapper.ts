@@ -7,12 +7,17 @@ export class GlobalSettingsMapper {
         const model = new GlobalSettingsModel();
         model.id = globalSettings._id;
         model.localCoordinates = globalSettings.localCoordinates;
+        model.modeRanks = globalSettings.modeRanks
+            ? { MANUAL: globalSettings.modeRanks.MANUAL, SCHEDULE: globalSettings.modeRanks.SCHEDULE, TRIGGER: globalSettings.modeRanks.TRIGGER }
+            : undefined;
         return model;
     }
 
     public static mapToSchema(model: GlobalSettingsModel): GlobalSettings {
         const globalSettings = new GlobalSettings();
+        // champ absent = non modifie (mongoose ignore les cles undefined dans un update)
         globalSettings.localCoordinates = model.localCoordinates;
+        globalSettings.modeRanks = model.modeRanks;
         return globalSettings;
     }
 

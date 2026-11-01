@@ -1,7 +1,7 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable max-lines */
 import { ApiProperty } from '@nestjs/swagger';
-import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType, ExecutableAction, ExecutionMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
 import { ConditionConnector, ConditionOperator, ConditionParentType, ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
 import { ElementType as ConditionElementType } from '@process/domain/models/event.model';
@@ -173,13 +173,6 @@ export class Style {
     public iconColor: IconColorSync;
 }
 
-export class ModePriority {
-    @IsEnum(ProcessMode)
-    public mode: ProcessMode;
-    @IsNumber()
-    public priority: number;
-}
-
 export class CycleSynchronizeDTO {
     @IsOptional()
     @IsString()
@@ -207,15 +200,6 @@ export class CycleSynchronizeDTO {
                 base: '#1565C0'
             }
         };
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => ModePriority)
-    public modePriority?: ModePriority[] = [
-            { mode: ProcessMode.MANUAL, priority: 0 },
-            { mode: ProcessMode.SCHEDULED, priority: 1 },
-            { mode: ProcessMode.TRIGGER, priority: 2 }
-        ];
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
@@ -277,18 +261,6 @@ export class CycleSynchronizeDTO {
                 isSkipped: childCycleSync.config.isSkipped
             }
         }));
-
-        cycle.modePriority = [];
-        if (cycleSynchronizeDTO.modePriority) {
-            cycleSynchronizeDTO.modePriority?.forEach(priority => { //nya remove optional
-                const priorityModel = { mode: priority.mode, priority: priority.priority };
-                cycle.modePriority.push(priorityModel);
-            });
-        } else {
-            cycle.modePriority.push({ mode: ProcessMode.MANUAL, priority: 0 });
-            cycle.modePriority.push({ mode: ProcessMode.SCHEDULED, priority: 1 });
-            cycle.modePriority.push({ mode: ProcessMode.TRIGGER, priority: 2 });
-        }
 
         cycle.sequences = (cycleSynchronizeDTO.sequences ?? []).map(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();

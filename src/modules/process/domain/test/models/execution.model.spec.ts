@@ -1,4 +1,4 @@
-import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
+import { StartPolicy, ExecutableAction, ProcessMode, ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
@@ -104,7 +104,7 @@ describe('ExecutionModel model', () => {
 
         execution.cycle = cycle;
         execution.action = ExecutableAction.ON;
-        execution.type = ProcessType.FORCE;
+        execution.policy = StartPolicy.FORCE;
         execution.mode = ProcessMode.MANUAL;
         expect(execution).toBeDefined();
     });

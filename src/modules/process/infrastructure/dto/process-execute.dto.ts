@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ProcessType, ExecutableAction, ProcessMode, ExecutableStatus, IExecutable } from '@process/domain/interfaces/executable.interface';
+import { ExecutableAction, ProcessMode, ExecutableStatus, SequenceCommand, StartPolicy } from '@process/domain/interfaces/executable.interface';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ProcessModel } from '@process/domain/models/process.model';
 import { ExecutableType } from '@process/domain/models/value.model';
@@ -11,6 +11,28 @@ export enum USER_ENS_TYPE {
     CS = '993',
     CM = '400'
 }
+// valeurs de "type" envoyees par le front (protocole inchange)
+export enum ProcessExecuteType {
+    INIT = 'INIT', // demarrage arbitre par les rangs
+    FORCE = 'FORCE', // demarrage force (ou acceptation d'une confirmation)
+    QUEUED = 'QUEUED', // reponse a une confirmation : attendre la fin des conflits
+    IGNORE = 'IGNORE', // reponse a une confirmation : abandonner
+    SKIP = 'SKIP',
+    FORCE_SEQUENCE = 'FORCE_SEQUENCE'
+}
+
+const POLICY_BY_TYPE: Partial<Record<ProcessExecuteType, StartPolicy>> = {
+    [ProcessExecuteType.INIT]: StartPolicy.ARBITRATE,
+    [ProcessExecuteType.FORCE]: StartPolicy.FORCE,
+    [ProcessExecuteType.QUEUED]: StartPolicy.QUEUE,
+    [ProcessExecuteType.IGNORE]: StartPolicy.FORCE
+};
+
+const SEQUENCE_COMMAND_BY_TYPE: Partial<Record<ProcessExecuteType, SequenceCommand>> = {
+    [ProcessExecuteType.SKIP]: SequenceCommand.SKIP,
+    [ProcessExecuteType.FORCE_SEQUENCE]: SequenceCommand.FORCE
+};
+
 export class ProcessExecuteDTO {
 
     @IsNotEmpty()
@@ -28,10 +50,10 @@ export class ProcessExecuteDTO {
     @ApiProperty({ enum: ExecutableType, required: false, default: ExecutableType.CYCLE })
     public executableType?: ExecutableType;
 
-    @IsEnum(ProcessType)
+    @IsEnum(ProcessExecuteType)
     @IsOptional()
-    @ApiProperty({ required: false })
-    public type?: ProcessType;
+    @ApiProperty({ enum: ProcessExecuteType, required: false })
+    public type?: ProcessExecuteType;
 
     @IsEnum(ProcessMode)
     @IsOptional()
@@ -48,16 +70,22 @@ export class ProcessExecuteDTO {
     @ApiProperty({ required: false })
     public duration?: number;
 
-    public static mapToProcessModel(notificationCreateDTO: ProcessExecuteDTO): ProcessModel {
+    // valeurs historiques du front traduites en consigne de demarrage ; IGNORE (refus d'une
+    // confirmation) = arret, qui annule l'attente du cycle (cf. ProcessService._cancelPendingConfirmation)
+    public static mapToProcessModel(processExecuteDTO: ProcessExecuteDTO): ProcessModel {
         const process = new ProcessModel();
         process.cycle = new CycleModel();
-        process.cycle._id = notificationCreateDTO._id;
+        process.cycle._id = processExecuteDTO._id;
         process.cycle.status = ExecutableStatus.STOPPED;
-        process.action = notificationCreateDTO.action;
-        process.mode = notificationCreateDTO.mode;
-        process.type = notificationCreateDTO.type;
-        process.duration = notificationCreateDTO.duration;
+        process.action = processExecuteDTO.type === ProcessExecuteType.IGNORE ? ExecutableAction.OFF : processExecuteDTO.action;
+        process.mode = processExecuteDTO.mode;
+        process.policy = POLICY_BY_TYPE[processExecuteDTO.type];
+        process.duration = processExecuteDTO.duration;
         return process;
     }
-}
 
+    // SKIP / FORCE_SEQUENCE visent une sequence (_id = id de sequence), pas un cycle
+    public static mapToSequenceCommand(processExecuteDTO: ProcessExecuteDTO): SequenceCommand | undefined {
+        return SEQUENCE_COMMAND_BY_TYPE[processExecuteDTO.type];
+    }
+}

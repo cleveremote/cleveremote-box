@@ -1,7 +1,7 @@
 import {
     DigitalIoAutoCreationStrategy
 } from '@process/domain/services/slave-provisioning/auto-creation/strategies/digital-io-auto-creation.strategy';
-import { CycleType, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 import { ActuatorType, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { DeviceModel, DeviceType, SlaveTemplate } from '@process/domain/models/device.model';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -60,7 +60,6 @@ describe('DigitalIoAutoCreationStrategy', () => {
         cycles.forEach((cycle, index) => {
             expect(isValidUuid(cycle._id)).toBe(true);
             expect(cycle.type).toBe(CycleType.MODULE);
-            expect(cycle.modePriority.map((p) => p.mode)).toEqual(Object.values(ProcessMode));
             expect(cycle.sequences).toHaveLength(1);
             expect(cycle.sequences[0]).toMatchObject({
                 cycleId: cycle._id,

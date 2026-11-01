@@ -7,13 +7,15 @@ import { SocketIoClientProxyService } from '../../../../common/websocket/socket-
 import { ProcessInvalidTypeError } from '../errors/process-invalid-type-error';
 import { StructureInvalidError } from '../errors/structure-invalid.error';
 import {
+    CauseType,
     ExecutableAction,
     ExecutableStatus,
     ProcessMode,
-    ProcessType,
     CycleType,
     ProcessNotification,
-    SequenceExecutionEntry
+    SequenceCommand,
+    SequenceExecutionEntry,
+    StartPolicy
 } from '../interfaces/executable.interface';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ComActuatorConfigModel } from '../models/actuator.model';
@@ -38,8 +40,10 @@ import { ConditionFailureReporter, evaluateConditions, sortConditions } from '..
 import { ConditionModel } from '../models/condition.model';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
+import { GlobalSettingsService } from './global-settings.service';
+import { ConfirmationRequestModel } from '../models/confirmation-request.model';
 
-type ProcessReport = { id: string; type: ProcessType; cause: string }[];
+type ProcessReport = { id: string; type: CauseType; cause: string }[];
 // causes d'une notification CONDITIONS_NOT_VERIFIED : id = element de la condition fausse
 type ConditionReport = { id: string; type: 'CONDITION'; cause: string }[];
 
@@ -60,6 +64,9 @@ export class ProcessService {
     // cycle id -> process recu en QUEUED, demarre (FORCE) par _startQueuedCycles quand plus aucun
     // cycle en cours n'est en conflit avec lui ; ordre d'insertion = ordre de demarrage.
     private queuedCycles = new Map<string, ProcessModel>();
+    // cycle id -> process en attente de la reponse du front (statut WAITTING_CONFIRMATION) apres un
+    // arbitrage perdu ou un schedule.shouldConfirmation ; la reponse (FORCE / QUEUE / OFF) le retire.
+    private pendingConfirmations = new Map<string, ProcessModel>();
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
         private configurationService: StructureService,
@@ -71,7 +78,8 @@ export class ProcessService {
         @Inject(forwardRef(() => TriggerService)) private triggerService: TriggerService,
         @Inject(forwardRef(() => ScheduleService)) private scheduleService: ScheduleService,
         private readonly logger: Logger,
-        private deviceCommandService: DeviceCommandService
+        private deviceCommandService: DeviceCommandService,
+        private globalSettingsService: GlobalSettingsService
     ) {
 
     }
@@ -81,13 +89,31 @@ export class ProcessService {
         return await this._manageProcessType(process);
     }
 
+    // commandes du front sur une sequence d'un cycle en cours
+    public async executeSequenceCommand(sequenceId: string, command: SequenceCommand): Promise<void> {
+        if (command === SequenceCommand.SKIP) {
+            this._skipSequence(sequenceId);
+        } else if (command === SequenceCommand.FORCE) {
+            this._forceSequence(sequenceId);
+        } else {
+            throw new ProcessInvalidTypeError();
+        }
+    }
+
+    // pilote par un autre cycle (regle 2 CYCLE -> MODULE, enfant demarre par son Group) : son mode
+    // est herite de ce cycle. Un arret SYSTEM portant un sourceCycleId (enfant stoppe par son Group)
+    // n'est pas "pilote".
+    private static _isDriven(process: ProcessModel): boolean {
+        return !!process.sourceCycleId && process.mode !== ProcessMode.SYSTEM;
+    }
+
     private _resolveActuators(): Promise<Map<string, IActuatorModule>> {
         return this.actuatorService.resolve(this.configurationService.structure.getModuleIds());
     }
 
     private _buildManualPushButtonReport(process: ProcessModel): ProcessReport {
-        if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.type === ProcessType.FORCE) {
-            return [{ id: process.id, type: process.type, cause: 'manual push button : ' + process.cycle.name }];
+        if (process.mode === ProcessMode.TRIGGER && process.cycle.type === CycleType.MODULE && process.policy === StartPolicy.FORCE) {
+            return [{ id: process.id, type: CauseType.FORCE, cause: 'manual push button : ' + process.cycle.name }];
         }
         return [];
     }
@@ -126,12 +152,12 @@ export class ProcessService {
             process.cycle.status = ExecutableStatus.STOPPED;
 
             // libere d'abord tout cycle MODULE qui n'est IN_PROCCESS que parce que CE cycle l'a
-            // auto-demarre (regle 2, mode AUTO + sourceCycleId le pointant) et qui n'a jamais ete
-            // repris depuis par un declenchement independant (mode different) - sinon il reste
+            // auto-demarre (regle 2, pilote via sourceCycleId le pointant) et qui n'a jamais ete
+            // repris depuis par un declenchement independant (sans sourceCycleId) - sinon il reste
             // orphelin indefiniment (status/processList perimes, actuator pourtant deja coupe
             // physiquement plus bas) et _isActuatorStillInUse bloque a tort son actuator pour toute
-            // tentative future de l'arreter. Un cycle MODULE repris manuellement/schedule/trigger a
-            // un mode different et reste protege (cf. test "actuator still used by another active
+            // tentative future de l'arreter. Un cycle MODULE repris manuellement/schedule/trigger n'a
+            // pas de sourceCycleId et reste protege (cf. test "actuator still used by another active
             // MODULE cycle"). Fait AVANT de calculer modulesToStop ci-dessous : une fois ces MODULE
             // liberes, _isActuatorStillInUse ne les voit plus comme "en cours" et laisse leurs
             // actuators partages etre coupes normalement.
@@ -168,8 +194,8 @@ export class ProcessService {
 
     // regle 2/3/4 (arret d'un MODULE) : un actuator partage ne doit etre coupe que si plus aucun
     // CYCLE ni MODULE actif (autre que celui qu'on est en train d'arreter) ne le reference encore.
-    // on exclut aussi les entrees dont le cycle n'est pas IN_PROCCESS (ex: CONFIRMATION, meme filtre
-    // que _getConflictedExecutables) : elles n'ont jamais reellement pilote l'actuator.
+    // on exclut aussi les entrees dont le cycle n'est plus IN_PROCCESS (arret deja decide) : elles ne
+    // pilotent plus l'actuator.
     private _isActuatorStillInUse(
         actuator: IActuatorModule, excludeCycleId: string, actuators: Map<string, IActuatorModule>
     ): boolean {
@@ -181,19 +207,19 @@ export class ProcessService {
     }
 
     // libere tout cycle MODULE qui n'est IN_PROCCESS que parce que sourceCycleId l'a auto-demarre
-    // (regle 2, mode AUTO) et qui n'a jamais ete repris depuis independamment (auquel cas son
-    // entree processList porterait un mode different, cf. test "independently triggered"). Un
+    // (regle 2, pilote) et qui n'a jamais ete repris depuis independamment (auquel cas son entree
+    // processList n'aurait pas de sourceCycleId, cf. test "independently triggered"). Un
     // reset() complet (status/processList/progress) est applique a chacun, pas seulement une
     // coupure d'actuator, pour que son statut reflete correctement qu'il ne tourne plus.
     private async _releaseAutoStartedModules(sourceCycleId: string): Promise<void> {
         const orphaned = this.processList.filter((proc) =>
             proc.cycle.type === CycleType.MODULE &&
-            proc.mode === ProcessMode.AUTO &&
+            ProcessService._isDriven(proc) &&
             proc.sourceCycleId === sourceCycleId &&
             proc.cycle.status === ExecutableStatus.IN_PROCCESS
         );
         for (const proc of orphaned) {
-            const report: ProcessReport = [{ id: proc.id, type: ProcessType.FORCE, cause: 'owning cycle stopped : ' + sourceCycleId }];
+            const report: ProcessReport = [{ id: proc.id, type: CauseType.FORCE, cause: 'owning cycle stopped : ' + sourceCycleId }];
             await this.reset(proc, report);
         }
     }
@@ -211,7 +237,7 @@ export class ProcessService {
             const process = new ProcessModel();
             process.cycle = cycleModel;
             process.action = ExecutableAction.ON;
-            process.type = ProcessType.FORCE;
+            process.policy = StartPolicy.FORCE;
             process.mode = ProcessMode.MANUAL;
             await this.execute(process);
         }
@@ -220,9 +246,9 @@ export class ProcessService {
     // mapping sortie physique IO module -> actuator COM (via config.deviceId + config.actions[0].channel)
     // -> pilotage du cycle MODULE qui possede cet actuator, sur le meme principe que la regle 2
     // (_triggerOwningModuleCycle) mais declenche par une lecture materielle Modbus plutot que par
-    // un CYCLE en cours d'execution. mode = TRIGGER (pas AUTO, contrairement a
+    // un CYCLE en cours d'execution. mode = TRIGGER sans sourceCycleId (pas pilote, contrairement a
     // _triggerOwningModuleCycle) : ce chemin n'a pas de cycle CYCLE amont a proteger, donc la regle 1
-    // (_cascadeStopConflictingCycles, gardee par mode !== AUTO) doit s'appliquer normalement et
+    // (_cascadeStopConflictingCycles, ignoree pour un process pilote) doit s'appliquer normalement et
     // arreter tout cycle CYCLE en cours partageant un actuator COM/RPI avec ce cycle MODULE.
     // Le garde no-op ci-dessous (etat deja atteint) est indispensable : quand la regle 2 demarre elle-
     // meme ce cycle MODULE (actuator commute par un CYCLE deja en cours), l'ecriture Modbus physique
@@ -259,7 +285,7 @@ export class ProcessService {
         const moduleProcess = new ProcessModel();
         moduleProcess.cycle = moduleCycle;
         moduleProcess.action = isOn ? ExecutableAction.ON : ExecutableAction.OFF;
-        moduleProcess.type = ProcessType.FORCE;
+        moduleProcess.policy = StartPolicy.FORCE;
         moduleProcess.mode = ProcessMode.TRIGGER;
         await this.execute(moduleProcess);
     }
@@ -280,12 +306,16 @@ export class ProcessService {
         });
     }
 
-    private _removeIgnoredProcess(process: ProcessModel): Promise<string> {
-        this.queuedCycles.delete(process.cycle._id);
-        const index = this.processList.findIndex(x => x.cycle._id === process.cycle._id);
-        if (index > -1) {
-            this.processList.splice(index, 1);
-        }
+    // attente de confirmation : process en file, ou statut rehydrate au boot sans entree en memoire
+    private _isAwaitingConfirmation(cycle: CycleModel): boolean {
+        return this.pendingConfirmations.has(cycle._id) || cycle.status === ExecutableStatus.WAITTING_CONFIRMATION;
+    }
+
+    // refus d'une confirmation (IGNORE) ou OFF sur un cycle en attente : abandonne l'attente sans
+    // toucher aux actuators, le cycle n'a jamais demarre.
+    private _cancelPendingConfirmation(process: ProcessModel): Promise<string> {
+        this.pendingConfirmations.delete(process.cycle._id);
+        process.cycle.status = ExecutableStatus.STOPPED;
 
         const data = { type: ExecutableType.CYCLE, id: process.cycle._id, status: ExecutableStatus.STOPPED };
         return this._publishStatusEvent({
@@ -311,188 +341,190 @@ export class ProcessService {
     private _initializeProcess(process: ProcessModel): void {
         const struct = this.configurationService.structure;
         const currentCycle = struct.cycles.find(x => x._id === process.cycle._id);
-        if (!currentCycle && (process.type === ProcessType.SKIP || process.type === ProcessType.FORCE_SEQUENCE)) {
-            //skip / force sequence concernent les sequences ... donc pas de cycle existant
-            process.id = process.cycle._id;
-        } else if (currentCycle) {
-            process.cycle = currentCycle;
-        } else {
+        if (!currentCycle) {
             throw new StructureInvalidError();
         }
+        process.cycle = currentCycle;
     }
 
     private async _manageProcessType(process: ProcessModel): Promise<void> {
-        if (process.type === ProcessType.SKIP) {
-            const sequenceSkipFlag = this.queuedSequences.find(x => x.sequenceId === process.id);
-            sequenceSkipFlag.flag.next(null);
-        } else if (process.type === ProcessType.FORCE_SEQUENCE) {
-            this._forceSequence(process.id);
-        } else if (process.type === ProcessType.FORCE) {
-            if (process.cycle.type === CycleType.MODULE && process.mode !== ProcessMode.AUTO) {
-                await this._cascadeStopConflictingCycles(process);
-            }
-            if (process.cycle.type === CycleType.CYCLE && process.mode !== ProcessMode.AUTO && process.action === ExecutableAction.OFF) {
-                await this._cascadeStopOwningModules(process);
-            }
-            if (process.action === ExecutableAction.OFF) {
-                let report: ProcessReport;
-                if (process.sourceCycleId) {
-                    report = [];
-                    report.push({ id: process.id, type: process.type, cause: 'stopped by parent : ' + this.configurationService.structure.cycles.find(x => x._id === process.sourceCycleId)?.name });
-                } else {
-                    report = this._buildManualPushButtonReport(process);
-                }
-                if (process.cycle.type === CycleType.GROUP) {
-                    await this._stopGroupChildren(process.cycle);
-                }
-                await this.reset(process, report);
-                // regle child manuel (OFF) : un arret MANUEL direct d'un enfant de Group (pas via
-                // _stopChildCycle, qui est en mode=AUTO) doit desactiver ses propres trigger/schedule
-                // pour empecher un redemarrage automatique - meme geste que _stopGroupChildren fait
-                // pour TOUS les enfants quand c'est le Group qui s'arrete. No-op silencieux si
-                // l'enfant n'a ni trigger ni schedule.
-                if (process.mode === ProcessMode.MANUAL && process.cycle.parentCycleId) {
-                    await this._setChildTriggersAndSchedulesPaused(process.cycle._id, true);
-                    // reset() ci-dessus est un no-op pour un enfant qui n'a jamais reellement
-                    // demarre (cas trigger/schedule : seul son trigger/schedule etait arme, son
-                    // status est deja STOPPED et il n'est pas dans processList) - son hook interne
-                    // _syncParentGroupOffIfAllChildrenStopped ne se declenche donc jamais dans ce
-                    // cas. Sans cet appel explicite ici, un Group dont TOUS les enfants sont de ce
-                    // type ne repasserait jamais OFF automatiquement, quel que soit le nombre de
-                    // clics "stop" recus sur ses enfants.
-                    await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
-                }
-            } else {
-                if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
-                    // regle 2 (reclaim) : un cycle MODULE deja IN_PROCCESS peut changer de cycle CYCLE
-                    // proprietaire (ex: cycle-B remplace cycle-A suite a une resolution de conflit) sans
-                    // que son status change (l'actuator est deja/redevient ON via le CYCLE lui-meme) -
-                    // sans cette mise a jour, son entree processList reste associee a l'ancien
-                    // sourceCycleId (potentiellement deja retire de processList), ce qui fausse toute
-                    // lecture ulterieure de "quel cycle pilote ce module actuellement". Exclusion
-                    // sourceCycleId !== process.cycle._id : la propre sequence du cycle MODULE
-                    // s'auto-declenche aussi via ce meme mecanisme (rule 2 reutilisee pour son propre
-                    // actuator) avec sourceCycleId = son propre _id - un no-op inoffensif qu'il ne faut
-                    // pas laisser ecraser une reelle attribution a un cycle CYCLE proprietaire.
-                    // existing.mode === AUTO : ne transfere que d'un proprietaire AUTO a un autre -
-                    // un MODULE deja repris independamment (MANUAL/SCHEDULED/TRIGGER, cf. test
-                    // "independently triggered") ne doit jamais se faire reattribuer silencieusement
-                    // par la cascade rule 2 d'un CYCLE qui partage juste le meme actuator.
-                    if (process.cycle.type === CycleType.MODULE && process.mode === ProcessMode.AUTO &&
-                        process.sourceCycleId && process.sourceCycleId !== process.cycle._id) {
-                        const existing = this.processList.find(x => x.cycle._id === process.cycle._id);
-                        if (existing && existing.mode === ProcessMode.AUTO && existing.sourceCycleId !== process.sourceCycleId) {
-                            existing.sourceCycleId = process.sourceCycleId;
-                        }
-                    }
-                    return; // regle 3 : ON sur un cycle deja en cours -> no-op silencieux
-                }
-                // regle child manuel (ON) : miroir exact de _startGroupChildren pour un ON MANUEL
-                // envoye directement sur un enfant de Group (pas via _startChildCycle, qui est en
-                // mode=AUTO). Si cet enfant possede son propre trigger/schedule, on ne demarre
-                // JAMAIS ses sequences ni ne touche au Group parent : on se contente de lever la
-                // pause, exactement comme le ferait le Group en le "demarrant". S'il ne possede ni
-                // trigger ni schedule, on tombe dans le pipeline normal ci-dessous (deja existant).
-                // Exception : un enfant en attente de confirmation (WAITTING_CONFIRMATION) recoit ce
-                // FORCE comme la confirmation elle-meme -> il doit suivre le pipeline normal.
-                if (process.mode === ProcessMode.MANUAL && process.cycle.parentCycleId) {
-                    const isAwaitingConfirmation = process.cycle.status === ExecutableStatus.WAITTING_CONFIRMATION ||
-                        this.processList.some(x => x.cycle._id === process.cycle._id && x.type === ProcessType.CONFIRMATION);
-                    const hasTriggerOrSchedule =
-                        !!this._getChildTriggers(process.cycle._id).length || !!this._getChildSchedules(process.cycle._id).length;
-                    if (hasTriggerOrSchedule && !isAwaitingConfirmation) {
-                        await this._setChildTriggersAndSchedulesPaused(process.cycle._id, false);
-                        return; // ne jamais demarrer le cycle ni le Group parent dans ce cas
-                    }
-                }
-                // un FORCE recu pendant la mise en file la court-circuite (demarrage immediat)
-                this.queuedCycles.delete(process.cycle._id);
-                process.cycle.status = ExecutableStatus.IN_PROCCESS; // reservation synchrone (ferme la fenetre TOCTOU)
-                // pour un cycle MODULE, _cascadeStopConflictingCycles ci-dessus est deja le
-                // mecanisme de resolution de conflit faisant autorite (exclusion du cycle source,
-                // restriction COM/RPI) : _resetConflictedProcesses ignore sourceCycleId et
-                // stopperait a tort le cycle CYCLE qui vient de declencher ce MODULE (regle 2).
-                if (process.cycle.type !== CycleType.MODULE) {
-                    await this._resetConflictedProcesses(process);
-                }
-                if (process.cycle.type === CycleType.GROUP) {
-                    // orchestration Group : ne suit pas le pipeline sequences/actuators (fire-and-forget,
-                    // comme _executeProcess ci-dessous - execute() ne bloque jamais le temps qu'un cycle tourne).
-                    this._executeGroupOn(process).catch((err) => this.logger.error({ err }, 'group children start error'));
-                } else {
-                    this._executeProcess(process);
-                }
-            }
-        } else if (process.type === ProcessType.QUEUED) {
-            await this._queueCycle(process);
-        } else if (process.type === ProcessType.IGNORE) {
-            await this._removeIgnoredProcess(process);
-        } else if (process.type === ProcessType.CONFIRMATION) {
-            return;
-        } else if (process.type === ProcessType.INIT) {
-            await this._manageProcessMode(process);
-        } else {
+        if (process.policy === StartPolicy.ARBITRATE) {
+            return this._arbitrate(process);
+        }
+        if (process.policy === StartPolicy.QUEUE) {
+            return this._queueCycle(process);
+        }
+        if (process.policy !== StartPolicy.FORCE) {
             throw new ProcessInvalidTypeError();
+        }
+        if (process.action === ExecutableAction.OFF && this._isAwaitingConfirmation(process.cycle)) {
+            await this._cancelPendingConfirmation(process);
+            return;
+        }
+        await this._executeForced(process);
+    }
+
+    private async _executeForced(process: ProcessModel): Promise<void> {
+        const isDriven = ProcessService._isDriven(process);
+        // un ordre MANUEL direct (pas un enfant pilote par son Group)
+        const isDirectManual = process.mode === ProcessMode.MANUAL && !isDriven;
+        if (process.cycle.type === CycleType.MODULE && !isDriven) {
+            await this._cascadeStopConflictingCycles(process);
+        }
+        if (process.cycle.type === CycleType.CYCLE && !isDriven && process.action === ExecutableAction.OFF) {
+            await this._cascadeStopOwningModules(process);
+        }
+        if (process.action === ExecutableAction.OFF) {
+            let report: ProcessReport;
+            if (process.sourceCycleId) {
+                report = [];
+                report.push({ id: process.id, type: CauseType.FORCE, cause: 'stopped by parent : ' + this.configurationService.structure.cycles.find(x => x._id === process.sourceCycleId)?.name });
+            } else {
+                report = this._buildManualPushButtonReport(process);
+            }
+            if (process.cycle.type === CycleType.GROUP) {
+                await this._stopGroupChildren(process.cycle);
+            }
+            await this.reset(process, report);
+            // regle child manuel (OFF) : un arret MANUEL direct d'un enfant de Group (pas via
+            // _stopChildCycle, qui est en mode=SYSTEM) doit desactiver ses propres trigger/schedule
+            // pour empecher un redemarrage automatique - meme geste que _stopGroupChildren fait
+            // pour TOUS les enfants quand c'est le Group qui s'arrete. No-op silencieux si
+            // l'enfant n'a ni trigger ni schedule.
+            if (isDirectManual && process.cycle.parentCycleId) {
+                await this._setChildTriggersAndSchedulesPaused(process.cycle._id, true);
+                // reset() ci-dessus est un no-op pour un enfant qui n'a jamais reellement
+                // demarre (cas trigger/schedule : seul son trigger/schedule etait arme, son
+                // status est deja STOPPED et il n'est pas dans processList) - son hook interne
+                // _syncParentGroupOffIfAllChildrenStopped ne se declenche donc jamais dans ce
+                // cas. Sans cet appel explicite ici, un Group dont TOUS les enfants sont de ce
+                // type ne repasserait jamais OFF automatiquement, quel que soit le nombre de
+                // clics "stop" recus sur ses enfants.
+                await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
+            }
+        } else {
+            if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
+                // regle 2 (reclaim) : un cycle MODULE deja IN_PROCCESS peut changer de cycle CYCLE
+                // proprietaire (ex: cycle-B remplace cycle-A suite a une resolution de conflit) sans
+                // que son status change (l'actuator est deja/redevient ON via le CYCLE lui-meme) -
+                // sans cette mise a jour, son entree processList reste associee a l'ancien
+                // sourceCycleId (potentiellement deja retire de processList), ce qui fausse toute
+                // lecture ulterieure de "quel cycle pilote ce module actuellement". Exclusion
+                // sourceCycleId !== process.cycle._id : la propre sequence du cycle MODULE
+                // s'auto-declenche aussi via ce meme mecanisme (rule 2 reutilisee pour son propre
+                // actuator) avec sourceCycleId = son propre _id - un no-op inoffensif qu'il ne faut
+                // pas laisser ecraser une reelle attribution a un cycle CYCLE proprietaire.
+                // existing pilote : ne transfere que d'un proprietaire a un autre - un MODULE deja
+                // repris independamment (sans sourceCycleId, cf. test "independently triggered")
+                // ne doit jamais se faire reattribuer silencieusement par la cascade rule 2 d'un
+                // CYCLE qui partage juste le meme actuator.
+                if (process.cycle.type === CycleType.MODULE && isDriven && process.sourceCycleId !== process.cycle._id) {
+                    const existing = this.processList.find(x => x.cycle._id === process.cycle._id);
+                    if (existing && ProcessService._isDriven(existing) && existing.sourceCycleId !== process.sourceCycleId) {
+                        existing.sourceCycleId = process.sourceCycleId;
+                        existing.mode = process.mode;
+                    }
+                }
+                return; // regle 3 : ON sur un cycle deja en cours -> no-op silencieux
+            }
+            // regle child manuel (ON) : miroir exact de _startGroupChildren pour un ON MANUEL
+            // envoye directement sur un enfant de Group (pas via _startChildCycle, qui le pilote
+            // via sourceCycleId). Si cet enfant possede son propre trigger/schedule, on ne demarre
+            // JAMAIS ses sequences ni ne touche au Group parent : on se contente de lever la
+            // pause, exactement comme le ferait le Group en le "demarrant". S'il ne possede ni
+            // trigger ni schedule, on tombe dans le pipeline normal ci-dessous (deja existant).
+            // Exception : un enfant en attente de confirmation (WAITTING_CONFIRMATION) recoit ce
+            // FORCE comme la confirmation elle-meme -> il doit suivre le pipeline normal.
+            if (isDirectManual && process.cycle.parentCycleId) {
+                const isAwaitingConfirmation = this._isAwaitingConfirmation(process.cycle);
+                const hasTriggerOrSchedule =
+                    !!this._getChildTriggers(process.cycle._id).length || !!this._getChildSchedules(process.cycle._id).length;
+                if (hasTriggerOrSchedule && !isAwaitingConfirmation) {
+                    await this._setChildTriggersAndSchedulesPaused(process.cycle._id, false);
+                    return; // ne jamais demarrer le cycle ni le Group parent dans ce cas
+                }
+            }
+            // un FORCE recu pendant la mise en file ou l'attente de confirmation la court-circuite
+            this.queuedCycles.delete(process.cycle._id);
+            this.pendingConfirmations.delete(process.cycle._id);
+            process.cycle.status = ExecutableStatus.IN_PROCCESS; // reservation synchrone (ferme la fenetre TOCTOU)
+            // pour un cycle MODULE, _cascadeStopConflictingCycles ci-dessus est deja le
+            // mecanisme de resolution de conflit faisant autorite (exclusion du cycle source,
+            // restriction COM/RPI) : _resetConflictedProcesses ignore sourceCycleId et
+            // stopperait a tort le cycle CYCLE qui vient de declencher ce MODULE (regle 2).
+            if (process.cycle.type !== CycleType.MODULE) {
+                await this._resetConflictedProcesses(process);
+            }
+            if (process.cycle.type === CycleType.GROUP) {
+                // orchestration Group : ne suit pas le pipeline sequences/actuators (fire-and-forget,
+                // comme _executeProcess ci-dessous - execute() ne bloque jamais le temps qu'un cycle tourne).
+                this._executeGroupOn(process).catch((err) => this.logger.error({ err }, 'group children start error'));
+            } else {
+                this._executeProcess(process);
+            }
         }
     }
 
-    private async _manageProcessMode(process: ProcessModel): Promise<void> {
-        // conditions du cycle fausses : on ne demarre pas le cycle (ni execution, ni confirmation).
-        // uniquement pour un demarrage : un OFF doit toujours pouvoir arreter le cycle.
-        const isStart = process.action !== ExecutableAction.OFF;
-        if (isStart) {
-            const cycleCauses = await this._getCycleConditionCauses(process);
-            if (cycleCauses) {
-                this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
-                this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses);
-                return;
-            }
-            const sequenceCauses = await this._getUnverifiedSequencesCauses(process);
-            if (sequenceCauses) {
-                this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
-                this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses);
-                return;
-            }
+    // arbitrage d'un demarrage (StartPolicy.ARBITRATE) contre les cycles en cours partageant un
+    // actuator : rang strictement plus petit (GlobalSettingsService.rankOf) -> FORCE, les conflits
+    // seront stoppes ; rang egal ou plus grand, ou schedule.shouldConfirmation -> le cycle attend la
+    // reponse du front (FORCE / QUEUE / OFF). Un OFF n'a jamais de conflit.
+    private async _arbitrate(process: ProcessModel): Promise<void> {
+        if (process.action !== ExecutableAction.OFF && !(await this._canStart(process))) {
+            return;
         }
-        const cyclePriority = process.cycle.modePriority.find(x => x.mode === process.mode);
         const report: ProcessReport = [];
-        const conflictedProcesses: ProcessModel[] = await this._getConflictedExecutables(process);
-        if (process.schedule?.shouldConfirmation) {
-            process.type = ProcessType.CONFIRMATION;
-            this.processList.push(process);
-            report.push({ id: process.id, type: process.type, cause: 'schedule triggered : ' + process.cycle.name });
-        } else
-            if (!conflictedProcesses.length) {
-                process.type = ProcessType.FORCE;
-            }
-        for (const proc of conflictedProcesses) {
-            if (cyclePriority.priority < proc.cycle.modePriority.find((x) => x.mode === proc.mode).priority) {
-                if ((process.mode === ProcessMode.SCHEDULED || process.mode === ProcessMode.TRIGGER) && process.schedule.shouldConfirmation) {
-                    process.type = ProcessType.CONFIRMATION;
-                } else {
-                    process.type = ProcessType.FORCE;
-                }
-
-                report.push({ id: proc.id, type: process.type, cause: 'conflicted with cycle : ' + proc.cycle.name });
-            } else {
-                const processAlreadyExist = this.processList.find(x => x.cycle._id === process.cycle._id);
-                process.type = ProcessType.CONFIRMATION;
-
-                if (!processAlreadyExist) {
-                    this.processList.push(process);
-                    report.push({ id: proc.id, type: process.type, cause: 'conflicted with cycle : ' + proc.cycle.name });
-                }
-                break;
-            }
+        // detail structure pour la popin du front (causes : textes historiques conserves)
+        const confirmation: ConfirmationRequestModel = { isRequested: !!process.schedule?.shouldConfirmation, conflicts: [] };
+        let isConfirmationNeeded = confirmation.isRequested;
+        if (isConfirmationNeeded) {
+            report.push({ id: process.id, type: CauseType.CONFIRMATION, cause: 'schedule triggered : ' + process.cycle.name });
+        }
+        const rank = this.globalSettingsService.rankOf(process.mode);
+        // tous les conflits sont listes : un seul perdu impose la confirmation, et une confirmation
+        // FORCE les stoppe tous (_resetConflictedProcesses)
+        for (const proc of await this._getConflictedExecutables(process)) {
+            const isWinning = rank < this.globalSettingsService.rankOf(proc.mode);
+            confirmation.conflicts.push({ cycleId: proc.cycle._id, name: proc.cycle.name, mode: proc.mode, isWinning });
+            isConfirmationNeeded = isConfirmationNeeded || !isWinning;
+            report.push({
+                id: proc.id,
+                type: isConfirmationNeeded ? CauseType.CONFIRMATION : CauseType.FORCE,
+                cause: 'conflicted with cycle : ' + proc.cycle.name
+            });
         }
 
-        const confirmationType = report.find((x) => x.type === ProcessType.CONFIRMATION);
-        if (confirmationType) {
-            process.type = ProcessType.CONFIRMATION;
-            this._needConfirmation(process, report);
-        } else {
-            this._manageProcessType(process);
+        // pas d'await (comme avant) : execute() rend la main sans attendre le demarrage effectif
+        if (isConfirmationNeeded) {
+            this.pendingConfirmations.set(process.cycle._id, process);
+            this._needConfirmation(process, report, confirmation)
+                .catch((err) => this.logger.warn({ err }, 'failed to publish confirmation request'));
+            return;
         }
+        process.policy = StartPolicy.FORCE;
+        this._manageProcessType(process).catch((err) => this.logger.error({ err }, 'arbitrated start error'));
+    }
+
+    // demarrage arbitre : refuse si le cycle tourne deja (regle 3, no-op silencieux sans repasser en
+    // attente) ou si ses conditions sont fausses (ni execution, ni confirmation). Un OFF n'est jamais
+    // concerne : il doit toujours pouvoir arreter le cycle.
+    private async _canStart(process: ProcessModel): Promise<boolean> {
+        if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
+            return false;
+        }
+        const cycleCauses = await this._getCycleConditionCauses(process);
+        if (cycleCauses) {
+            this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
+            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses);
+            return false;
+        }
+        const sequenceCauses = await this._getUnverifiedSequencesCauses(process);
+        if (sequenceCauses) {
+            this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
+            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses);
+            return false;
+        }
+        return true;
     }
 
     // null des qu'une sequence est verifiee, sinon les causes de toutes les sequences (prefixees par leur nom).
@@ -562,13 +594,13 @@ export class ProcessService {
             {
                 next: async () => {
                     const report: ProcessReport = [];
-                    report.push({ id: process.id, type: process.type, cause: 'end lifecycle normal stop : ' + process.cycle.name });
+                    report.push({ id: process.id, type: CauseType.FORCE, cause: 'end lifecycle normal stop : ' + process.cycle.name });
                     await this.reset(process, report);
                 },
                 error: async (_err) => {
                     this.logger.error({ err: _err }, 'execution error');
                     const report: ProcessReport = [];
-                    report.push({ id: process.id, type: process.type, cause: 'abnormal stop : ' + process.cycle.name + 'detail:=>' + _err });
+                    report.push({ id: process.id, type: CauseType.FORCE, cause: 'abnormal stop : ' + process.cycle.name + 'detail:=>' + _err });
                     await this.reset(process, report);
                 }
             }
@@ -582,7 +614,7 @@ export class ProcessService {
         await this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, []);
         const token = Symbol();
         this.groupRunTokens.set(process.cycle._id, token);
-        await this._startGroupChildren(process.cycle, token);
+        await this._startGroupChildren(process.cycle, token, process.mode);
     }
 
     // groupStartsInProgress est marque pendant toute la duree de la sequence de demarrage : un
@@ -592,10 +624,10 @@ export class ProcessService {
     // encore eu sa chance de demarrer. Le try/finally est isole dans cette methode (plutot que
     // directement autour de la boucle de _runGroupChildrenSequence) pour ne pas ajouter un niveau
     // d'imbrication supplementaire a une boucle deja profondement imbriquee.
-    private async _startGroupChildren(groupCycle: CycleModel, token: symbol): Promise<void> {
+    private async _startGroupChildren(groupCycle: CycleModel, token: symbol, mode: ProcessMode): Promise<void> {
         this.groupStartsInProgress.add(groupCycle._id);
         try {
-            await this._runGroupChildrenSequence(groupCycle, token);
+            await this._runGroupChildrenSequence(groupCycle, token, mode);
         } finally {
             this.groupStartsInProgress.delete(groupCycle._id);
         }
@@ -603,7 +635,8 @@ export class ProcessService {
 
     // parcourt les enfants dans l'ordre (config.order), en respectant isSkipped/delayBefore/
     // delayAfter/waitForCompletion ; s'arrete si le groupe a recu un OFF entretemps (token invalide).
-    private async _runGroupChildrenSequence(groupCycle: CycleModel, token: symbol): Promise<void> {
+    // mode = origine du Group, heritee par les enfants qu'il demarre.
+    private async _runGroupChildrenSequence(groupCycle: CycleModel, token: symbol, mode: ProcessMode): Promise<void> {
         for (const ref of this._getOrderedChildRefs(groupCycle)) {
             if (this.groupRunTokens.get(groupCycle._id) !== token) {
                 return;
@@ -625,7 +658,7 @@ export class ProcessService {
             if (hasTriggerOrSchedule) {
                 await this._setChildTriggersAndSchedulesPaused(child._id, false);
             } else {
-                await this._startChildCycle(child, groupCycle._id);
+                await this._startChildCycle(child, groupCycle._id, mode);
                 if (ref.config?.waitForCompletion) {
                     await this._waitForCycleStopped(child);
                     if (this.groupRunTokens.get(groupCycle._id) !== token) {
@@ -718,20 +751,20 @@ export class ProcessService {
         const groupOffProcess = new ProcessModel();
         groupOffProcess.cycle = group;
         groupOffProcess.action = ExecutableAction.OFF;
-        groupOffProcess.type = ProcessType.FORCE;
+        groupOffProcess.policy = StartPolicy.FORCE;
         groupOffProcess.mode = ProcessMode.SYSTEM;
         await this.execute(groupOffProcess);
     }
 
-    private async _startChildCycle(child: CycleModel, sourceCycleId: string): Promise<void> {
+    private async _startChildCycle(child: CycleModel, sourceCycleId: string, mode: ProcessMode): Promise<void> {
         if (child.status === ExecutableStatus.IN_PROCCESS) {
             return;
         }
         const childProcess = new ProcessModel();
         childProcess.cycle = child;
         childProcess.action = ExecutableAction.ON;
-        childProcess.type = ProcessType.FORCE;
-        childProcess.mode = ProcessMode.AUTO;
+        childProcess.policy = StartPolicy.FORCE;
+        childProcess.mode = mode;
         childProcess.sourceCycleId = sourceCycleId;
         await this.execute(childProcess);
     }
@@ -740,7 +773,7 @@ export class ProcessService {
         const childProcess = new ProcessModel();
         childProcess.cycle = child;
         childProcess.action = ExecutableAction.OFF;
-        childProcess.type = ProcessType.FORCE;
+        childProcess.policy = StartPolicy.FORCE;
         childProcess.mode = ProcessMode.SYSTEM;
         childProcess.sourceCycleId = sourceCycleId;
         await this.execute(childProcess);
@@ -765,14 +798,8 @@ export class ProcessService {
         for (const proc of conflictedProcesses) {
             proc.mode = ProcessMode.SYSTEM; // pour que la regle 1 (_cascadeStopConflictingCycles) s'applique aussi a ces arrets
             const report: ProcessReport = [];
-            report.push({ id: proc.id, type: process.type, cause: 'stopped by conflicted cycle : ' + process.cycle.name });
+            report.push({ id: proc.id, type: CauseType.FORCE, cause: 'stopped by conflicted cycle : ' + process.cycle.name });
             await this.reset(proc, report);
-        }
-        if (process.type === ProcessType.FORCE) {
-            const foundIndex = this.processList.findIndex(x => x.cycle._id === process.cycle._id && x.type === ProcessType.CONFIRMATION);
-            if (foundIndex > -1) {
-                this.processList.splice(foundIndex, 1);
-            }
         }
     }
 
@@ -787,16 +814,17 @@ export class ProcessService {
         if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             return; // regle 3 : deja en cours -> no-op silencieux
         }
+        this.pendingConfirmations.delete(process.cycle._id);
         const actuators = await this._resolveActuators();
         const conflicts = this._getRunningConflicts(process.cycle, actuators);
         if (!conflicts.length) {
-            process.type = ProcessType.FORCE;
+            process.policy = StartPolicy.FORCE;
             return this._manageProcessType(process);
         }
         // mise en file synchrone apres le calcul des conflits : aucun arret ne peut s'intercaler et etre manque
         this.queuedCycles.set(process.cycle._id, process);
         const report: ProcessReport = conflicts
-            .map((cyc) => ({ id: process.id, type: ProcessType.QUEUED, cause: 'queued after cycle : ' + cyc.name }));
+            .map((cyc) => ({ id: process.id, type: CauseType.QUEUED, cause: 'queued after cycle : ' + cyc.name }));
         this.logger.log({ cycleId: process.cycle._id, waitingFor: conflicts.map((cyc) => cyc._id) }, 'cycle queued');
         await this._publishWaitingStatus(process, ExecutableStatus.QUEUED, report);
     }
@@ -816,7 +844,7 @@ export class ProcessService {
             }
             this.queuedCycles.delete(cycleId);
             this.logger.log({ cycleId }, 'conflicts ended, starting queued cycle');
-            queued.type = ProcessType.FORCE;
+            queued.policy = StartPolicy.FORCE;
             await this._manageProcessType(queued);
         }
     }
@@ -831,22 +859,21 @@ export class ProcessService {
             modules.some((module) => cyc.exists(module, actuators)));
     }
 
-    // un cycle MODULE partageant un actuator n'est jamais un "conflit" a arbitrer ici (priorite/
+    // un cycle MODULE partageant un actuator n'est jamais un "conflit" a arbitrer ici (rang/
     // confirmation) : rule 1 (_cascadeStopConflictingCycles) et rule 2 (_triggerOwningModuleCycle)
     // gerent deja entierement la relation CYCLE<->MODULE sur cet actuator, de facon automatique et
-    // sans jamais demander de confirmation - y compris pour un cycle demarre manuellement (type
-    // FORCE direct, qui ne passe meme pas par _manageProcessMode). Un cycle demarre via son propre
-    // schedule/trigger (mode SCHEDULED/TRIGGER, type INIT -> _manageProcessMode) doit se comporter
-    // de la meme facon : un MODULE actif sur le meme actuator ne doit jamais a lui seul declencher
-    // une demande de confirmation.
+    // sans jamais demander de confirmation - y compris pour un cycle demarre manuellement (FORCE
+    // direct, qui ne passe meme pas par _arbitrate). Un cycle demarre via son propre schedule/trigger
+    // (StartPolicy.ARBITRATE -> _arbitrate) doit se comporter de la meme facon : un MODULE actif sur
+    // le meme actuator ne doit jamais a lui seul declencher une demande de confirmation. Les cycles en
+    // attente de confirmation ne sont pas dans processList (cf. pendingConfirmations).
     private async _getConflictedExecutables(process: ProcessModel): Promise<ProcessModel[]> {
         const conflictedExecutable: ProcessModel[] = [];
         const actuators = await this._resolveActuators();
         const modules = process.cycle.getModules(actuators);
         modules.forEach((module) => {
-            this.processList.forEach((proc) => { // and not in confirmation state
-                const isConflicting = proc.cycle._id !== process.cycle._id &&
-                    process.type !== ProcessType.CONFIRMATION && proc.type !== ProcessType.CONFIRMATION
+            this.processList.forEach((proc) => {
+                const isConflicting = proc.cycle._id !== process.cycle._id
                     && proc.cycle.type !== CycleType.MODULE && proc.cycle.exists(module, actuators)
                     && !conflictedExecutable.find((x) => x.cycle._id === proc.cycle._id) && process.action !== 'OFF';
                 if (isConflicting) {
@@ -858,8 +885,8 @@ export class ProcessService {
         return conflictedExecutable;
     }
 
-    // regle 1 : un ON/OFF sur un cycle MODULE stoppe immediatement (sans passer par la priorite
-    // / confirmation) tous les cycles CYCLE partageant au moins un actuator COM/RPI avec lui.
+    // regle 1 : un ON/OFF sur un cycle MODULE (non pilote) stoppe immediatement (sans passer par le
+    // rang / la confirmation) tous les cycles CYCLE partageant au moins un actuator COM/RPI avec lui.
     private async _cascadeStopConflictingCycles(process: ProcessModel): Promise<void> {
         const actuators = await this._resolveActuators();
         const moduleActuators = process.cycle.getModules(actuators)
@@ -876,7 +903,7 @@ export class ProcessService {
 
         for (const proc of conflicting) {
             const report: ProcessReport = [];
-            report.push({ id: proc.id, type: process.type, cause: 'single module stop  : ' + process.cycle.name });
+            report.push({ id: proc.id, type: CauseType.FORCE, cause: 'single module stop  : ' + process.cycle.name });
 
             await this.reset(proc, report);
         }
@@ -900,14 +927,15 @@ export class ProcessService {
 
         for (const proc of owningModules) {
             const report: ProcessReport = [];
-            report.push({ id: proc.id, type: process.type, cause: 'parent cycle stop : ' + process.cycle.name });
+            report.push({ id: proc.id, type: CauseType.FORCE, cause: 'parent cycle stop : ' + process.cycle.name });
 
             await this.reset(proc, report);
         }
     }
 
     // regle 2 : trouve le cycle MODULE possedant cet actuator, et pilote son ON/OFF au moment
-    // precis ou le cycle CYCLE (sourceCycleId) commute effectivement cet actuator.
+    // precis ou le cycle CYCLE (sourceCycleId) commute effectivement cet actuator ; le MODULE herite
+    // du mode (origine) de ce cycle.
     private async _triggerOwningModuleCycle(
         actuator: IActuatorModule, action: number, sourceCycleId: string | undefined, mode: ProcessMode
     ): Promise<void> {
@@ -928,8 +956,8 @@ export class ProcessService {
         const moduleProcess = new ProcessModel();
         moduleProcess.cycle = moduleCycle;
         moduleProcess.action = action === 1 ? ExecutableAction.ON : ExecutableAction.OFF;
-        moduleProcess.type = ProcessType.FORCE;
-        moduleProcess.mode = ProcessMode.AUTO;
+        moduleProcess.policy = StartPolicy.FORCE;
+        moduleProcess.mode = mode;
         moduleProcess.sourceCycleId = sourceCycleId;
         await this.execute(moduleProcess);
     }
@@ -971,6 +999,16 @@ export class ProcessService {
         return obs.pipe(
             mergeMap(() => from(this._runSequences(process, executionLst, modules, timings, sourceCycleId)))
         );
+    }
+
+    // termine la sequence en cours (reveille _runSequence) : le cycle passe a la suivante
+    private _skipSequence(sequenceId: string): void {
+        const running = this.queuedSequences.find(x => x.sequenceId === sequenceId);
+        if (!running) {
+            this.logger.warn({ sequenceId }, 'sequence skip ignored (sequence not running)');
+            return;
+        }
+        running.flag.next(null);
     }
 
     // force une sequence sautee (conditions fausses, deja notifiee au front) : sans interrompre la sequence
@@ -1232,14 +1270,15 @@ export class ProcessService {
         }
     }
 
-    private _needConfirmation(processModel: ProcessModel, causes: { type: ProcessType; cause: string }[]): Promise<string> {
-        return this._publishWaitingStatus(processModel, ExecutableStatus.WAITTING_CONFIRMATION, causes);
+    private _needConfirmation(processModel: ProcessModel, causes: { type: CauseType; cause: string }[],
+        confirmation: ConfirmationRequestModel): Promise<string> {
+        return this._publishWaitingStatus(processModel, ExecutableStatus.WAITTING_CONFIRMATION, causes, confirmation);
     }
 
     // statut pose de facon synchrone (avant toute attente) : un demarrage qui suit ne doit pas etre ecrase
     private _publishWaitingStatus(processModel: ProcessModel, status: ExecutableStatus.WAITTING_CONFIRMATION | ExecutableStatus.QUEUED,
-        causes: { type: ProcessType; cause: string }[]): Promise<string> {
-        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes };
+        causes: { type: CauseType; cause: string }[], confirmation?: ConfirmationRequestModel): Promise<string> {
+        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes, confirmation };
         const cycFound = this.configurationService.structure.cycles.find((cyc) => cyc._id === data.id);
         if (cycFound) {
             cycFound.status = status;
@@ -1248,7 +1287,7 @@ export class ProcessService {
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
-            additionalData: { type: processModel.mode, value: data.status, status: data.status, causes }
+            additionalData: { type: processModel.mode, value: data.status, status: data.status, causes, confirmation }
         }, data);
     }
 

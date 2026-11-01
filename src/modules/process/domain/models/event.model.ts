@@ -1,4 +1,5 @@
 import { ExecutableAction, ExecutableStatus } from '../interfaces/executable.interface';
+import { ConfirmationRequestModel } from './confirmation-request.model';
 
 export enum ElementType {
     CYCLE = 'CYCLE',
@@ -13,6 +14,8 @@ export class ProcessEventData {
     public startedAt?: Date;
     public duration?: number;
     public causes?: { type: string; cause: string }[];
+    // statut WAITTING_CONFIRMATION uniquement : raison de l'attente (popin du front)
+    public confirmation?: ConfirmationRequestModel;
 }
 
 export class SensorEventData {

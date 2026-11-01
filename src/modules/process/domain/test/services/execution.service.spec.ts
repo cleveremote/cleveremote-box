@@ -23,8 +23,9 @@ import { TriggerModel } from '@process/domain/models/trigger.model';
 import { IActuatorModule, ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorModel, ComActuatorConfigModel } from '@process/domain/models/actuator.model';
 import {
-    CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessNotification, ProcessType
+    CauseType, CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessNotification, SequenceCommand, StartPolicy
 } from '@process/domain/interfaces/executable.interface';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { ExecutableType } from '@process/domain/models/value.model';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
@@ -133,6 +134,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let triggerService: { setPaused: jest.Mock; onElementValueChanged: BehaviorSubject<unknown> };
     let scheduleService: { setPaused: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
+    let globalSettingsService: GlobalSettingsService;
     let service: ProcessService;
     let actuatorTypeOverrides: Record<string, ActuatorType>;
 
@@ -225,6 +227,9 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         };
         scheduleService = { setPaused: jest.fn().mockImplementation((schedule) => Promise.resolve(schedule)) };
         logger = CreateLoggerMock();
+        // service reel sans repository : rangs par defaut (MANUAL 0, SCHEDULE 1, TRIGGER 2),
+        // modifiables par test via globalSettingsService.modeRanks
+        globalSettingsService = new GlobalSettingsService({} as never);
 
         service = new ProcessService(
             schedulerRegistry,
@@ -237,7 +242,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             triggerService as never,
             scheduleService as never,
             logger as never,
-            deviceCommandService as never
+            deviceCommandService as never,
+            globalSettingsService
         );
     });
 
@@ -245,7 +251,6 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         name: string;
         // une entree par sequence a creer pour ce cycle (dans l'ordre d'execution)
         sequences: Partial<SequenceSpec>[];
-        modePriority?: { mode: ProcessMode; priority: number }[];
         type?: CycleType;
     }
 
@@ -260,7 +265,6 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         for (const spec of specs) {
             const saved = await cycleRepository.save(CreateCycleModel({
                 name: spec.name,
-                ...(spec.modePriority ? { modePriority: spec.modePriority } : {}),
                 ...(spec.type ? { type: spec.type } : {})
             }));
             savedIds.push(saved._id);
@@ -280,12 +284,12 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         return cycle;
     }
 
-    function CreateProcess(cycle: CycleModel, mode: ProcessMode, action: ExecutableAction, type = ProcessType.FORCE): ProcessModel {
+    function CreateProcess(cycle: CycleModel, mode: ProcessMode, action: ExecutableAction, policy = StartPolicy.FORCE): ProcessModel {
         const process = new ProcessModel();
         process.cycle = cycle;
         process.mode = mode;
         process.action = action;
-        process.type = type;
+        process.policy = policy;
         return process;
     }
 
@@ -384,7 +388,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         it('should start a queued cycle immediately when no conflicting cycle is running', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
 
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.QUEUE));
 
             expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
@@ -396,10 +400,10 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
             ]);
             await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
             expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.QUEUE));
 
             expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
             expect(cycleB.status).toEqual(ExecutableStatus.QUEUED);
@@ -407,7 +411,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 elementId: cycleB._id,
                 additionalData: expect.objectContaining({
                     status: ExecutableStatus.QUEUED,
-                    causes: [expect.objectContaining({ type: ProcessType.QUEUED, cause: 'queued after cycle : cycle-a' })]
+                    causes: [expect.objectContaining({ type: CauseType.QUEUED, cause: 'queued after cycle : cycle-a' })]
                 })
             }));
 
@@ -426,8 +430,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
             ]);
             await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.QUEUED));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.QUEUE));
 
             await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
             expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
@@ -438,44 +442,34 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
         });
 
-        it('should be a no-op for ProcessType.CONFIRMATION', async () => {
-            const cycle = await SeedCycle('cycle-1', ['module-a']);
-            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.CONFIRMATION);
+        it('should cancel a pending confirmation on OFF (front IGNORE) without touching the actuators', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+            actuatorService.reset.mockClear();
 
-            await service.execute(process);
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
 
-            expect(actuatorService.execute).not.toHaveBeenCalled();
+            expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
+            expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(actuatorService.reset).not.toHaveBeenCalled();
+            expect(eventRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+                elementId: cycleB._id,
+                additionalData: expect.objectContaining({ status: ExecutableStatus.STOPPED })
+            }));
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
-        it('should remove and report a STOPPED status for ProcessType.IGNORE', async () => {
-            const cycle = await SeedCycle('cycle-1', ['module-a']);
-            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.IGNORE);
-
-            await service.execute(process);
-
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    elementId: cycle._id,
-                    additionalData: expect.objectContaining({ status: ExecutableStatus.STOPPED })
-                })
-            );
-        });
-
-        it('should remove the process from the tracked list when it was already running', async () => {
-            const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
-            expect(service.processList).toHaveLength(1);
-
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.IGNORE));
-
-            expect(service.processList).toHaveLength(0);
-        });
-
-        it('should auto-force execution (INIT -> FORCE) when nothing else is running', async () => {
-            // _manageProcessMode() ne "await" pas son propre appel interne a _manageProcessType() :
+        it('should auto-force execution (ARBITRATE -> FORCE) when nothing else is running', async () => {
+            // _arbitrate() ne "await" pas son propre appel interne a _manageProcessType() :
             // execute() peut donc resoudre avant que le statut IN_PROCCESS ne soit pose.
             const cycle = await SeedCycle('cycle-1', ['module-a'], 150);
-            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT);
+            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE);
 
             await service.execute(process);
             await Flush(50);
@@ -487,22 +481,19 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(200);
         });
 
-        it('should resolve the queued flag for a sequence when using ProcessType.SKIP', async () => {
+        it('should resolve the queued flag for a sequence when using SequenceCommand.SKIP', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
             const sequenceId = cycle.sequences[0]._id;
-            const skipCycle = new CycleModel();
-            skipCycle._id = sequenceId;
 
-            await expect(service.execute(CreateProcess(skipCycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.SKIP)))
-                .resolves.toBeUndefined();
+            await expect(service.executeSequenceCommand(sequenceId, SequenceCommand.SKIP)).resolves.toBeUndefined();
 
             await Flush(150);
         });
 
-        it('should throw ProcessInvalidTypeError for an unrecognized process type', async () => {
+        it('should throw ProcessInvalidTypeError for an unrecognized start policy', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a']);
-            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, 'UNKNOWN' as ProcessType);
+            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, 'UNKNOWN' as StartPolicy);
 
             await expect(service.execute(process)).rejects.toBeInstanceOf(ProcessInvalidTypeError);
         });
@@ -515,11 +506,18 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
             expect(service.processList).toHaveLength(1);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
 
             expect(eventRepository.save).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION })
+                    elementId: cycleB._id,
+                    additionalData: expect.objectContaining({
+                        status: ExecutableStatus.WAITTING_CONFIRMATION,
+                        confirmation: {
+                            isRequested: false,
+                            conflicts: [{ cycleId: cycleA._id, name: 'cycle-a', mode: ProcessMode.MANUAL, isWinning: false }]
+                        }
+                    })
                 })
             );
 
@@ -528,20 +526,28 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(80);
         });
 
-        it('should require confirmation for a scheduled process with lower priority when shouldConfirmation is set', async () => {
+        it('should require confirmation for a winning scheduled process when shouldConfirmation is set', async () => {
+            // SCHEDULE (rang 1) gagne contre TRIGGER (rang 2), mais shouldConfirmation impose la confirmation
             const [cycleA, cycleB] = await SeedCycles([
-                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }], modePriority: [{ mode: ProcessMode.SCHEDULED, priority: 5 }] },
-                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'] }], modePriority: [{ mode: ProcessMode.SCHEDULED, priority: 0 }] }
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'] }] }
             ]);
-            await service.execute(CreateProcess(cycleA, ProcessMode.SCHEDULED, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleA, ProcessMode.TRIGGER, ExecutableAction.ON));
 
-            const process = CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.ON, ProcessType.INIT);
+            const process = CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
             await service.execute(process);
 
             expect(eventRepository.save).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION })
+                    elementId: cycleB._id,
+                    additionalData: expect.objectContaining({
+                        status: ExecutableStatus.WAITTING_CONFIRMATION,
+                        confirmation: {
+                            isRequested: true,
+                            conflicts: [{ cycleId: cycleA._id, name: 'cycle-a', mode: ProcessMode.TRIGGER, isWinning: true }]
+                        }
+                    })
                 })
             );
 
@@ -550,11 +556,30 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(80);
         });
 
+        it('should require confirmation without any conflict when shouldConfirmation is set', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a']);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
+
+            await service.execute(process);
+
+            expect(cycle.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+            expect(eventRepository.save).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    elementId: cycle._id,
+                    additionalData: expect.objectContaining({ confirmation: { isRequested: true, conflicts: [] } })
+                })
+            );
+            expect(wsService.sendMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ data: expect.stringContaining('"confirmation":{"isRequested":true,"conflicts":[]}') }), true
+            );
+        });
+
         it('should not require confirmation when the only conflicting process is a MODULE cycle sharing the actuator', async () => {
             // regle CYCLE<->MODULE (rule 1/rule 2) : un MODULE partageant l'actuator n'est jamais
             // un "conflit" a arbitrer via la priorite/confirmation - meme comportement qu'un cycle
-            // demarre manuellement (type FORCE direct, qui ne passe meme pas par
-            // _manageProcessMode). shouldConfirmation:true ne doit donc pas non plus declencher de
+            // demarre manuellement (FORCE direct, qui ne passe meme pas par
+            // _arbitrate). shouldConfirmation:true ne doit donc pas non plus declencher de
             // confirmation ici, puisque le seul "conflit" detecte est ce MODULE.
             const [cycleModule, cycle] = await SeedCycles([
                 { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['shared-pump'] }] },
@@ -563,7 +588,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleModule, ProcessMode.MANUAL, ExecutableAction.ON));
             expect(cycleModule.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, ProcessType.INIT);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
             await service.execute(process);
             await Flush(50);
@@ -583,19 +608,16 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleModule, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
 
-        it('should auto-force execution when the new process has priority over the conflicting one', async () => {
+        it('should auto-force execution when the new process has a better rank than the conflicting one', async () => {
+            // MANUAL (rang 0) gagne contre TRIGGER (rang 2)
             const [cycleA, cycleB] = await SeedCycles([
-                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }], modePriority: [{ mode: ProcessMode.MANUAL, priority: 5 }] },
-                {
-                    name: 'cycle-b',
-                    sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }],
-                    modePriority: [{ mode: ProcessMode.MANUAL, priority: 0 }]
-                }
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
             ]);
-            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleA, ProcessMode.TRIGGER, ExecutableAction.ON));
             expect(cycleA.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
             // ce chemin enchaine un reset() complet de cycleA (lui-meme asynchrone) avant de
             // demarrer cycleB : marge plus large que les autres tests bases sur Flush().
             await Flush(150);
@@ -610,19 +632,36 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.reset(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON));
         });
 
-        it('should clear a stale CONFIRMATION entry from the process list when force-executing after confirmation', async () => {
+        it('should follow the global ranks configured in the settings', async () => {
+            globalSettingsService.modeRanks = { [ProcessMode.MANUAL]: 2, [ProcessMode.SCHEDULED]: 1, [ProcessMode.TRIGGER]: 0 };
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            await service.execute(CreateProcess(cycleB, ProcessMode.TRIGGER, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            await Flush(150);
+
+            expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
+            expect(cycleB.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should leave the confirmation wait when force-executing after confirmation', async () => {
             const [cycleA, cycleB] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'] }] },
                 { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'] }] }
             ]);
             await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
-            expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(true);
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.FORCE));
+
+            expect(cycleB.status).toEqual(ExecutableStatus.IN_PROCCESS);
             await Flush(150);
-
-            expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(false);
+            expect(cycleB.status).toEqual(ExecutableStatus.STOPPED);
         });
 
         it('should update the shared MODULE cycle ownership to the new cycle after a conflict is resolved via confirmation + force', async () => {
@@ -646,10 +685,10 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(moduleShared.status).toEqual(ExecutableStatus.IN_PROCCESS);
             expect(service.processList.find((p) => p.cycle._id === moduleShared._id)?.sourceCycleId).toEqual(cycleA._id);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
-            expect(service.processList.some((p) => p.cycle._id === cycleB._id && p.type === ProcessType.CONFIRMATION)).toBe(true);
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.FORCE));
             await Flush(150);
 
             expect(cycleA.status).toEqual(ExecutableStatus.STOPPED);
@@ -791,9 +830,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(30);
             expect(actuatorService.execute).toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-b' }), 1);
 
-            const forceCycle = new CycleModel();
-            forceCycle._id = cycle.sequences[0]._id;
-            await service.execute(CreateProcess(forceCycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE_SEQUENCE));
+            await service.executeSequenceCommand(cycle.sequences[0]._id, SequenceCommand.FORCE);
             // la sequence en cours n'est pas interrompue
             expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
 
@@ -808,10 +845,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
         it('should ignore a forced sequence when its cycle is not running', async () => {
             const [cycle] = await SeedCycles([{ name: 'cycle-1', sequences: [{ moduleIds: ['module-a'], maxDuration: 30 }] }]);
-            const forceCycle = new CycleModel();
-            forceCycle._id = cycle.sequences[0]._id;
 
-            await service.execute(CreateProcess(forceCycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.FORCE_SEQUENCE));
+            await service.executeSequenceCommand(cycle.sequences[0]._id, SequenceCommand.FORCE);
 
             expect(logger.warn).toHaveBeenCalledWith({ sequenceId: cycle.sequences[0]._id }, 'sequence force ignored (owning cycle not running)');
             expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
@@ -909,7 +944,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             // cycleB n'a jamais reellement demarre (deja STOPPED) : le filtre process.action !== 'OFF'
             // fait que cycleA n'est jamais traite comme un conflit ici, donc aucune confirmation
             // n'est demandee et ce process OFF passe directement en FORCE (no-op, cycleB deja STOPPED).
-            await service.execute(CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.OFF, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.OFF, StartPolicy.ARBITRATE));
 
             expect(eventRepository.save).not.toHaveBeenCalledWith(
                 expect.objectContaining({ additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION }) })
@@ -941,7 +976,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
             await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON));
 
-            const process = CreateProcess(cycle, ProcessMode.AUTO, ExecutableAction.OFF);
+            // process pilote (sourceCycleId, mode herite) dont le cycle source a disparu
+            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF);
             process.sourceCycleId = 'ghost-parent-id';
 
             await expect(service.execute(process)).resolves.toBeUndefined();
@@ -1052,13 +1088,14 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     });
 
     describe('status sync failure handling (wsService.sendMessage rejecting)', () => {
-        it('should log a warning for both local and remote failures when removing an ignored process', async () => {
+        it('should log a warning for both local and remote failures when cancelling a pending confirmation', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a']);
+            cycle.status = ExecutableStatus.WAITTING_CONFIRMATION;
             wsService.sendMessage
                 .mockRejectedValueOnce(new Error('local down'))
                 .mockRejectedValueOnce(new Error('remote down'));
 
-            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.IGNORE));
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
 
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (local)');
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (remote)');
@@ -1087,7 +1124,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 .mockRejectedValueOnce(new Error('local down'))
                 .mockRejectedValueOnce(new Error('remote down'));
 
-            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, ProcessType.INIT));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
 
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (local)');
             expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'failed to send status sync message (remote)');
@@ -1178,10 +1215,10 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         it('should not turn off an actuator whose owning MODULE cycle was independently triggered (not just auto-started by the stopping cycle)', async () => {
             // cycle-a possede actuator-1 ET actuator-2, chacun pilote par son propre MODULE
             // (module-x / module-y). module-y est demarre INDEPENDAMMENT (bouton-poussoir manuel)
-            // AVANT cycle-a : son entree processList porte mode=MANUAL (pas AUTO/sourceCycleId=
-            // cycle-a), le signal qui le distingue d'un simple reflet auto-demarre par cycle-a
-            // (cf. reset() : seul un MODULE encore attribuable EXCLUSIVEMENT au cycle qu'on arrete,
-            // via mode===AUTO && sourceCycleId===ce cycle, est libere avec lui).
+            // AVANT cycle-a : son entree processList n'a pas de sourceCycleId (non pilote), le signal
+            // qui le distingue d'un simple reflet auto-demarre par cycle-a (cf. reset() : seul un
+            // MODULE encore attribuable EXCLUSIVEMENT au cycle qu'on arrete, via pilote &&
+            // sourceCycleId===ce cycle, est libere avec lui).
             const [cycleA, moduleX, moduleY] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['actuator-1', 'actuator-2'], maxDuration: 5000 }] },
                 { name: 'module-x', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-1'], maxDuration: 5000 }] },
@@ -1217,7 +1254,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         it('should also stop a MODULE cycle that was only ever auto-started by the stopping cycle itself', async () => {
             // meme structure que le test precedent, mais module-y n'est JAMAIS demarre
             // independamment : il n'existe que comme reflet auto-demarre par cycle-a (regle 2,
-            // mode=AUTO, sourceCycleId=cycle-a). Contrairement a module-y du test precedent (demarre
+            // pilote via sourceCycleId=cycle-a). Contrairement a module-y du test precedent (demarre
             // independamment, protege), celui-ci n'a plus aucune raison de tourner une fois cycle-a
             // arrete : _releaseAutoStartedModules le libere donc (status STOPPED, actuator-2 coupe),
             // pour que son statut reflete la realite physique au lieu de rester IN_PROCCESS perime.
@@ -1852,7 +1889,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleC, ProcessMode.MANUAL, ExecutableAction.ON));
             expect(cycleC.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-            // a la difference de la regle 2 (_triggerOwningModuleCycle, mode AUTO), un ON/OFF
+            // a la difference de la regle 2 (_triggerOwningModuleCycle, process pilote), un ON/OFF
             // declenche depuis le monitoring n'a pas de cycle CYCLE amont a proteger : il doit donc
             // appliquer la regle 1 normalement et arreter cycleC.
             await service.executeModuleCycleForDigitalOutput(deviceId, 2, true);

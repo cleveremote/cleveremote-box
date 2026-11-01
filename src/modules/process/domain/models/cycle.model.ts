@@ -3,7 +3,6 @@ import {
     ExecutionMode,
     CycleType,
     IExecutable,
-    ProcessMode,
     SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
@@ -33,7 +32,6 @@ export class CycleModel implements IExecutable {
     public description: string;
     public display?: boolean = true;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public modePriority: { mode: ProcessMode; priority: number }[] = [];
     public progression?: { startedAt: Date; duration: number };
     public sequences?: SequenceModel[] = [];
     public schedules?: ScheduleModel[] = [];

@@ -3,7 +3,7 @@ import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { DeviceModel } from '@process/domain/models/device.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
-import { CycleType, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 
 // borne d'un ON manuel sur un cycle MODULE auto-créé (1 h)
 export const MODULE_SEQUENCE_MAX_DURATION = 3_600_000;
@@ -16,7 +16,6 @@ export function BuildModuleCycle(device: DeviceModel, actuator: ActuatorModel): 
     cycle.description = `${device.name} ${actuator.name}`;
     cycle.type = CycleType.MODULE;
     cycle.style = { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'module', base: '#000000' } };
-    cycle.modePriority = Object.values(ProcessMode).map((mode) => ({ mode, priority: 0 }));
 
     const sequence = new SequenceModel();
     sequence._id = randomUUID();
