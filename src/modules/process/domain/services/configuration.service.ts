@@ -17,6 +17,9 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
+import { CycleHistoryModel } from '../models/cycle-history.model';
+import { BuildCycleHistory } from '../utils/cycle-history.util';
+import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { DeviceWithCommands, SlaveTemplate } from '../models/device.model';
 import { DeviceCommandModel } from '../models/device-command.model';
@@ -132,7 +135,7 @@ export class StructureService {
 
     // progression n'a de sens que pour IN_PROCCESS, meme convention que ProcessService._processProgress.
     private async _rehydrateProcessStatus(executable: CycleModel | SequenceModel): Promise<void> {
-        const lastEvent = await this.eventRepository.getLast(executable._id);
+        const lastEvent = await this.eventRepository.getLastStatus(executable._id);
         if (!lastEvent) { return; }
         const data = lastEvent.additionalData as ProcessEventData;
         executable.status = (data.status ?? data.value) as ExecutableStatus;
@@ -147,10 +150,57 @@ export class StructureService {
         return this.getStructure();
     }
 
-    public async getEvents(query: { deviceId: string; startDate: string; endDate: string }): Promise<EventModel[]> {
+    // cycle : historique regroupe par run (events du cycle et de ses sequences) ; capteur / sequence : events bruts
+    public async getEvents(query: { deviceId: string; startDate: string; endDate: string }): Promise<EventModel[] | CycleHistoryModel> {
         const startDate = new Date(query.startDate);
         const endDate = new Date(query.endDate);
-        return this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate);
+        const cycle = this.structure?.cycles?.find((cyc) => cyc._id === query.deviceId);
+        if (!cycle) {
+            return this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate);
+        }
+        return this._getCycleHistory(cycle, startDate, endDate);
+    }
+
+    // purge des events d'un cycle (sequences comprises), d'un capteur / autre element, ou de toute la
+    // collection (deviceId absent). Toujours conserves : le dernier event de chaque capteur (sa valeur est
+    // rechargee au boot) et, en purge globale, les events des cycles actifs (run en cours / en attente) ;
+    // un cycle actif vise directement n'est pas purge.
+    public async purgeEvents(query: { deviceId?: string; before?: string }): Promise<EventPurgeResultModel> {
+        const before = query.before ? new Date(query.before) : undefined;
+        const cycles = this.structure?.cycles ?? [];
+        const activeCycles = cycles.filter((cyc) => cyc.status && cyc.status !== ExecutableStatus.STOPPED);
+        const skipped = activeCycles.map((cyc) => ({ elementId: cyc._id, name: cyc.name, reason: EventPurgeSkipReason.ACTIVE_CYCLE }));
+        const cycleElementIds = (cycle: CycleModel): string[] => [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)];
+
+        if (!query.deviceId) {
+            const deletedCount = await this.eventRepository.purge({
+                excludedElementIds: activeCycles.flatMap(cycleElementIds), keptIds: await this._lastSensorEventIds(), before
+            });
+            return { deletedCount, skipped };
+        }
+        const cycle = cycles.find((cyc) => cyc._id === query.deviceId);
+        if (cycle && activeCycles.includes(cycle)) {
+            return { deletedCount: 0, skipped: skipped.filter((x) => x.elementId === cycle._id) };
+        }
+        const elementIds = cycle ? cycleElementIds(cycle) : [query.deviceId];
+        const deletedCount = await this.eventRepository.purge({ elementIds, keptIds: await this._lastSensorEventIds(elementIds), before });
+        return { deletedCount, skipped: [] };
+    }
+
+    private async _lastSensorEventIds(elementIds?: string[]): Promise<string[]> {
+        const sensors = (this.structure?.sensors ?? []).filter((sensor) => !elementIds || elementIds.includes(sensor._id));
+        const lastEvents = await Promise.all(sensors.map((sensor) => this.eventRepository.getLast(sensor._id)));
+        return lastEvents.filter(Boolean).map((event) => event._id);
+    }
+
+    private async _getCycleHistory(cycle: CycleModel, startDate: Date, endDate: Date): Promise<CycleHistoryModel> {
+        const elementIds = [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)];
+        const inRange = await this.eventRepository.getByDevicesAndDateRange(elementIds, startDate, endDate);
+        const runIds = [...new Set(inRange.map((event) => (event.additionalData as ProcessEventData).runId).filter(Boolean))];
+        // runs complets : un run commence avant startDate ou fini apres endDate garde toute sa timeline
+        const runEvents = await this.eventRepository.getByRunIds(runIds);
+        const legacy = inRange.filter((event) => !(event.additionalData as ProcessEventData).runId);
+        return BuildCycleHistory(cycle._id, [...runEvents, ...legacy]);
     }
 
     public async getStatus(type: string): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel> {

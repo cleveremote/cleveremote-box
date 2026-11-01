@@ -16,6 +16,7 @@ import { ScheduleRepository } from '@process/infrastructure/repositories/schedul
 import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 import { ComputeSunEventDate, ResolveCoordinates } from './sun-event.util';
 import { GlobalSettingsService } from './global-settings.service';
+import { EventOriginModel, EventSource } from '../models/event.model';
 
 @Injectable()
 export class ScheduleService {
@@ -222,10 +223,12 @@ export class ScheduleService {
         return this.configurationService.schedules.find(x => x._id === schedule._id) ?? schedule;
     }
 
-    // un declenchement planifie (schedule ou trigger) passe toujours par l'arbitrage des rangs
+    // un declenchement planifie (schedule ou trigger) passe toujours par l'arbitrage des rangs ;
+    // origin (journal) : le schedule par defaut, le trigger pour un declenchement de trigger
     public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULED,
-        action: ExecutableAction = ExecutableAction.ON): ProcessModel {
+        action: ExecutableAction = ExecutableAction.ON, origin?: EventOriginModel): ProcessModel {
         const process = new ProcessModel();
+        process.origin = origin ?? ScheduleService._scheduleOrigin(schedule);
         process.cycle = this.configurationService.structure.cycles.find(x => x._id === schedule.cycleId);
         process.action = action;
         process.policy = StartPolicy.ARBITRATE;
@@ -233,6 +236,10 @@ export class ScheduleService {
         process.schedule = schedule;
         process.duration = schedule.duration;
         return process;
+    }
+
+    private static _scheduleOrigin(schedule: ScheduleModel): EventOriginModel {
+        return { source: EventSource.SCHEDULE, refId: schedule._id, refName: schedule.name };
     }
 
     public async restartAllSchedules(): Promise<void> {
@@ -249,6 +256,7 @@ export class ScheduleService {
                 process.mode = ProcessMode.SCHEDULED;
                 process.duration = schedule.duration;
                 process.schedule = schedule;
+                process.origin = ScheduleService._scheduleOrigin(schedule);
                 this.createSchedule(schedule, this._buildExecutionMethode(schedule, process));
             }
         }

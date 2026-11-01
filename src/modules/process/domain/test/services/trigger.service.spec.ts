@@ -354,37 +354,17 @@ describe('TriggerService', () => {
             expect(trigger.isCheckInProgress).toBe(false);
         });
 
-        it('should tag a persisted event as a CYCLE element when the incoming value has no numeric `value` field', async () => {
-            // isPaused=true coupe le pipeline juste apres la sauvegarde de la valeur entrante :
-            // suffisant pour isoler cette assertion de l'evaluation mathjs des conditions,
-            // hors-perimetre de ce test.
+        it('should not persist a CYCLE/SEQUENCE value (already journaled by ProcessService)', async () => {
+            // isPaused=true coupe le pipeline juste apres la sauvegarde de la valeur entrante
             const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'process-1' })] });
             configurationService.triggers = [trigger];
             service.initilize();
 
             service.onElementValueChanged.next({ id: 'process-1', type: 'CYCLE', status: 'IN_PROCCESS' } as never);
-            await Flush();
-
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    elementId: 'process-1',
-                    elementType: 'CYCLE',
-                    additionalData: expect.objectContaining({ type: 'sensor', value: 'IN_PROCCESS' })
-                })
-            );
-        });
-
-        it('should tag a persisted event as a SEQUENCE element when the process value type is SEQUENCE', async () => {
-            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'seq-1' })] });
-            configurationService.triggers = [trigger];
-            service.initilize();
-
             service.onElementValueChanged.next({ id: 'seq-1', type: 'SEQUENCE', status: 'IN_PROCCESS' } as never);
             await Flush();
 
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({ elementId: 'seq-1', elementType: 'SEQUENCE' })
-            );
+            expect(eventRepository.save).not.toHaveBeenCalled();
         });
 
         it('should tolerate an undefined sensor value when saving the sensor event', async () => {
@@ -397,19 +377,6 @@ describe('TriggerService', () => {
 
             expect(eventRepository.save).toHaveBeenCalledWith(
                 expect.objectContaining({ elementType: 'SENSOR', additionalData: { value: undefined } })
-            );
-        });
-
-        it('should tolerate an undefined status when saving a CYCLE/SEQUENCE event', async () => {
-            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'process-1' })] });
-            configurationService.triggers = [trigger];
-            service.initilize();
-
-            service.onElementValueChanged.next({ id: 'process-1', type: 'CYCLE', status: undefined } as never);
-            await Flush();
-
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({ elementType: 'CYCLE', additionalData: { type: 'sensor', value: undefined } })
             );
         });
 

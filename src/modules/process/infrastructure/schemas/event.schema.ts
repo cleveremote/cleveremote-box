@@ -25,3 +25,5 @@ export class Event {
 
 export const EventSchema = SchemaFactory.createForClass(Event);
 EventSchema.index({ elementId: 1, date: 1 });
+// regroupement des events d'une meme execution (journal)
+EventSchema.index({ 'additionalData.runId': 1 }, { sparse: true });

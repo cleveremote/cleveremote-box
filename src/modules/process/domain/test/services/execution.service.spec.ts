@@ -26,6 +26,7 @@ import {
     CauseType, CycleType, ExecutableAction, ExecutableStatus, ProcessMode, ProcessNotification, SequenceCommand, StartPolicy
 } from '@process/domain/interfaces/executable.interface';
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
+import { ConfirmationAnswer, EventSource, ProcessEventData, ProcessEventKind, StopReason } from '@process/domain/models/event.model';
 import { ExecutableType } from '@process/domain/models/value.model';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { StructureInvalidError } from '@process/domain/errors/structure-invalid.error';
@@ -748,7 +749,15 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 notification: ProcessNotification.CONDITIONS_NOT_VERIFIED,
                 causes: [{ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (current : 2)' }]
             });
-            expect(eventRepository.save).not.toHaveBeenCalled();
+            // seule trace persistee : le refus (sans statut, ignore par la rehydratation)
+            expect(eventRepository.save).toHaveBeenCalledTimes(1);
+            expect(eventRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+                elementId: cycle._id,
+                additionalData: expect.objectContaining({
+                    kind: ProcessEventKind.START_REFUSED, conditions: ['sensor-1 > 5 (current : 2)']
+                })
+            }));
+            expect(eventRepository.save.mock.calls[0][0].additionalData.status).toBeUndefined();
             expect(cycle.status).toEqual(ExecutableStatus.STOPPED);
             expect(actuatorService.execute).not.toHaveBeenCalledWith(expect.objectContaining({ _id: 'module-a' }), 1);
         });
@@ -1084,6 +1093,110 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(actuatorService.execute.mock.calls.some(
                 ([mod, action]) => (mod as IActuatorModule)?._id === 'module-a' && action === 1
             )).toBe(false);
+        });
+    });
+
+    describe('execution journal', () => {
+        // events du journal (kind renseigne) d'un element, dans l'ordre d'enregistrement
+        function Journal(elementId: string): ProcessEventData[] {
+            return eventRepository.save.mock.calls
+                .map(([event]) => event)
+                .filter((event) => event.elementId === elementId && event.additionalData?.kind)
+                .map((event) => event.additionalData);
+        }
+
+        it('should trace a manual run from start to normal end under a single runId', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a']);
+            const process = CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.ON);
+            process.origin = { source: EventSource.MANUAL, requestedBy: 'alice' };
+
+            await service.execute(process);
+            await Flush();
+
+            const [started, ended] = Journal(cycle._id);
+            expect(started).toEqual(expect.objectContaining({
+                kind: ProcessEventKind.CYCLE_STARTED, name: 'cycle-1', origin: { source: EventSource.MANUAL, requestedBy: 'alice' }
+            }));
+            expect(started.message).toContain('démarré manuellement (alice) (sans confirmation)');
+            expect(ended).toEqual(expect.objectContaining({
+                kind: ProcessEventKind.CYCLE_ENDED, runId: started.runId, stop: { reason: StopReason.COMPLETED },
+                sequences: { run: [cycle.sequences[0].name], skipped: [], forced: [] }
+            }));
+            expect(ended.realDuration).toBeGreaterThanOrEqual(0);
+            expect(ended.message).toContain('terminé normalement');
+
+            const sequenceKinds = Journal(cycle.sequences[0]._id).map((x) => [x.kind, x.runId, x.cycleId]);
+            expect(sequenceKinds).toEqual([
+                [ProcessEventKind.SEQUENCE_STARTED, started.runId, cycle._id],
+                [ProcessEventKind.SEQUENCE_ENDED, started.runId, cycle._id]
+            ]);
+        });
+
+        it('should keep the runId and record the FORCE answer of a confirmation, and the preempted cycle', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+            expect(cycleB.status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+
+            const answer = CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON);
+            answer.origin = { source: EventSource.MANUAL, requestedBy: 'bob' };
+            await service.execute(answer);
+            await Flush(100);
+
+            const [requested, started] = Journal(cycleB._id);
+            expect(requested.kind).toEqual(ProcessEventKind.CONFIRMATION_REQUESTED);
+            expect(started).toEqual(expect.objectContaining({
+                kind: ProcessEventKind.CYCLE_STARTED, runId: requested.runId, preempted: ['cycle-a'],
+                confirmation: expect.objectContaining({ answer: ConfirmationAnswer.FORCE, answeredBy: 'bob' })
+            }));
+            expect(started.confirmation.waitMs).toBeGreaterThanOrEqual(0);
+            expect(Journal(cycleA._id)).toContainEqual(expect.objectContaining({
+                kind: ProcessEventKind.CYCLE_ENDED,
+                stop: expect.objectContaining({ reason: StopReason.PREEMPTED, by: expect.objectContaining({ refName: 'cycle-b' }) })
+            }));
+
+            await service.reset(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should trace a refused confirmation (IGNORE) as a cancelled run', async () => {
+            const [cycleA, cycleB] = await SeedCycles([
+                { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.ON, StartPolicy.ARBITRATE));
+
+            const refusal = CreateProcess(cycleB, ProcessMode.MANUAL, ExecutableAction.OFF);
+            refusal.stop = { reason: StopReason.CONFIRMATION_REFUSED };
+            await service.execute(refusal);
+
+            const [requested, cancelled] = Journal(cycleB._id);
+            expect(cancelled).toEqual(expect.objectContaining({
+                kind: ProcessEventKind.CYCLE_CANCELLED, runId: requested.runId,
+                stop: expect.objectContaining({ reason: StopReason.CONFIRMATION_REFUSED }),
+                confirmation: expect.objectContaining({ answer: ConfirmationAnswer.IGNORE })
+            }));
+            expect(cancelled.message).toContain('annulé');
+
+            await service.execute(CreateProcess(cycleA, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should take the schedule as origin of a scheduled run and stop reason of a manual OFF', async () => {
+            const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            process.schedule = Object.assign(new ScheduleModel(), { _id: 'schedule-1', name: 'Matin', shouldConfirmation: false });
+
+            await service.execute(process);
+            await Flush(50);
+            await service.execute(CreateProcess(cycle, ProcessMode.MANUAL, ExecutableAction.OFF));
+
+            const [started, ended] = Journal(cycle._id);
+            expect(started.origin).toEqual({ source: EventSource.SCHEDULE, refId: 'schedule-1', refName: 'Matin' });
+            expect(started.message).toContain('par le planning « Matin »');
+            expect(ended.stop).toEqual({ reason: StopReason.MANUAL, by: { source: EventSource.MANUAL } });
         });
     });
 

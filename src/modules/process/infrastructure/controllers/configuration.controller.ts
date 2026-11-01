@@ -8,7 +8,11 @@ import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc'
 import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
 import { EventFetchUC } from '@process/use-cases/event-fetch.uc';
 import { EventModel } from '@process/domain/models/event.model';
+import { CycleHistoryModel } from '@process/domain/models/cycle-history.model';
 import { EventQueryDTO } from '../dto/event-query.dto';
+import { EventPurgeDTO } from '../dto/event-purge.dto';
+import { EventPurgeUC } from '@process/use-cases/event-purge.uc';
+import { EventPurgeResultModel } from '@process/domain/models/event-purge.model';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
@@ -184,8 +188,16 @@ export class ConfigurationController {
     }
 
     @MessagePattern(['box/fetch/events'])
-    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[]> {
+    // cycle : CycleHistoryModel (runs) ; capteur / sequence : EventModel[]
+    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[] | CycleHistoryModel> {
         const uc = new EventFetchUC(this._configurationService);
         return uc.execute(eventQueryDTO);
+    }
+
+    // deviceId : cycle (sequences comprises) ou capteur ; absent = purge globale. before : purge partielle
+    @MessagePattern(['box/purge/events'])
+    public async purgeEvents(@Payload() eventPurgeDTO: EventPurgeDTO): Promise<EventPurgeResultModel> {
+        const uc = new EventPurgeUC(this._configurationService);
+        return uc.execute(eventPurgeDTO);
     }
 }

@@ -7,15 +7,114 @@ export enum ElementType {
     SENSOR = 'SENSOR'
 }
 
+// etape du journal d'execution d'un cycle (cf. RunContextModel : tous les events d'un run partagent son runId)
+export enum ProcessEventKind {
+    START_REFUSED = 'START_REFUSED', // conditions du cycle fausses : pas de statut porte (ignore par la rehydratation)
+    CONFIRMATION_REQUESTED = 'CONFIRMATION_REQUESTED',
+    CYCLE_QUEUED = 'CYCLE_QUEUED',
+    CYCLE_CANCELLED = 'CYCLE_CANCELLED', // jamais demarre (confirmation refusee, OFF pendant l'attente / la file)
+    CYCLE_STARTED = 'CYCLE_STARTED',
+    CYCLE_ENDED = 'CYCLE_ENDED',
+    SEQUENCE_STARTED = 'SEQUENCE_STARTED',
+    SEQUENCE_ENDED = 'SEQUENCE_ENDED',
+    SEQUENCE_SKIPPED = 'SEQUENCE_SKIPPED' // conditions de la sequence fausses
+}
+
+// qui a emis l'ordre (plus precis que ProcessMode, qui ne sert qu'a l'arbitrage des rangs)
+export enum EventSource {
+    MANUAL = 'MANUAL',
+    PUSH_BUTTON = 'PUSH_BUTTON',
+    SCHEDULE = 'SCHEDULE',
+    TRIGGER = 'TRIGGER',
+    GROUP = 'GROUP', // enfant demarre / stoppe par son Group
+    CYCLE = 'CYCLE', // MODULE pilote par un cycle (regle 2)
+    SYSTEM = 'SYSTEM'
+}
+
+export enum StopReason {
+    COMPLETED = 'COMPLETED', // toutes les sequences terminees
+    MANUAL = 'MANUAL',
+    PUSH_BUTTON = 'PUSH_BUTTON',
+    SCHEDULE = 'SCHEDULE',
+    TRIGGER = 'TRIGGER',
+    PREEMPTED = 'PREEMPTED', // stoppe par un cycle demarre en conflit (by = ce cycle)
+    MODULE_OVERRIDE = 'MODULE_OVERRIDE', // regle 1 : un MODULE a repris l'actionneur
+    PARENT_STOPPED = 'PARENT_STOPPED', // Group parent / cycle proprietaire arrete
+    DRIVEN = 'DRIVEN', // MODULE coupe par le cycle qui le pilote (regle 2)
+    ERROR = 'ERROR',
+    SYSTEM_RESET = 'SYSTEM_RESET', // reset au demarrage de la box
+    CONFIRMATION_REFUSED = 'CONFIRMATION_REFUSED',
+    CANCELLED_WHILE_WAITING = 'CANCELLED_WHILE_WAITING',
+    CANCELLED_WHILE_QUEUED = 'CANCELLED_WHILE_QUEUED',
+    SKIPPED_BY_USER = 'SKIPPED_BY_USER' // sequence : commande SKIP du front
+}
+
+export enum ConfirmationAnswer {
+    FORCE = 'FORCE',
+    QUEUE = 'QUEUE',
+    IGNORE = 'IGNORE'
+}
+
+export class EventOriginModel {
+    public source: EventSource;
+    // schedule / trigger / Group parent / cycle pilote / actionneur du bouton poussoir
+    public refId?: string;
+    public refName?: string;
+    // run du cycle reference (GROUP / CYCLE) : relie un run enfant a son run parent
+    public refRunId?: string;
+    // utilisateur, si le front l'envoie
+    public requestedBy?: string;
+}
+
+export class EventStopModel {
+    public reason: StopReason;
+    public by?: EventOriginModel;
+    public error?: string;
+}
+
+export class EventConfirmationModel extends ConfirmationRequestModel {
+    public answer?: ConfirmationAnswer;
+    public requestedAt?: Date;
+    public answeredAt?: Date;
+    public waitMs?: number;
+    public answeredBy?: string;
+}
+
+// noms des sequences d'un run, au fil de l'execution
+export class EventSequencesSummary {
+    public run: string[] = [];
+    public skipped: string[] = [];
+    public forced: string[] = [];
+}
+
 export class ProcessEventData {
     public type: string; // manual schedule trigger sensor
-    public value: ExecutableStatus | ExecutableAction;
+    public value?: ExecutableStatus | ExecutableAction;
     public status?: string;
     public startedAt?: Date;
     public duration?: number;
     public causes?: { type: string; cause: string }[];
-    // statut WAITTING_CONFIRMATION uniquement : raison de l'attente (popin du front)
-    public confirmation?: ConfirmationRequestModel;
+    // statut WAITTING_CONFIRMATION uniquement : raison de l'attente (popin du front) ; complete par la
+    // reponse (answer, waitMs...) sur les events suivants du run
+    public confirmation?: EventConfirmationModel;
+
+    // journal d'execution (absent des events anterieurs)
+    public kind?: ProcessEventKind;
+    public runId?: string;
+    public name?: string; // nom de l'element au moment de l'event
+    public cycleId?: string; // sequence : cycle proprietaire
+    public origin?: EventOriginModel;
+    public stop?: EventStopModel;
+    public isForced?: boolean; // sequence lancee par FORCE_SEQUENCE
+    public conditions?: string[]; // START_REFUSED / SEQUENCE_SKIPPED : conditions fausses
+    public preempted?: string[]; // CYCLE_STARTED : cycles stoppes par ce demarrage
+    public waitingFor?: string[]; // CYCLE_QUEUED : cycles dont la fin est attendue
+    public runStartedAt?: Date;
+    public endedAt?: Date;
+    public realDuration?: number;
+    public plannedDuration?: number;
+    public sequences?: EventSequencesSummary;
+    public message?: string;
 }
 
 export class SensorEventData {

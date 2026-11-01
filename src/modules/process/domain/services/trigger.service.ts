@@ -20,9 +20,8 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ProcessService } from './execution.service';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
-import { ElementType, ProcessEventData } from '../models/event.model';
+import { ElementType, EventSource } from '../models/event.model';
 import { evaluateConditions } from '../utils/evaluate-conditions.util';
-import { ExecutableType } from '../models/value.model';
 @Injectable()
 export class TriggerService {
     // toujours lire la liste courante de ConfigurationService : getStructure() (ex: synchronizeCycle)
@@ -75,6 +74,8 @@ export class TriggerService {
                 // les ProcessValueModel n'ont pas de champ `.value` (seulement `.status`) :
                 // deviner le type via la meme detection que _saveIncommingValue() plutot que de
                 // supposer un SensorValueModel partout, ce qui plantait sur toute valeur process.
+                // une valeur process (statut de cycle) est deja journalisee par ProcessService._processProgress :
+                // seule une valeur capteur est enregistree ici.
                 const isSensor = Object.prototype.hasOwnProperty.call(element, 'value');
                 if (isSensor) {
                     await this.eventRepository.save({
@@ -82,14 +83,6 @@ export class TriggerService {
                         date: new Date(),
                         elementType: ElementType.SENSOR,
                         additionalData: { value: (element as SensorValueModel).value?.toString() }
-                    });
-                } else {
-                    const processElement = element as ProcessValueModel;
-                    await this.eventRepository.save({
-                        elementId: element.id,
-                        date: new Date(),
-                        elementType: processElement.type === ExecutableType.SEQUENCE ? ElementType.SEQUENCE : ElementType.CYCLE,
-                        additionalData: { type: 'sensor', value: processElement.status?.toString() } as ProcessEventData
                     });
                 }
                 for (const trigger of triggers) {
@@ -191,7 +184,8 @@ export class TriggerService {
         scheduleModel.duration = trigger.duration;
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
 
-        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, trigger.action);
+        const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, trigger.action,
+            { source: EventSource.TRIGGER, refId: trigger.id, refName: trigger.name });
         const methode = async (): Promise<void> => {
             await this.scheduleService.clearAllSchedules();
             await this.processService.execute({ ...process });

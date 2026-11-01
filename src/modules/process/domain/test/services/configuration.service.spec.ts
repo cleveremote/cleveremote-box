@@ -14,6 +14,8 @@ import { CycleModel } from '@process/domain/models/cycle.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { CycleHistoryModel, RunOutcome } from '@process/domain/models/cycle-history.model';
+import { EventPurgeSkipReason } from '@process/domain/models/event-purge.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ValueModel, ExecutableType } from '@process/domain/models/value.model';
@@ -39,7 +41,10 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
     let slaveScanService: { scan: jest.Mock };
     let autoCreationService: { createSlave: jest.Mock };
     let actuatorRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
-    let eventRepository: { save: jest.Mock; getLast: jest.Mock; getByDeviceAndDateRange: jest.Mock };
+    let eventRepository: {
+        save: jest.Mock; getLast: jest.Mock; getLastStatus: jest.Mock; getByDeviceAndDateRange: jest.Mock;
+        getByDevicesAndDateRange: jest.Mock; getByRunIds: jest.Mock; purge: jest.Mock;
+    };
     let service: StructureService;
 
     beforeAll(async () => {
@@ -80,7 +85,11 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
         eventRepository = {
             save: jest.fn().mockResolvedValue(undefined),
             getLast: jest.fn().mockResolvedValue(null),
-            getByDeviceAndDateRange: jest.fn().mockResolvedValue([])
+            getLastStatus: jest.fn().mockResolvedValue(null),
+            getByDeviceAndDateRange: jest.fn().mockResolvedValue([]),
+            getByDevicesAndDateRange: jest.fn().mockResolvedValue([]),
+            getByRunIds: jest.fn().mockResolvedValue([]),
+            purge: jest.fn().mockResolvedValue(3)
         };
 
         slaveScanService = { scan: jest.fn() };
@@ -112,7 +121,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             expect(service.structure).toBe(structure);
         });
 
-        // passe car eventRepository.getLast renvoie null par defaut (beforeEach) : aucun evenement
+        // passe car eventRepository.getLastStatus renvoie null par defaut (beforeEach) : aucun evenement
         // connu pour ce cycle, donc le defaut STOPPED du schema Mongo est conserve tel quel.
         it('should leave a freshly loaded cycle at its default STOPPED status when it has no known event', async () => {
             await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
@@ -125,7 +134,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
         it('should rehydrate a cycle\'s status/progression from its last known event (IN_PROCCESS)', async () => {
             const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
             const startedAt = new Date('2026-07-30T10:00:00.000Z');
-            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+            eventRepository.getLastStatus.mockImplementation((id: string) => Promise.resolve(
                 id === cycle._id
                     ? {
                         elementId: id,
@@ -138,12 +147,12 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
 
             expect(structure.cycles[0].status).toEqual(ExecutableStatus.IN_PROCCESS);
             expect(structure.cycles[0].progression).toEqual({ startedAt, duration: 300 });
-            expect(eventRepository.getLast).toHaveBeenCalledWith(cycle._id);
+            expect(eventRepository.getLastStatus).toHaveBeenCalledWith(cycle._id);
         });
 
         it('should not set progression when the last known cycle event is STOPPED', async () => {
             const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
-            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+            eventRepository.getLastStatus.mockImplementation((id: string) => Promise.resolve(
                 id === cycle._id
                     ? {
                         elementId: id,
@@ -160,7 +169,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
 
         it('should rehydrate a WAITTING_CONFIRMATION cycle status without setting progression', async () => {
             const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
-            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+            eventRepository.getLastStatus.mockImplementation((id: string) => Promise.resolve(
                 id === cycle._id
                     ? {
                         elementId: id,
@@ -190,7 +199,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             const savedSequence = await sequenceMongooseRepository.create(sequence);
             const sequenceId = savedSequence._id;
             const startedAt = new Date('2026-07-30T10:00:00.000Z');
-            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve(
+            eventRepository.getLastStatus.mockImplementation((id: string) => Promise.resolve(
                 id === sequenceId
                     ? {
                         elementId: id,
@@ -203,7 +212,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
 
             expect(service.sequences[0].status).toEqual(ExecutableStatus.IN_PROCCESS);
             expect(service.sequences[0].progression).toEqual({ startedAt, duration: 30 });
-            expect(eventRepository.getLast).toHaveBeenCalledWith(sequenceId);
+            expect(eventRepository.getLastStatus).toHaveBeenCalledWith(sequenceId);
         });
 
         it('should populate a sensor\'s value/date from its last known event, and reflect it in structure.values', async () => {
@@ -297,6 +306,81 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             expect(eventRepository.getByDeviceAndDateRange).toHaveBeenCalledWith(
                 'device-1', new Date('2024-01-01'), new Date('2024-01-31')
             );
+        });
+
+        it('should return the runs of a cycle, completed with the out-of-range events of those runs', async () => {
+            service.structure = Object.assign(new StructureModel(), {
+                cycles: [Object.assign(new CycleModel(), { _id: 'cycle-1', sequences: [{ _id: 'seq-1' }] })]
+            });
+            const started = { _id: 'e1', elementId: 'cycle-1', date: new Date('2023-12-31T23:50:00Z'),
+                additionalData: { type: 'MANUAL', kind: 'CYCLE_STARTED', runId: 'run-1', name: 'Zone A' } };
+            const ended = { _id: 'e2', elementId: 'cycle-1', date: new Date('2024-01-01T00:10:00Z'),
+                additionalData: { type: 'MANUAL', kind: 'CYCLE_ENDED', runId: 'run-1', stop: { reason: 'COMPLETED' } } };
+            const old = { _id: 'e3', elementId: 'cycle-1', date: new Date('2024-01-02T00:00:00Z'),
+                additionalData: { type: 'MANUAL', value: 'STOPPED', status: 'STOPPED' } };
+            eventRepository.getByDevicesAndDateRange.mockResolvedValue([ended, old]);
+            eventRepository.getByRunIds.mockResolvedValue([started, ended]);
+
+            const history = await service.getEvents({ deviceId: 'cycle-1', startDate: '2024-01-01', endDate: '2024-01-31' }) as CycleHistoryModel;
+
+            expect(eventRepository.getByDevicesAndDateRange).toHaveBeenCalledWith(
+                ['cycle-1', 'seq-1'], new Date('2024-01-01'), new Date('2024-01-31')
+            );
+            expect(eventRepository.getByRunIds).toHaveBeenCalledWith(['run-1']);
+            expect(history.runs).toHaveLength(1);
+            expect(history.runs[0]).toEqual(expect.objectContaining({
+                runId: 'run-1', name: 'Zone A', outcome: RunOutcome.ENDED, startedAt: started.date, stop: { reason: 'COMPLETED' }
+            }));
+            expect(history.runs[0].timeline.map((x) => x.kind)).toEqual(['CYCLE_STARTED', 'CYCLE_ENDED']);
+            expect(history.legacy).toEqual([old]);
+        });
+    });
+
+    describe('purgeEvents', () => {
+        beforeEach(() => {
+            service.structure = Object.assign(new StructureModel(), {
+                cycles: [
+                    Object.assign(new CycleModel(),
+                        { _id: 'cycle-1', name: 'Zone A', status: ExecutableStatus.STOPPED, sequences: [{ _id: 'seq-1' }] }),
+                    Object.assign(new CycleModel(),
+                        { _id: 'cycle-2', name: 'Zone B', status: ExecutableStatus.IN_PROCCESS, sequences: [{ _id: 'seq-2' }] })
+                ],
+                sensors: [{ _id: 'sensor-1' }, { _id: 'sensor-2' }]
+            });
+            eventRepository.getLast.mockImplementation((id: string) => Promise.resolve({ _id: `last-${id}` }));
+        });
+
+        it('should purge a stopped cycle with its sequences', async () => {
+            const result = await service.purgeEvents({ deviceId: 'cycle-1' });
+
+            expect(eventRepository.purge).toHaveBeenCalledWith({ elementIds: ['cycle-1', 'seq-1'], keptIds: [], before: undefined });
+            expect(result).toEqual({ deletedCount: 3, skipped: [] });
+        });
+
+        it('should not purge an active cycle', async () => {
+            const result = await service.purgeEvents({ deviceId: 'cycle-2' });
+
+            expect(eventRepository.purge).not.toHaveBeenCalled();
+            expect(result).toEqual({
+                deletedCount: 0, skipped: [{ elementId: 'cycle-2', name: 'Zone B', reason: EventPurgeSkipReason.ACTIVE_CYCLE }]
+            });
+        });
+
+        it('should keep the last event of a purged sensor and honour the before date', async () => {
+            await service.purgeEvents({ deviceId: 'sensor-1', before: '2026-01-01' });
+
+            expect(eventRepository.purge).toHaveBeenCalledWith({
+                elementIds: ['sensor-1'], keptIds: ['last-sensor-1'], before: new Date('2026-01-01')
+            });
+        });
+
+        it('should purge everything but the active cycles and the last event of each sensor', async () => {
+            const result = await service.purgeEvents({});
+
+            expect(eventRepository.purge).toHaveBeenCalledWith({
+                excludedElementIds: ['cycle-2', 'seq-2'], keptIds: ['last-sensor-1', 'last-sensor-2'], before: undefined
+            });
+            expect(result.skipped).toEqual([{ elementId: 'cycle-2', name: 'Zone B', reason: EventPurgeSkipReason.ACTIVE_CYCLE }]);
         });
     });
 

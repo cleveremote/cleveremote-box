@@ -6,6 +6,8 @@ import {
 } from '../interfaces/executable.interface';
 import { ScheduleModel } from './schedule.model';
 import { CycleModel } from './cycle.model';
+import { EventOriginModel, EventStopModel } from './event.model';
+import { RunContextModel } from './run-context.model';
 
 export class ProcessModel {
     public id: string;
@@ -21,4 +23,10 @@ export class ProcessModel {
     // ce cycle (regle 2 CYCLE -> MODULE, enfant demarre par son Group), cf. ProcessService._isDriven ;
     // en SYSTEM : arret demande par ce cycle (enfant stoppe par son Group).
     public sourceCycleId?: string;
+    // emetteur de cet ordre (journal) ; deduit de mode/sourceCycleId si absent
+    public origin?: EventOriginModel;
+    // raison d'arret portee par un ordre OFF (journal) ; deduite de origin si absente
+    public stop?: EventStopModel;
+    // run journalise de ce process (cree au demarrage, repris d'un process en attente de confirmation / en file)
+    public run?: RunContextModel;
 }

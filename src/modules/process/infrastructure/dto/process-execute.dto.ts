@@ -3,6 +3,7 @@ import { ExecutableAction, ProcessMode, ExecutableStatus, SequenceCommand, Start
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { ProcessModel } from '@process/domain/models/process.model';
 import { ExecutableType } from '@process/domain/models/value.model';
+import { EventSource, StopReason } from '@process/domain/models/event.model';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 
@@ -70,6 +71,12 @@ export class ProcessExecuteDTO {
     @ApiProperty({ required: false })
     public duration?: number;
 
+    // utilisateur a l'origine de l'ordre (journal d'execution)
+    @IsString()
+    @IsOptional()
+    @ApiProperty({ required: false })
+    public requestedBy?: string;
+
     // valeurs historiques du front traduites en consigne de demarrage ; IGNORE (refus d'une
     // confirmation) = arret, qui annule l'attente du cycle (cf. ProcessService._cancelPendingConfirmation)
     public static mapToProcessModel(processExecuteDTO: ProcessExecuteDTO): ProcessModel {
@@ -81,6 +88,10 @@ export class ProcessExecuteDTO {
         process.mode = processExecuteDTO.mode;
         process.policy = POLICY_BY_TYPE[processExecuteDTO.type];
         process.duration = processExecuteDTO.duration;
+        process.origin = { source: EventSource.MANUAL, requestedBy: processExecuteDTO.requestedBy };
+        if (processExecuteDTO.type === ProcessExecuteType.IGNORE) {
+            process.stop = { reason: StopReason.CONFIRMATION_REFUSED };
+        }
         return process;
     }
 

@@ -32,7 +32,12 @@ import { CycleRepository } from '@process/infrastructure/repositories/cycle.repo
 import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
-import { ElementType, EventModel } from '../models/event.model';
+import {
+    ConfirmationAnswer, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind,
+    StopReason
+} from '../models/event.model';
+import { RunContextModel } from '../models/run-context.model';
+import { DescribeProcessEvent } from '../utils/process-event-message.util';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
@@ -46,6 +51,24 @@ import { ConfirmationRequestModel } from '../models/confirmation-request.model';
 type ProcessReport = { id: string; type: CauseType; cause: string }[];
 // causes d'une notification CONDITIONS_NOT_VERIFIED : id = element de la condition fausse
 type ConditionReport = { id: string; type: 'CONDITION'; cause: string }[];
+
+// raison d'arret par defaut d'un ordre OFF, selon son emetteur
+const STOP_REASON_BY_SOURCE: Record<EventSource, StopReason> = {
+    [EventSource.MANUAL]: StopReason.MANUAL,
+    [EventSource.PUSH_BUTTON]: StopReason.PUSH_BUTTON,
+    [EventSource.SCHEDULE]: StopReason.SCHEDULE,
+    [EventSource.TRIGGER]: StopReason.TRIGGER,
+    [EventSource.GROUP]: StopReason.PARENT_STOPPED,
+    [EventSource.CYCLE]: StopReason.DRIVEN,
+    [EventSource.SYSTEM]: StopReason.SYSTEM_RESET
+};
+
+const SOURCE_BY_MODE: Record<ProcessMode, EventSource> = {
+    [ProcessMode.MANUAL]: EventSource.MANUAL,
+    [ProcessMode.SCHEDULED]: EventSource.SCHEDULE,
+    [ProcessMode.TRIGGER]: EventSource.TRIGGER,
+    [ProcessMode.SYSTEM]: EventSource.SYSTEM
+};
 
 @Injectable()
 export class ProcessService {
@@ -61,6 +84,8 @@ export class ProcessService {
     // cycle id -> sequences forcees par le front (ordre des demandes), consommees par _runSequences
     // a la fin de la sequence en cours ; entree presente uniquement pendant que _runSequences tourne.
     private forcedSequences = new Map<string, string[]>();
+    // sequences terminees par un SKIP du front (journal : raison de fin de la sequence)
+    private sequencesSkippedByUser = new Set<string>();
     // cycle id -> process recu en QUEUED, demarre (FORCE) par _startQueuedCycles quand plus aucun
     // cycle en cours n'est en conflit avec lui ; ordre d'insertion = ordre de demarrage.
     private queuedCycles = new Map<string, ProcessModel>();
@@ -118,9 +143,84 @@ export class ProcessService {
         return [];
     }
 
-    private _publishStatusEvent(eventPayload: EventModel, wsData: unknown): Promise<string> {
+    // emetteur d'un ordre : explicite (process.origin) ou deduit de son mode / cycle source
+    private _originOf(process: ProcessModel): EventOriginModel {
+        if (process.origin) {
+            return process.origin;
+        }
+        if (ProcessService._isDriven(process)) {
+            return this._cycleOrigin(EventSource.CYCLE, process.sourceCycleId);
+        }
+        const source = SOURCE_BY_MODE[process.mode] ?? EventSource.SYSTEM;
+        return process.schedule ? { source, refId: process.schedule._id, refName: process.schedule.name } : { source };
+    }
+
+    // origine "un autre cycle" (Group parent, cycle pilote) : reliee au run en cours de ce cycle
+    private _cycleOrigin(source: EventSource, cycleId: string): EventOriginModel {
+        const proc = this.processList.find((x) => x.cycle._id === cycleId);
+        const name = proc?.cycle.name ?? this.configurationService.structure.cycles.find((x) => x._id === cycleId)?.name;
+        return { source, refId: cycleId, refName: name, refRunId: proc?.run?.runId };
+    }
+
+    // raison d'arret d'un ordre OFF : explicite (process.stop) ou deduite de son emetteur
+    private _stopOf(process: ProcessModel, fallback?: StopReason): EventStopModel {
+        const by = process.stop?.by ?? this._originOf(process);
+        if (process.stop) {
+            return { ...process.stop, by };
+        }
+        return { reason: fallback ?? STOP_REASON_BY_SOURCE[by.source], by };
+    }
+
+    // arret provoque par le demarrage / l'arret d'un autre cycle (preemption, regle 1, cascade)
+    private _stopByCycle(reason: StopReason, process: ProcessModel): EventStopModel {
+        return {
+            reason,
+            by: { source: this._originOf(process).source, refId: process.cycle._id, refName: process.cycle.name, refRunId: process.run?.runId }
+        };
+    }
+
+    // run du process : repris d'un process en attente (confirmation / file) - la reponse du front ne cree pas
+    // un nouveau run - sinon le sien, sinon un nouveau. answer : reponse a la confirmation en attente.
+    private _adoptRun(process: ProcessModel, waiting?: ProcessModel, answer?: ConfirmationAnswer): RunContextModel {
+        const run = (waiting && waiting !== process ? waiting.run : undefined) ?? process.run ?? RunContextModel.create(this._originOf(process));
+        if (answer && run.confirmation && !run.confirmation.answer) {
+            const answeredAt = new Date();
+            run.confirmation.answer = answer;
+            run.confirmation.answeredAt = answeredAt;
+            run.confirmation.waitMs = answeredAt.getTime() - (run.confirmation.requestedAt ?? run.requestedAt).getTime();
+            run.confirmation.answeredBy = process.origin?.requestedBy;
+        }
+        process.run = run;
+        return run;
+    }
+
+    // champs communs a tous les events d'un run (copies : le run continue d'evoluer apres l'enregistrement)
+    private static _runJournal(run: RunContextModel | undefined): Partial<ProcessEventData> {
+        if (!run) {
+            return {};
+        }
+        return {
+            runId: run.runId,
+            origin: run.origin,
+            confirmation: run.confirmation && { ...run.confirmation }
+        };
+    }
+
+    private static _sequencesSummary(run: RunContextModel | undefined): ProcessEventData['sequences'] {
+        return run && { run: [...run.sequences.run], skipped: [...run.sequences.skipped], forced: [...run.sequences.forced] };
+    }
+
+    // journal : message lisible calcule ici, et champs principaux repris dans le statut envoye au front
+    private _publishStatusEvent(eventPayload: EventModel, wsData: object): Promise<string> {
+        const journal = eventPayload.additionalData as ProcessEventData;
+        let payload = wsData;
+        if (journal.kind) {
+            journal.message = DescribeProcessEvent(journal);
+            const { kind, runId, origin, stop, message } = journal;
+            payload = { ...wsData, kind, runId, origin, stop, message };
+        }
         return this.eventRepository.save(eventPayload).then(() => {
-            this._sendStatusSync(wsData);
+            this._sendStatusSync(payload);
             return 'sent';
         });
     }
@@ -132,17 +232,24 @@ export class ProcessService {
             .catch((err) => this.logger.warn({ err }, 'failed to send status sync message (remote)'));
     }
 
-    public async reset(process: ProcessModel, causes?: ProcessReport): Promise<void> {
+    // stop : raison d'arret journalisee ; par defaut celle portee par l'ordre OFF (cf. _stopOf)
+    public async reset(process: ProcessModel, causes?: ProcessReport, stop?: EventStopModel): Promise<void> {
         const index = this.processList.map(x => x.cycle._id).indexOf(process.cycle._id);
         this._clearQueuedSequences(process);
         // un arret annule la mise en file QUEUED ; un cycle en file sans entree processList (QUEUED
         // envoye sans confirmation prealable) doit quand meme repasser STOPPED.
+        const queued = this.queuedCycles.get(process.cycle._id);
         const wasQueued = this.queuedCycles.delete(process.cycle._id);
         // le statut peut etre reserve (IN_PROCCESS) avant que processList ne contienne l'entree
         // (voir la reservation synchrone de la regle 3) : sans ce fallback, un OFF arrivant dans
         // cette fenetre ne trouverait rien dans processList et ne ferait rien.
         if (index > -1 || process.cycle.status === ExecutableStatus.IN_PROCCESS || wasQueued) {
             this.processList[index]?.instance?.unsubscribe();
+            // journal : run du process en cours (ou en file), pas celui de l'ordre OFF ; un cycle encore en
+            // file n'a jamais demarre (annulation)
+            const run = this.processList[index]?.run ?? queued?.run ?? process.run;
+            const isCancelled = wasQueued && !run?.startedAt;
+            const stopInfo = stop ?? this._stopOf(process, isCancelled ? StopReason.CANCELLED_WHILE_QUEUED : undefined);
             // flip immediatement (avant tout await) : ce champ est partage (meme CycleModel que
             // configurationService.structure.cycles, cf. _initializeProcess) et sert de signal
             // d'annulation pour toute continuation asynchrone deja en vol (tap de reservation dans
@@ -172,10 +279,17 @@ export class ProcessService {
                 this.processList.splice(index, 1);
             }
             // pour ne pas avoir de latece lors de l'execution off il etaignait toutes les sequences avant d'etindre le cycle.
-            await this._processProgress(process.cycle._id, ExecutableAction.OFF, process.mode, causes).then(() => true);
+            await this._processProgress(process.cycle._id, ExecutableAction.OFF, process.mode, causes, undefined, {
+                ...ProcessService._runJournal(run),
+                kind: isCancelled ? ProcessEventKind.CYCLE_CANCELLED : ProcessEventKind.CYCLE_ENDED,
+                stop: stopInfo,
+                sequences: ProcessService._sequencesSummary(run)
+            }).then(() => true);
             for (const sequence of process.cycle.sequences) {
+                this.sequencesSkippedByUser.delete(sequence._id);
                 if (sequence.status !== ExecutableStatus.STOPPED) {
-                    await this._processProgress(sequence._id, ExecutableAction.OFF, process.mode, causes).then(() => true);
+                    await this._processProgress(sequence._id, ExecutableAction.OFF, process.mode, causes, undefined,
+                        { runId: run?.runId, cycleId: process.cycle._id, stop: stopInfo }).then(() => true);
                 }
             }
             // regle 3 : verifie/eteint le Group parent si tous ses enfants sont maintenant stoppes
@@ -220,7 +334,7 @@ export class ProcessService {
         );
         for (const proc of orphaned) {
             const report: ProcessReport = [{ id: proc.id, type: CauseType.FORCE, cause: 'owning cycle stopped : ' + sourceCycleId }];
-            await this.reset(proc, report);
+            await this.reset(proc, report, { reason: StopReason.PARENT_STOPPED, by: this._cycleOrigin(EventSource.CYCLE, sourceCycleId) });
         }
     }
 
@@ -287,6 +401,7 @@ export class ProcessService {
         moduleProcess.action = isOn ? ExecutableAction.ON : ExecutableAction.OFF;
         moduleProcess.policy = StartPolicy.FORCE;
         moduleProcess.mode = ProcessMode.TRIGGER;
+        moduleProcess.origin = { source: EventSource.PUSH_BUTTON, refId: candidates[0]._id, refName: candidates[0].name };
         await this.execute(moduleProcess);
     }
 
@@ -314,6 +429,9 @@ export class ProcessService {
     // refus d'une confirmation (IGNORE) ou OFF sur un cycle en attente : abandonne l'attente sans
     // toucher aux actuators, le cycle n'a jamais demarre.
     private _cancelPendingConfirmation(process: ProcessModel): Promise<string> {
+        const stop = this._stopOf(process, StopReason.CANCELLED_WHILE_WAITING);
+        const run = this._adoptRun(process, this.pendingConfirmations.get(process.cycle._id),
+            stop.reason === StopReason.CONFIRMATION_REFUSED ? ConfirmationAnswer.IGNORE : undefined);
         this.pendingConfirmations.delete(process.cycle._id);
         process.cycle.status = ExecutableStatus.STOPPED;
 
@@ -322,20 +440,35 @@ export class ProcessService {
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
-            additionalData: { type: process.mode, value: data.status, status: data.status }
+            additionalData: {
+                type: process.mode, value: data.status, status: data.status,
+                ...ProcessService._runJournal(run), kind: ProcessEventKind.CYCLE_CANCELLED, name: process.cycle.name, stop
+            }
         }, data);
     }
 
+    // journal : seul un element encore actif au boot (statut rehydrate, ex: crash en pleine execution)
+    // est trace comme interrompu ; un element deja arrete ne recoit que l'event historique.
     private async _initialReset(cycleModel: CycleModel): Promise<void> {
         const actuators = await this._resolveActuators();
         await this.actuatorService.reset(cycleModel.getModules(actuators));
         cycleModel.status = ExecutableStatus.STOPPED;
+        const stop: EventStopModel = { reason: StopReason.SYSTEM_RESET, by: { source: EventSource.SYSTEM } };
+        const rehydratedStatus = this.configurationService.structure.cycles.find((cyc) => cyc._id === cycleModel._id)?.status;
 
         for (const sequence of cycleModel.sequences) {
-            await this._processProgress(sequence._id, ExecutableAction.OFF, ProcessMode.SYSTEM).then(() => true);
+            const isRunning = this.configurationService.sequences?.find((seq) => seq._id === sequence._id)?.status === ExecutableStatus.IN_PROCCESS;
+            await this._processProgress(sequence._id, ExecutableAction.OFF, ProcessMode.SYSTEM, undefined, undefined,
+                isRunning ? { cycleId: cycleModel._id, stop } : undefined).then(() => true);
         }
 
-        await this._processProgress(cycleModel._id, ExecutableAction.OFF, ProcessMode.SYSTEM);
+        const cycleJournal: Partial<ProcessEventData> | undefined = !rehydratedStatus || rehydratedStatus === ExecutableStatus.STOPPED
+            ? undefined
+            : {
+                kind: rehydratedStatus === ExecutableStatus.IN_PROCCESS ? ProcessEventKind.CYCLE_ENDED : ProcessEventKind.CYCLE_CANCELLED,
+                stop
+            };
+        await this._processProgress(cycleModel._id, ExecutableAction.OFF, ProcessMode.SYSTEM, undefined, undefined, cycleJournal);
     }
 
     private _initializeProcess(process: ProcessModel): void {
@@ -444,7 +577,10 @@ export class ProcessService {
                     return; // ne jamais demarrer le cycle ni le Group parent dans ce cas
                 }
             }
-            // un FORCE recu pendant la mise en file ou l'attente de confirmation la court-circuite
+            // un FORCE recu pendant la mise en file ou l'attente de confirmation la court-circuite : il
+            // reprend le run en attente (meme runId) et, pour une confirmation, en est la reponse
+            const pending = this.pendingConfirmations.get(process.cycle._id);
+            this._adoptRun(process, pending ?? this.queuedCycles.get(process.cycle._id), pending ? ConfirmationAnswer.FORCE : undefined);
             this.queuedCycles.delete(process.cycle._id);
             this.pendingConfirmations.delete(process.cycle._id);
             process.cycle.status = ExecutableStatus.IN_PROCCESS; // reservation synchrone (ferme la fenetre TOCTOU)
@@ -474,6 +610,8 @@ export class ProcessService {
             return;
         }
         const report: ProcessReport = [];
+        // nouveau run a chaque declenchement (un process de schedule peut etre rejoue)
+        process.run = RunContextModel.create(this._originOf(process));
         // detail structure pour la popin du front (causes : textes historiques conserves)
         const confirmation: ConfirmationRequestModel = { isRequested: !!process.schedule?.shouldConfirmation, conflicts: [] };
         let isConfirmationNeeded = confirmation.isRequested;
@@ -496,6 +634,7 @@ export class ProcessService {
 
         // pas d'await (comme avant) : execute() rend la main sans attendre le demarrage effectif
         if (isConfirmationNeeded) {
+            process.run.confirmation = { ...confirmation, requestedAt: new Date() };
             this.pendingConfirmations.set(process.cycle._id, process);
             this._needConfirmation(process, report, confirmation)
                 .catch((err) => this.logger.warn({ err }, 'failed to publish confirmation request'));
@@ -516,15 +655,33 @@ export class ProcessService {
         if (cycleCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
             this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses);
+            this._journalStartRefused(process, cycleCauses);
             return false;
         }
         const sequenceCauses = await this._getUnverifiedSequencesCauses(process);
         if (sequenceCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
             this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses);
+            this._journalStartRefused(process, sequenceCauses);
             return false;
         }
         return true;
+    }
+
+    // demarrage refuse : trace sans statut (EventRepository.getLastStatus l'ignore a la rehydratation) ;
+    // le front est deja notifie par _notifyConditionsNotVerified. process.run n'est pas touche : le meme
+    // process de schedule peut porter le run d'une execution en cours.
+    private _journalStartRefused(process: ProcessModel, causes: ConditionReport): void {
+        const additionalData: ProcessEventData = {
+            type: process.mode,
+            ...ProcessService._runJournal(RunContextModel.create(this._originOf(process))),
+            kind: ProcessEventKind.START_REFUSED,
+            name: process.cycle.name,
+            conditions: causes.map((x) => x.cause)
+        };
+        additionalData.message = DescribeProcessEvent(additionalData);
+        this.eventRepository.save({ elementId: process.cycle._id, date: new Date(), elementType: ElementType.CYCLE, additionalData })
+            .catch((err) => this.logger.warn({ err }, 'failed to save start refused event'));
     }
 
     // null des qu'une sequence est verifiee, sinon les causes de toutes les sequences (prefixees par leur nom).
@@ -595,23 +752,42 @@ export class ProcessService {
                 next: async () => {
                     const report: ProcessReport = [];
                     report.push({ id: process.id, type: CauseType.FORCE, cause: 'end lifecycle normal stop : ' + process.cycle.name });
-                    await this.reset(process, report);
+                    await this.reset(process, report, { reason: StopReason.COMPLETED });
                 },
                 error: async (_err) => {
                     this.logger.error({ err: _err }, 'execution error');
                     const report: ProcessReport = [];
                     report.push({ id: process.id, type: CauseType.FORCE, cause: 'abnormal stop : ' + process.cycle.name + 'detail:=>' + _err });
-                    await this.reset(process, report);
+                    await this.reset(process, report, { reason: StopReason.ERROR, error: _err?.message ?? String(_err) });
                 }
             }
         );
+    }
+
+    // CYCLE_STARTED : le cycle passe reellement IN_PROCCESS (CYCLE / MODULE / GROUP)
+    private _journalCycleStarted(process: ProcessModel, report: ProcessReport): Promise<string> {
+        const run = process.run ?? this._adoptRun(process);
+        run.startedAt = new Date();
+        return this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, report, undefined, {
+            ...ProcessService._runJournal(run),
+            kind: ProcessEventKind.CYCLE_STARTED,
+            preempted: [...run.preempted]
+        });
+    }
+
+    private _runOf(cycleId: string): RunContextModel | undefined {
+        return this.processList.find((x) => x.cycle._id === cycleId)?.run;
+    }
+
+    private _sequenceName(sequenceId: string): string {
+        return this.configurationService.sequences.find((x) => x._id === sequenceId)?.name ?? sequenceId;
     }
 
     // orchestration Group : le parent marque son propre statut/progress puis demarre ses enfants
     // en tache de fond (ne bloque pas execute(), au meme titre que _executeProcess pour un CYCLE).
     private async _executeGroupOn(process: ProcessModel): Promise<void> {
         this.processList.push(process);
-        await this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, []);
+        await this._journalCycleStarted(process, []);
         const token = Symbol();
         this.groupRunTokens.set(process.cycle._id, token);
         await this._startGroupChildren(process.cycle, token, process.mode);
@@ -753,6 +929,7 @@ export class ProcessService {
         groupOffProcess.action = ExecutableAction.OFF;
         groupOffProcess.policy = StartPolicy.FORCE;
         groupOffProcess.mode = ProcessMode.SYSTEM;
+        groupOffProcess.stop = { reason: StopReason.COMPLETED, by: { source: EventSource.SYSTEM } };
         await this.execute(groupOffProcess);
     }
 
@@ -766,6 +943,7 @@ export class ProcessService {
         childProcess.policy = StartPolicy.FORCE;
         childProcess.mode = mode;
         childProcess.sourceCycleId = sourceCycleId;
+        childProcess.origin = this._cycleOrigin(EventSource.GROUP, sourceCycleId);
         await this.execute(childProcess);
     }
 
@@ -776,6 +954,7 @@ export class ProcessService {
         childProcess.policy = StartPolicy.FORCE;
         childProcess.mode = ProcessMode.SYSTEM;
         childProcess.sourceCycleId = sourceCycleId;
+        childProcess.stop = { reason: StopReason.PARENT_STOPPED, by: this._cycleOrigin(EventSource.GROUP, sourceCycleId) };
         await this.execute(childProcess);
     }
 
@@ -799,7 +978,8 @@ export class ProcessService {
             proc.mode = ProcessMode.SYSTEM; // pour que la regle 1 (_cascadeStopConflictingCycles) s'applique aussi a ces arrets
             const report: ProcessReport = [];
             report.push({ id: proc.id, type: CauseType.FORCE, cause: 'stopped by conflicted cycle : ' + process.cycle.name });
-            await this.reset(proc, report);
+            process.run?.preempted.push(proc.cycle.name);
+            await this.reset(proc, report, this._stopByCycle(StopReason.PREEMPTED, process));
         }
     }
 
@@ -814,6 +994,7 @@ export class ProcessService {
         if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             return; // regle 3 : deja en cours -> no-op silencieux
         }
+        const run = this._adoptRun(process, this.pendingConfirmations.get(process.cycle._id), ConfirmationAnswer.QUEUE);
         this.pendingConfirmations.delete(process.cycle._id);
         const actuators = await this._resolveActuators();
         const conflicts = this._getRunningConflicts(process.cycle, actuators);
@@ -826,7 +1007,8 @@ export class ProcessService {
         const report: ProcessReport = conflicts
             .map((cyc) => ({ id: process.id, type: CauseType.QUEUED, cause: 'queued after cycle : ' + cyc.name }));
         this.logger.log({ cycleId: process.cycle._id, waitingFor: conflicts.map((cyc) => cyc._id) }, 'cycle queued');
-        await this._publishWaitingStatus(process, ExecutableStatus.QUEUED, report);
+        run.queuedAt = new Date();
+        await this._publishWaitingStatus(process, ExecutableStatus.QUEUED, report, undefined, conflicts.map((cyc) => cyc.name));
     }
 
     // demarre, dans l'ordre de mise en file, chaque cycle QUEUED qui n'a plus de conflit en cours ; un
@@ -905,7 +1087,7 @@ export class ProcessService {
             const report: ProcessReport = [];
             report.push({ id: proc.id, type: CauseType.FORCE, cause: 'single module stop  : ' + process.cycle.name });
 
-            await this.reset(proc, report);
+            await this.reset(proc, report, this._stopByCycle(StopReason.MODULE_OVERRIDE, process));
         }
     }
 
@@ -929,7 +1111,7 @@ export class ProcessService {
             const report: ProcessReport = [];
             report.push({ id: proc.id, type: CauseType.FORCE, cause: 'parent cycle stop : ' + process.cycle.name });
 
-            await this.reset(proc, report);
+            await this.reset(proc, report, this._stopByCycle(StopReason.PARENT_STOPPED, process));
         }
     }
 
@@ -959,6 +1141,7 @@ export class ProcessService {
         moduleProcess.policy = StartPolicy.FORCE;
         moduleProcess.mode = mode;
         moduleProcess.sourceCycleId = sourceCycleId;
+        moduleProcess.origin = this._cycleOrigin(EventSource.CYCLE, sourceCycleId);
         await this.execute(moduleProcess);
     }
 
@@ -993,7 +1176,7 @@ export class ProcessService {
                     this.processList.push(process);
                     const report = this._buildManualPushButtonReport(process);
 
-                    await this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, report);
+                    await this._journalCycleStarted(process, report);
                 }));
 
         return obs.pipe(
@@ -1008,6 +1191,7 @@ export class ProcessService {
             this.logger.warn({ sequenceId }, 'sequence skip ignored (sequence not running)');
             return;
         }
+        this.sequencesSkippedByUser.add(sequenceId);
         running.flag.next(null);
     }
 
@@ -1068,7 +1252,8 @@ export class ProcessService {
                 }
                 skipped.delete(i);
                 this.logger.log({ cycleId: cycle._id, sequenceId }, 'forced sequence launched');
-                lastRun = await this._runSequence(lastRun, executionLst[i], modules, timings, process.mode, cycle, sourceCycleId);
+                process.run?.sequences.forced.push(this._sequenceName(sequenceId));
+                lastRun = await this._runSequence(lastRun, executionLst[i], modules, timings, process.mode, cycle, sourceCycleId, true);
             }
         };
 
@@ -1106,7 +1291,11 @@ export class ProcessService {
             } else {
                 skipped.add(i);
                 this.logger.log({ cycleId: cycle._id, sequenceId: sequence.sequenceId }, 'sequence skipped (conditions not verified)');
-                await this._processProgress(sequence.sequenceId, ExecutableAction.OFF, process.mode);
+                process.run?.sequences.skipped.push(this._sequenceName(sequence.sequenceId));
+                await this._processProgress(sequence.sequenceId, ExecutableAction.OFF, process.mode, undefined, undefined, {
+                    kind: ProcessEventKind.SEQUENCE_SKIPPED, runId: process.run?.runId, cycleId: cycle._id,
+                    conditions: sequenceCauses.map((x) => x.cause)
+                });
                 // uniquement au premier saut : les rattrapages reevaluent en boucle et spammeraient le front
                 this._notifyConditionsNotVerified(ExecutableType.SEQUENCE, sequence.sequenceId, process.mode, sequenceCauses);
             }
@@ -1124,15 +1313,25 @@ export class ProcessService {
                 this.logger.warn({ error, name: previousName }, 'module cycle trigger error');
             }
         }
-        await this._processProgress(lastRun.sequenceId, ExecutableAction.OFF, process.mode);
+        await this._processProgress(lastRun.sequenceId, ExecutableAction.OFF, process.mode, undefined, undefined,
+            this._sequenceEndJournal(lastRun.sequenceId, cycle._id));
         return null;
+    }
+
+    // SEQUENCE_ENDED au passage a la suivante / en fin de cycle : duree ecoulee ou SKIP du front
+    private _sequenceEndJournal(sequenceId: string, cycleId: string): Partial<ProcessEventData> {
+        const isSkippedByUser = this.sequencesSkippedByUser.delete(sequenceId);
+        return {
+            runId: this._runOf(cycleId)?.runId, cycleId,
+            stop: { reason: isSkippedByUser ? StopReason.SKIPPED_BY_USER : StopReason.COMPLETED }
+        };
     }
 
     // lance une sequence (coupe les modules de previousSeq, allume ceux de currentSeq) et attend sa fin :
     // maxDuration ecoulee, SKIP (flag) ou arret du cycle (_clearQueuedSequences reveille le flag).
     private async _runSequence(previousSeq: SequenceExecutionEntry | undefined, currentSeq: SequenceExecutionEntry,
         modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>, mode: ProcessMode, cycle: CycleModel,
-        sourceCycleId?: string): Promise<SequenceExecutionEntry> {
+        sourceCycleId?: string, isForced = false): Promise<SequenceExecutionEntry> {
         const ref: { sequenceId: string; flag: Subject<unknown>; timeoutHandle?: NodeJS.Timeout } =
             { sequenceId: currentSeq.sequenceId, flag: new Subject() };
         this.queuedSequences.push(ref);
@@ -1142,7 +1341,7 @@ export class ProcessService {
         const currentData =
             { id: currentSeq.sequenceId, names: currentSeq.names, duration: currentSeq.securityConfig.maxDuration };
         if (cycle.status === ExecutableStatus.IN_PROCCESS) {
-            await this._switchProcess(previousData, currentData, modules, timings, mode, sourceCycleId);
+            await this._switchProcess(previousData, currentData, modules, timings, mode, sourceCycleId, cycle._id, isForced);
             ref.timeoutHandle = setTimeout(() => ref.flag.next(null), currentSeq.securityConfig.maxDuration);
             await done;
         }
@@ -1164,15 +1363,23 @@ export class ProcessService {
 
     private async _switchProcess(previousData: { id: string; names: string[]; duration: number },
         currentData: { id: string; names: string[]; duration: number }, modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>,
-        mode: ProcessMode, sourceCycleId?: string): Promise<boolean> {
+        mode: ProcessMode, sourceCycleId?: string, cycleId?: string, isForced = false): Promise<boolean> {
 
         if (previousData.id) {
             await this._switchModule(previousData.names, modules, timings, 0, sourceCycleId, mode);
-            await this._processProgress(previousData.id, ExecutableAction.OFF, mode).then(() => true);
+            await this._processProgress(previousData.id, ExecutableAction.OFF, mode, undefined, undefined,
+                this._sequenceEndJournal(previousData.id, cycleId)).then(() => true);
         }
 
         await this._switchModule(currentData.names, modules, timings, 1, sourceCycleId, mode);
-        return this._processProgress(currentData.id, ExecutableAction.ON, mode, null, currentData.duration).then(() => true);
+        const run = this._runOf(cycleId);
+        const name = this._sequenceName(currentData.id);
+        if (run) {
+            run.sequences.skipped = run.sequences.skipped.filter((x) => x !== name); // rattrapage / forcee
+            run.sequences.run.push(name);
+        }
+        return this._processProgress(currentData.id, ExecutableAction.ON, mode, null, currentData.duration,
+            { runId: run?.runId, cycleId, isForced: isForced || undefined }).then(() => true);
     }
 
     private async _switchModule(
@@ -1205,9 +1412,12 @@ export class ProcessService {
 
     }
 
+    // journal : champs du journal d'execution (kind deduit de l'action s'il est absent) ; sans journal,
+    // event historique seul (ex: reset au boot d'un element deja arrete).
     // eslint-disable-next-line complexity
     private async _processProgress(
-        id: string, action: ExecutableAction, mode: ProcessMode, causes?: ProcessReport, duration?: number
+        id: string, action: ExecutableAction, mode: ProcessMode, causes?: ProcessReport, duration?: number,
+        journal?: Partial<ProcessEventData>
     ): Promise<string> {
         const seqFound = this.configurationService.sequences.find(seq => seq._id === id);
         const cycFound = this.configurationService.structure.cycles.find(cyc => cyc._id === id);
@@ -1217,6 +1427,8 @@ export class ProcessService {
         const type: ExecutableType = cycFound ? ExecutableType.CYCLE : ExecutableType.SEQUENCE;
         const startedAt = new Date();
         const status = action === ExecutableAction.ON ? ExecutableStatus.IN_PROCCESS : ExecutableStatus.STOPPED;
+        // lu avant que la progression ne soit remise a zero ci-dessous
+        const previousStartedAt = (cycFound ?? seqFound).progression?.startedAt;
         let data = { type, id, status, startedAt, duration };
         if (type === ExecutableType.SEQUENCE) {
             const customStacks = seqFound.securityConfig.customStacks;
@@ -1236,6 +1448,8 @@ export class ProcessService {
             data = { type, id, status, startedAt, duration: cycleDuration };
             this.triggerService.onElementValueChanged.next(data);
         }
+        const journalData = journal &&
+            this._buildProgressJournal(journal, cycFound ?? seqFound, !!cycFound, status, data.duration, previousStartedAt);
 
         return this._publishStatusEvent({
             elementId: id,
@@ -1247,9 +1461,29 @@ export class ProcessService {
                 status: data.status,
                 startedAt: data.startedAt,
                 duration: data.duration,
-                causes
+                causes,
+                ...journalData
             }
         }, data);
+    }
+
+    // complete le journal d'un changement de statut : kind par defaut, nom, durees prevue / reelle
+    private _buildProgressJournal(journal: Partial<ProcessEventData>, element: { name: string }, isCycle: boolean,
+        status: ExecutableStatus, plannedDuration: number, previousStartedAt: Date | undefined): Partial<ProcessEventData> {
+        const isOn = status === ExecutableStatus.IN_PROCCESS;
+        const defaultKind = isCycle
+            ? (isOn ? ProcessEventKind.CYCLE_STARTED : ProcessEventKind.CYCLE_ENDED)
+            : (isOn ? ProcessEventKind.SEQUENCE_STARTED : ProcessEventKind.SEQUENCE_ENDED);
+        const result: Partial<ProcessEventData> = { kind: defaultKind, name: element.name, plannedDuration, ...journal };
+        if (result.kind === ProcessEventKind.CYCLE_ENDED || result.kind === ProcessEventKind.SEQUENCE_ENDED) {
+            const endedAt = new Date();
+            result.endedAt = endedAt;
+            if (previousStartedAt) {
+                result.runStartedAt = new Date(previousStartedAt);
+                result.realDuration = endedAt.getTime() - result.runStartedAt.getTime();
+            }
+        }
+        return result;
     }
     /**
      * Écrit les paramètres Fgg.ii de l'onduleur via sa register map (bloc = code du paramètre,
@@ -1277,7 +1511,7 @@ export class ProcessService {
 
     // statut pose de facon synchrone (avant toute attente) : un demarrage qui suit ne doit pas etre ecrase
     private _publishWaitingStatus(processModel: ProcessModel, status: ExecutableStatus.WAITTING_CONFIRMATION | ExecutableStatus.QUEUED,
-        causes: { type: CauseType; cause: string }[], confirmation?: ConfirmationRequestModel): Promise<string> {
+        causes: { type: CauseType; cause: string }[], confirmation?: ConfirmationRequestModel, waitingFor?: string[]): Promise<string> {
         const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes, confirmation };
         const cycFound = this.configurationService.structure.cycles.find((cyc) => cyc._id === data.id);
         if (cycFound) {
@@ -1287,7 +1521,15 @@ export class ProcessService {
             elementId: data.id,
             date: new Date(),
             elementType: ElementType.CYCLE,
-            additionalData: { type: processModel.mode, value: data.status, status: data.status, causes, confirmation }
+            additionalData: {
+                type: processModel.mode, value: data.status, status: data.status, causes,
+                ...ProcessService._runJournal(processModel.run),
+                // demande : detail tel que calcule par l'arbitrage ; file : confirmation du run (reponse QUEUE)
+                confirmation: confirmation ?? (processModel.run?.confirmation && { ...processModel.run.confirmation }),
+                kind: status === ExecutableStatus.QUEUED ? ProcessEventKind.CYCLE_QUEUED : ProcessEventKind.CONFIRMATION_REQUESTED,
+                name: processModel.cycle.name,
+                waitingFor
+            }
         }, data);
     }
 
