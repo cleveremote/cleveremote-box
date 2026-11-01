@@ -43,6 +43,7 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
 import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
+import { DigitalIoMonitorService } from '@process/domain/services/digital-io-monitor.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -113,7 +114,8 @@ import { DeviceConnectivityService } from '@process/domain/services/device-conne
         },
         BleService,
         CycleGroupService,
-        DeviceConnectivityService
+        DeviceConnectivityService,
+        DigitalIoMonitorService
     ],
     exports: [
         ProcessService,

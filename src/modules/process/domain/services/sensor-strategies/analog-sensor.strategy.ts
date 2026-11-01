@@ -12,14 +12,14 @@ export class AnalogSensorStrategy implements SensorStrategy {
     public constructor(private comSensorStrategy: ComSensorStrategy) { }
 
     // lecture identique à un sensor COM (valeur brute + unité de la voie), convertie en grandeur physique
-    public async read(sensor: SensorModel): Promise<ReadResult> {
+    public async read(sensor: SensorModel,isFromLoopCtrl?:boolean): Promise<ReadResult> {
         const items = await this.comSensorStrategy.read(sensor);
-        return items.map((item) => this.transform(sensor, item));
+        return items.map((item) => this.transform(sensor, item,isFromLoopCtrl));
     }
 
     // valeur brute (unité de l'acquisition, ex: µA) -> grandeur physique (config.scaling.unit) ; AnalogConversionError si invalide
-    public transform(sensor: SensorModel, item: ReadResultItem): ReadResultItem {
+    public transform(sensor: SensorModel, item: ReadResultItem, isFromLoopCtrl?:boolean): ReadResultItem {
         const { scaling } = sensor.config as AnalogSensorConfigModel;
-        return { value: toPhysicalValue(item?.value, item?.unit, scaling), isFormated: true, unit: scaling.unit, name: item.name };
+        return { value: toPhysicalValue(item?.value, item?.unit, scaling,isFromLoopCtrl), isFormated: true, unit: scaling.unit, name: item.name };
     }
 }

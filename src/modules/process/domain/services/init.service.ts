@@ -33,6 +33,7 @@ import { SensorType } from '../interfaces/sensor.interface';
 import { outcomeValues } from '../utils/device-command.util';
 import { SlaveTemplateService } from './slave-template.service';
 import { DeviceConnectivityService } from './device-connectivity.service';
+import { DigitalIoMonitorService } from './digital-io-monitor.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -68,7 +69,8 @@ export class InitService {
         private readonly comSensorStrategy: ComSensorStrategy,
         private readonly slaveTemplateService: SlaveTemplateService,
         private readonly deviceConnectivityService: DeviceConnectivityService,
-        private readonly controlLoopRepository: ControlLoopRepository
+        private readonly controlLoopRepository: ControlLoopRepository,
+        private readonly digitalIoMonitorService: DigitalIoMonitorService
     ) { }
 
 
@@ -99,7 +101,7 @@ export class InitService {
             //.then(() => wrap('InitService.testBuildSlaveDeviceCommandsJson', () => this._testBuildSlaveDeviceCommandsJson()))
             .then(() => wrap('init devices', () => this.configurationService.scanMaster('8d6f3fe2-af41-405b-9523-a0a6fb589b42'))) // TODO: adapter le deviceId a la connexion Modbus reelle du module Waveshare "Modbus RTU IO 8CH" une fois configuree (slave relié au bus du master concerné).    
             //.then(() => wrap('InitService.testDeviceCommands', () => this._testDeviceCommands("eec70b4d-eddc-456a-a1be-0229663b60a3"))) 
-            .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testFlowMeter() ))
+            //.then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testFlowMeter() ))
             
             //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
             //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
@@ -111,6 +113,7 @@ export class InitService {
             .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
+            .then(() => wrap('DigitalIoMonitorService.watch', () => this._watchDigitalIo()))
             .then(() => wrap('sendReadySignal', () => this.sendReadySignal()))
             //.then(() => wrap('init devices', () => this.deviceService.initAll()))
             .then(async () => {
@@ -134,6 +137,15 @@ export class InitService {
             .catch((error) => {
                 this.logger.error({ err: error, message: error?.message, stack: error?.stack }, 'initialization failed');
             })
+    }
+
+    // Sortie digitale commutée (à la main, ou par un cycle) -> démarrage/arrêt du cycle MODULE qui possède son actuator COM
+    private _watchDigitalIo(): void {
+        this.digitalIoMonitorService.outputChanges$.subscribe((change) => {
+            this.processService.executeModuleCycleForDigitalOutput(change.deviceId, change.channel, change.current)
+                .catch((error) => this.logger.warn({ err: error?.message, change }, 'digital output -> module cycle mapping failed'));
+        });
+        this.digitalIoMonitorService.watch();
     }
 
     private _resetAllModules(): Promise<void> {

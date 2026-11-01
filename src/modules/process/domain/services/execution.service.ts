@@ -226,7 +226,7 @@ export class ProcessService {
     // arreter tout cycle CYCLE en cours partageant un actuator COM/RPI avec ce cycle MODULE.
     // Le garde no-op ci-dessous (etat deja atteint) est indispensable : quand la regle 2 demarre elle-
     // meme ce cycle MODULE (actuator commute par un CYCLE deja en cours), l'ecriture Modbus physique
-    // qui en resulte est ensuite re-detectee ~500ms plus tard par monitorDigitalOutputs, qui rappelle
+    // qui en resulte est ensuite re-detectee ~500ms plus tard par DigitalIoMonitorService, qui rappelle
     // cette methode pour son propre echo. Sans ce garde, ce second appel (sans sourceCycleId)
     // declencherait la regle 1 et arreterait a tort le CYCLE qui vient de demarrer ce MODULE.
     public async executeModuleCycleForDigitalOutput(deviceId: string, channel: number, isOn: boolean): Promise<void> {

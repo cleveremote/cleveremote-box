@@ -100,7 +100,7 @@ export class RegulationService {
         return {
             min: config.minOpening,
             max: config.maxOpening,
-            read: async () => (await this._sensorStrategy(sensor).read(sensor))[0]?.value,
+            read: async () => (await this._sensorStrategy(sensor).read(sensor,true))[0]?.value,
             write: port.write,
             current: () => config.openingPercent,
             settleMs: port.settleMs

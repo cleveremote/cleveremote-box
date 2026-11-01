@@ -29,12 +29,15 @@ export function toElectricalValue(value: number, unit: string | undefined, signa
 }
 
 /** Valeur brute lue -> grandeur physique (scaling.unit) : conversion électrique puis mise à l'échelle linéaire */
-export function toPhysicalValue(value: number, unit: string | undefined, scaling: AnalogScalingModel): number {
+export function toPhysicalValue(value: number, unit: string | undefined, scaling: AnalogScalingModel,isFromLoopCtrl?:boolean): number {
     if (!scaling) {
         throw new AnalogConversionError('toPhysicalValue : mise à l\'échelle absente');
     }
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         throw new AnalogConversionError(`toPhysicalValue : valeur non numérique (${value})`);
+    }
+    if(isFromLoopCtrl){
+        return  toElectricalValue(value, unit, AnalogSignalType.RAW);
     }
     return linearScale(
         toElectricalValue(value, unit, scaling.signalType),

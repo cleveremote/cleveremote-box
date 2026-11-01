@@ -1,4 +1,5 @@
 import { Connection } from 'mongoose';
+import { Subject } from 'rxjs';
 import { InitService } from '@process/domain/services/init.service';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
@@ -128,7 +129,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             {} as never,
             { seed: jest.fn().mockResolvedValue(undefined) } as never,
             { watch: jest.fn() } as never,
-            { migrateFromCtrlActuators: jest.fn().mockResolvedValue(undefined) } as never
+            { migrateFromCtrlActuators: jest.fn().mockResolvedValue(undefined) } as never,
+            { watch: jest.fn(), outputChanges$: new Subject() } as never
         );
     });
 
