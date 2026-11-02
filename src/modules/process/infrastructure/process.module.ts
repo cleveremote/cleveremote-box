@@ -5,7 +5,6 @@ import { Connection } from 'mongoose';
 import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
-import { GlobalSettings, GlobalSettingsSchema } from './schemas/global-settings.schema';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
 import { ProcessService } from '@process/domain/services/execution.service';
@@ -22,8 +21,6 @@ import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
 import { AuthenticationController } from './controllers/authentication.controller';
-import { GlobalSettingsRepository } from './repositories/global-settings.repository';
-import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { GlobalSettingsController } from './controllers/global-settings.controller';
 import { EventRepository } from './repositories/event.repository';
 import { EventMongooseRepository } from './repositories/event-mongoose.repository';
@@ -67,8 +64,7 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
         }),
         MongooseModule.forFeature([
             { name: Event.name, schema: EventSchema },
-            { name: Authentication.name, schema: AuthenticationSchema },
-            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
+            { name: Authentication.name, schema: AuthenticationSchema }
         ]),
         ActuatorModule,
         DeviceModule,
@@ -87,13 +83,12 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
     providers: [
         //----Repositories------//
         AuthenticationRepository,
-        GlobalSettingsRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
         //---------------------//
         AuthenticationService,
-        GlobalSettingsService,
+        // GlobalSettingsService : fourni par ActuatorModule (instance unique)
         SlaveTemplateService,
         StructureService,
         ProcessService,

@@ -74,7 +74,9 @@ describe('DeviceCommandService', () => {
             slaveTemplateRepository as never,
             registerMapService,
             registerMapLoader as never,
+            { loadFromDirectory: jest.fn(), translate: jest.fn((t) => t), translateOutcome: jest.fn((_t, o) => o) } as never,
             new ModbusDeviceService({} as never, waveshareDiscoveryService as never, logger as never),
+            { language: 'fr' } as never,
             logger as never
         );
     });

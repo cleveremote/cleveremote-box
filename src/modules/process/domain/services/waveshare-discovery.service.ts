@@ -3,6 +3,8 @@ import { Logger } from 'nestjs-pino';
 import * as dgram from 'node:dgram';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol } from '@process/domain/models/device.model';
+import { GENERATED_TEXTS } from '@framework/i18n/generated-texts';
+import { GlobalSettingsService } from './global-settings.service';
 
 export interface WaveshareDiscoveryResult {
     ip: string;
@@ -28,6 +30,7 @@ export class WaveshareDiscoveryService {
 
     public constructor(
         @Inject(forwardRef(() => DeviceRepository)) private deviceRepository: DeviceRepository,
+        private readonly globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) { }
 
@@ -134,7 +137,7 @@ export class WaveshareDiscoveryService {
             const master = new DeviceModel();
             master.name = result.name || `Waveshare ${result.deviceId}`;
             master.type = DeviceType.MASTER;
-            master.description = 'Master découvert automatiquement (Waveshare)';
+            master.description = GENERATED_TEXTS[this.globalSettingsService.language].discoveredMaster('Waveshare');
             // 502 : port Modbus TCP de la passerelle (result.port est le port UDP de découverte)
             master.config = { protocol: MasterProtocol.TCP, ipAddress: result.ip, deviceId: result.deviceId, port: 502, timeout: 1000 };
             const saved = await this.deviceRepository.save(master);

@@ -1,3 +1,4 @@
+import { Language } from '@framework/i18n/language';
 import { ProcessMode, RankedProcessMode } from '../interfaces/executable.interface';
 
 export class LocalCoordinatesModel {
@@ -19,5 +20,7 @@ export class GlobalSettingsModel {
     public id: string;
     public localCoordinates: LocalCoordinatesModel;
     public modeRanks?: ModeRanksModel;
+    // langue par defaut des textes de la box (register maps traduites, noms generes)
+    public language?: Language;
     public version?: string;
 }

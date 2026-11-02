@@ -6,14 +6,17 @@ import { DeviceCommandRepository } from '@process/infrastructure/repositories/de
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { RegisterMapNotFoundError } from '@register-map/domain/errors/register-map.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 import { ModbusConnection } from '@register-map/domain/models/modbus-connection.model';
 import { READ_FUNCTIONS, RegisterMapTemplate, RegisterOperationCommand, RegisterOperationOutcome } from '@register-map/domain/models/register-map.model';
+import { REGISTER_MAPS_I18N_DIR, RegisterMapI18nService } from '@register-map/domain/services/register-map-i18n.service';
 import { REGISTER_MAPS_DIR, RegisterMapLoader } from '@register-map/domain/services/register-map-loader.service';
 import { RegisterMapService } from '@register-map/domain/services/register-map.service';
 import { ActuatorActionConfig } from '../models/actuator.model';
 import { DeviceCommandModel, DeviceCommandOverride, DeviceCommandType } from '../models/device-command.model';
 import { DeviceModel, MasterConfigModel, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
 import { DeviceCommandValue, hasCommandType, outcomeValues } from '../utils/device-command.util';
+import { GlobalSettingsService } from './global-settings.service';
 import { ModbusDeviceService } from './modbus-device.service';
 
 interface ResolvedDevice {
@@ -46,21 +49,25 @@ export class DeviceCommandService {
         private readonly slaveTemplateRepository: SlaveTemplateRepository,
         private readonly registerMapService: RegisterMapService,
         private readonly registerMapLoader: RegisterMapLoader,
+        private readonly registerMapI18n: RegisterMapI18nService,
         private readonly modbusDeviceService: ModbusDeviceService,
+        private readonly globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) { }
 
     /**
      * Exécute la commande (ou son id) sur le slave `deviceId`, qui doit être du modèle de la commande ;
      * `override` remplace voie / valeur par défaut. Commande invalide : exception ; erreurs Modbus/réseau :
-     * dans le résultat (outcome.isOk = false).
+     * dans le résultat (outcome.isOk = false). `lang` : libellés du résultat traduits pour l'affichage.
      */
     public async execute(
         command: DeviceCommandModel | string,
         deviceId: string,
-        override: DeviceCommandOverride = {}
+        override: DeviceCommandOverride = {},
+        lang?: string
     ): Promise<RegisterOperationOutcome> {
-        return this._execute(await this._resolve(command, deviceId), override);
+        const resolved = await this._resolve(command, deviceId);
+        return this.registerMapI18n.translateOutcome(resolved.template, await this._execute(resolved, override), lang);
     }
 
     /**
@@ -72,11 +79,15 @@ export class DeviceCommandService {
         return outcomeValues(await this._execute(resolved), fields ?? resolved.command.fields);
     }
 
-    /** Exécute une opération de la register map d'un slave, sans DeviceCommand enregistrée (banc de test, config onduleur) */
-    public async executeOnDevice(deviceId: string, operation: RegisterOperationCommand): Promise<RegisterOperationOutcome> {
+    /**
+     * Exécute une opération de la register map d'un slave, sans DeviceCommand enregistrée (banc de test, config onduleur) ;
+     * `lang` : libellés du résultat traduits pour l'affichage
+     */
+    public async executeOnDevice(deviceId: string, operation: RegisterOperationCommand, lang?: string): Promise<RegisterOperationOutcome> {
         const { template, connection } = await this._resolveDevice(deviceId);
-        return this.registerMapService.execute(template, connection, operation);
+        return this.registerMapI18n.translateOutcome(template, await this.registerMapService.execute(template, connection, operation), lang);
     }
+
 
     /**
      * Exécute dans l'ordre les commandes init du modèle du slave non encore appliquées sur ce slave, et les
@@ -189,7 +200,9 @@ export class DeviceCommandService {
      * les mêmes commandes. Blocs `danger` : isConfirmed à false, à confirmer explicitement avant exécution.
      */
     public fromRegisterMap(modelId: string, registerMap: RegisterMapTemplate): SlaveTemplate['deviceCommands'] {
-        return registerMap.registerMap.flatMap((block) => block.operations.map((operation) => {
+        // noms et descriptions dans la langue de la box
+        const translated = this.translateTemplate(registerMap, this.globalSettingsService.language);
+        return translated.registerMap.flatMap((block) => block.operations.map((operation) => {
             const isRead = READ_FUNCTIONS.includes(operation.function);
             return {
                 _id: this._stableId(modelId, block.id, operation.id),
@@ -215,7 +228,9 @@ export class DeviceCommandService {
 
     private _withParams<T extends Pick<DeviceCommandModel, 'blockId' | 'operationId' | 'params'> & { _id?: string }>(kind: string, modelId: string, command: T): T {
         try {
-            return { ...command, params: this.registerMapService.describeParams(this.getTemplate(kind), command.blockId, command.operationId) };
+            // libellés (champs, enums) dans la langue de la box : noms des sensors auto-créés, formulaires du front
+            const template = this.translateTemplate(this.getTemplate(kind), this.globalSettingsService.language);
+            return { ...command, params: this.registerMapService.describeParams(template, command.blockId, command.operationId) };
         } catch (err) {
             this.logger.warn({ modelId, commandId: command._id, err: err.message }, 'device command params unresolved');
             return command;
@@ -226,7 +241,7 @@ export class DeviceCommandService {
     public getTemplate(kind: string): RegisterMapTemplate {
         const template = this._loadTemplates().get(kind);
         if (!template) {
-            throw new RegisterMapNotFoundError(`Aucune register map pour le kind ${kind}`);
+            throw new RegisterMapNotFoundError(`Aucune register map pour le kind ${kind}`, BoxErrorCode.REGISTER_MAP_NOT_FOUND, { kind });
         }
         return template;
     }
@@ -241,21 +256,34 @@ export class DeviceCommandService {
         return (await this._resolveDevice(deviceId)).template;
     }
 
+    /** Copie traduite pour l'affichage (register-maps/i18n) ; l'exécution utilise toujours le template source */
+    public translateTemplate(template: RegisterMapTemplate, lang: string | undefined): RegisterMapTemplate {
+        this._loadTemplates();
+        return this.registerMapI18n.translate(template, lang);
+    }
+
     private _loadTemplates(): Map<string, RegisterMapTemplate> {
-        this._templates ??= new Map(this.registerMapLoader.loadFromDirectory(join(process.cwd(), REGISTER_MAPS_DIR)).map((t) => [t.kind, t]));
+        if (!this._templates) {
+            const dir = join(process.cwd(), REGISTER_MAPS_DIR);
+            const templates = this.registerMapLoader.loadFromDirectory(dir);
+            this._templates = new Map(templates.map((t) => [t.kind, t]));
+            this.registerMapI18n.loadFromDirectory(join(dir, REGISTER_MAPS_I18N_DIR), templates);
+        }
         return this._templates;
     }
 
     private async _resolve(command: DeviceCommandModel | string, deviceId: string): Promise<ResolvedCommand> {
         const model = typeof command === 'string' ? await this.deviceCommandRepository.get(command) as DeviceCommandModel : command;
         if (!model) {
-            throw new RegisterMapNotFoundError(`DeviceCommand ${command} introuvable`);
+            throw new RegisterMapNotFoundError(`DeviceCommand ${command} introuvable`, BoxErrorCode.DEVICE_COMMAND_NOT_FOUND,
+                { commandId: typeof command === 'string' ? command : command?._id });
         }
         const resolved = await this._resolveDevice(deviceId);
         const modelId = (resolved.slave.config as SlaveConfigModel).modelId;
         if (modelId !== model.modelId) {
             throw new RegisterMapNotFoundError(
-                `DeviceCommand ${model._id} (modèle ${model.modelId}) non exécutable sur le slave ${deviceId} (modèle ${modelId})`);
+                `DeviceCommand ${model._id} (modèle ${model.modelId}) non exécutable sur le slave ${deviceId} (modèle ${modelId})`,
+                BoxErrorCode.DEVICE_COMMAND_MODEL_MISMATCH, { commandId: model._id, deviceId });
         }
         return { command: model, ...resolved };
     }
@@ -263,7 +291,7 @@ export class DeviceCommandService {
     private async _getSlave(deviceId: string): Promise<DeviceModel> {
         const slave = await this.deviceRepository.get(deviceId) as DeviceModel;
         if (!(slave?.config as SlaveConfigModel)?.kind) {
-            throw new RegisterMapNotFoundError(`Slave ${deviceId} introuvable ou sans kind`);
+            throw new RegisterMapNotFoundError(`Slave ${deviceId} introuvable ou sans kind`, BoxErrorCode.SLAVE_NOT_FOUND, { deviceId });
         }
         return slave; 
     }
@@ -283,7 +311,8 @@ export class DeviceCommandService {
         const slaveConfig = slave.config as SlaveConfigModel;
         const master = await this.deviceRepository.get(slaveConfig.masterDeviceId) as DeviceModel;
         if (!master) {
-            throw new RegisterMapNotFoundError(`Master ${slaveConfig.masterDeviceId} du slave ${deviceId} introuvable`);
+            throw new RegisterMapNotFoundError(`Master ${slaveConfig.masterDeviceId} du slave ${deviceId} introuvable`, BoxErrorCode.MASTER_NOT_FOUND,
+                { deviceId, masterDeviceId: slaveConfig.masterDeviceId });
         }
         const connection = this.modbusDeviceService.toConnection(master.config as MasterConfigModel, slaveConfig.slaveId);
         return { slave, template: this.getTemplate(slaveConfig.kind), connection };

@@ -37,6 +37,7 @@ function ApplyCycleEvent(run: CycleRunModel, event: EventModel, data: ProcessEve
         run.plannedDuration = data.plannedDuration ?? run.plannedDuration;
     } else if (data.kind === ProcessEventKind.START_REFUSED) {
         run.conditions = data.conditions;
+        run.conditionCauses = data.conditionCauses;
     }
 }
 

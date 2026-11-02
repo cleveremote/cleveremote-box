@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { create, all, MathNode, EvalFunction } from 'mathjs';
 import { RegisterMapInputError } from '../errors/register-map.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 
 interface CompiledFormula {
     code: EvalFunction;
@@ -43,7 +44,7 @@ export class FormulaEngine {
             try {
                 node = this._parse(formula);
             } catch (e) {
-                throw new RegisterMapInputError(`Formule invalide "${formula}" : ${(e as Error).message}`);
+                throw new RegisterMapInputError(`Formule invalide "${formula}" : ${(e as Error).message}`, BoxErrorCode.FORMULA_INVALID, { formula });
             }
             // MathNode.filter() ne typifie pas ses sous-classes (SymbolNode.name/isSymbolNode)
             /* eslint-disable @typescript-eslint/no-explicit-any */

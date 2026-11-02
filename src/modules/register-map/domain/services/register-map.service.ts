@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { RegisterMapInputError, RegisterMapNotFoundError } from '../errors/register-map.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 import { ModbusConnection, ModbusTransport } from '../models/modbus-connection.model';
 import {
     DecodedChannel, DecodedField, DecodedValue, OperationRange, OperationResult, READ_FUNCTIONS, RegisterBlock, RegisterMapTemplate, RegisterOperation,
@@ -49,7 +50,8 @@ export class RegisterMapService {
         const block = template.registerMap.find((b) => b.id === blockId);
         const operation = block?.operations.find((o) => o.id === operationId);
         if (!operation) {
-            throw new RegisterMapNotFoundError(`Opération ${blockId}.${operationId} inconnue pour ${template.kind}`);
+            throw new RegisterMapNotFoundError(`Opération ${blockId}.${operationId} inconnue pour ${template.kind}`, BoxErrorCode.OPERATION_NOT_FOUND,
+                { blockId, operationId, kind: template.kind });
         }
         return { block, operation };
     }
@@ -64,7 +66,9 @@ export class RegisterMapService {
     public buildRequest(template: RegisterMapTemplate, command: RegisterOperationCommand): RegisterRequest {
         const { block, operation } = this.findOperation(template, command.blockId, command.operationId);
         if (block.danger && !command.isConfirmed) {
-            throw new RegisterMapInputError(`${block.id}.${operation.id} : opération sensible, isConfirmed=true requis`);
+            throw new RegisterMapInputError(`${block.id}.${operation.id} : opération sensible, isConfirmed=true requis`,
+                BoxErrorCode.CONFIRMATION_REQUIRED,
+                { blockId: block.id, operationId: operation.id });
         }
         const range = this._range(operation, command.range);
         const request: RegisterRequest = {
@@ -1014,7 +1018,9 @@ export class RegisterMapService {
         }
         const offset = operation.params?.persistence?.address;
         if (offset === undefined) {
-            throw new RegisterMapInputError(`${block.id}.${operation.id} : écriture persistante non prévue par le template`);
+            throw new RegisterMapInputError(`${block.id}.${operation.id} : écriture persistante non prévue par le template`,
+                BoxErrorCode.PERSISTENCE_NOT_ALLOWED,
+                { blockId: block.id, operationId: operation.id });
         }
         return offset;
     }
@@ -1027,7 +1033,8 @@ export class RegisterMapService {
         const count = operation.params?.length ?? 1;
         const { min, max } = range;
         if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || min > max || max >= count) {
-            throw new RegisterMapInputError(`${operation.id} : range doit vérifier 0 <= min <= max <= ${count - 1}`);
+            throw new RegisterMapInputError(`${operation.id} : range doit vérifier 0 <= min <= max <= ${count - 1}`, BoxErrorCode.RANGE_INVALID,
+                { operationId: operation.id, max: count - 1 });
         }
         return range;
     }
@@ -1038,7 +1045,8 @@ export class RegisterMapService {
             return 0;
         }
         if (!Number.isInteger(channel) || channel < 0 || channel >= block.address.count) {
-            throw new RegisterMapInputError(`channel doit être un entier entre 0 et ${block.address.count - 1}`);
+            throw new RegisterMapInputError(`channel doit être un entier entre 0 et ${block.address.count - 1}`, BoxErrorCode.CHANNEL_OUT_OF_RANGE,
+                { channel, max: block.address.count - 1 });
         }
         return channel * (block.address.stride ?? 1);
     }

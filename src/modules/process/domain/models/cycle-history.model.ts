@@ -1,5 +1,5 @@
 import {
-    ElementType, EventConfirmationModel, EventModel, EventOriginModel, EventSequencesSummary, EventStopModel, ProcessEventData,
+    ConditionCauseModel, ElementType, EventConfirmationModel, EventModel, EventOriginModel, EventSequencesSummary, EventStopModel, ProcessEventData,
     ProcessEventKind
 } from './event.model';
 
@@ -41,6 +41,7 @@ export class CycleRunModel {
     public sequences?: EventSequencesSummary;
     public preempted?: string[];
     public conditions?: string[]; // REFUSED : conditions fausses
+    public conditionCauses?: ConditionCauseModel[];
     public message?: string; // message du dernier event de cycle
     public timeline: RunTimelineEntryModel[] = [];
 }

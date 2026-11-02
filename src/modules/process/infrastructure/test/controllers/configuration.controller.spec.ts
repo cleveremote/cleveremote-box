@@ -46,7 +46,8 @@ describe('ConfigurationController', () => {
             configurationService as unknown as StructureService,
             {} as never,
             synchronizeService as unknown as SynchronizeService,
-            {} as never
+            {} as never,
+            { language: 'fr' } as never
         );
     });
 

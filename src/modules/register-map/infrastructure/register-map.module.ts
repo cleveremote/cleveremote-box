@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FormulaEngine } from '@register-map/domain/services/formula-engine.service';
 import { ModbusBusService } from '@register-map/domain/services/modbus-bus.service';
+import { RegisterMapI18nService } from '@register-map/domain/services/register-map-i18n.service';
 import { RegisterMapLoader } from '@register-map/domain/services/register-map-loader.service';
 import { RegisterMapService } from '@register-map/domain/services/register-map.service';
 
@@ -10,12 +11,14 @@ import { RegisterMapService } from '@register-map/domain/services/register-map.s
     providers: [
         FormulaEngine,
         ModbusBusService,
+        RegisterMapI18nService,
         RegisterMapLoader,
         RegisterMapService
     ],
     exports: [
         FormulaEngine,
         ModbusBusService,
+        RegisterMapI18nService,
         RegisterMapLoader,
         RegisterMapService
     ]

@@ -1,4 +1,5 @@
 import { AnalogConversionError } from '../errors/analog-conversion.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 
 // Comportement d'une valeur hors de la plage d'entrée
 export enum OutOfRangePolicy {
@@ -20,10 +21,12 @@ export interface LinearRange {
 export function assertValidLinearRanges(input: LinearRange, output: LinearRange): void {
     const bounds = [input?.min, input?.max, output?.min, output?.max];
     if (!bounds.every((bound) => typeof bound === 'number' && Number.isFinite(bound))) {
-        throw new AnalogConversionError(`linearScale : bornes non numériques (entrée [${input?.min}, ${input?.max}], sortie [${output?.min}, ${output?.max}])`);
+        throw new AnalogConversionError(`linearScale : bornes non numériques (entrée [${input?.min}, ${input?.max}], sortie [${output?.min}, ${output?.max}])`,
+            BoxErrorCode.ANALOG_BOUNDS_INVALID);
     }
     if (input.min === input.max) {
-        throw new AnalogConversionError(`linearScale : plage d'entrée dégénérée (min = max = ${input.min})`);
+        throw new AnalogConversionError(`linearScale : plage d'entrée dégénérée (min = max = ${input.min})`, BoxErrorCode.ANALOG_RANGE_DEGENERATE,
+            { min: input.min });
     }
 }
 
@@ -35,14 +38,16 @@ export function assertValidLinearRanges(input: LinearRange, output: LinearRange)
 export function linearScale(value: number, input: LinearRange, output: LinearRange, policy: OutOfRangePolicy = OutOfRangePolicy.CLAMP): number {
     assertValidLinearRanges(input, output);
     if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw new AnalogConversionError(`linearScale : valeur non numérique (${value})`);
+        throw new AnalogConversionError(`linearScale : valeur non numérique (${value})`,
+            BoxErrorCode.ANALOG_VALUE_NOT_NUMERIC, { value: String(value) });
     }
     const low = Math.min(input.min, input.max);
     const high = Math.max(input.min, input.max);
     let scaled = value;
     if (value < low || value > high) {
         if (policy === OutOfRangePolicy.ERROR) {
-            throw new AnalogConversionError(`linearScale : valeur ${value} hors de la plage d'entrée [${input.min}, ${input.max}]`);
+            throw new AnalogConversionError(`linearScale : valeur ${value} hors de la plage d'entrée [${input.min}, ${input.max}]`,
+                BoxErrorCode.ANALOG_VALUE_OUT_OF_RANGE, { value, min: input.min, max: input.max });
         }
         if (policy === OutOfRangePolicy.CLAMP) {
             scaled = Math.min(high, Math.max(low, value));

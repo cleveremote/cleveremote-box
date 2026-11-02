@@ -1,9 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateIf, ValidateNested } from 'class-validator';
+import { Language } from '@framework/i18n/language';
 import { DeviceCommandOverride } from '@process/domain/models/device-command.model';
 import { DeviceKind } from '@process/domain/models/device.model';
 import { RegisterOperationCommand, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+
+export class RegisterMapListDTO {
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue des libellés renvoyés (défaut : langue de la box)', enum: Language, required: false })
+    public lang?: Language;
+}
 
 export class RegisterMapFetchDTO {
     @ValidateIf((dto: RegisterMapFetchDTO) => !dto.kind)
@@ -16,6 +24,11 @@ export class RegisterMapFetchDTO {
     @IsEnum(DeviceKind)
     @ApiProperty({ description: 'Kind dont on veut la register map', enum: DeviceKind, required: false })
     public kind?: DeviceKind;
+
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue des libellés renvoyés (défaut : langue de la box)', enum: Language, required: false })
+    public lang?: Language;
 }
 
 export class RegisterOperationExecuteDTO {
@@ -49,6 +62,11 @@ export class RegisterOperationExecuteDTO {
     @IsBoolean()
     @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
     public isConfirmed?: boolean;
+
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue des libellés renvoyés (défaut : langue de la box)', enum: Language, required: false })
+    public lang?: Language;
 
     public static mapToCommand(dto: RegisterOperationExecuteDTO): RegisterOperationCommand {
         return {
@@ -122,6 +140,11 @@ export class DeviceCommandExecuteDTO {
     @IsOptional()
     @IsString()
     public boxId?: string;
+
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue des libellés renvoyés (défaut : langue de la box)', enum: Language, required: false })
+    public lang?: Language;
 
     public static mapToOverride(dto: DeviceCommandExecuteDTO): DeviceCommandOverride {
         const { channel, range, value, isPersistent, isConfirmed } = dto.params ?? {};

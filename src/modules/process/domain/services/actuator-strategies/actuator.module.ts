@@ -15,6 +15,7 @@ import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.
 import { SlaveTemplate, SlaveTemplateSchema } from '@process/infrastructure/schemas/slave-template.schema';
 import { Sensor, SensorSchema } from '@process/infrastructure/schemas/sensor.schema';
 import { ControlLoop, ControlLoopSchema } from '@process/infrastructure/schemas/control-loop.schema';
+import { GlobalSettings, GlobalSettingsSchema } from '@process/infrastructure/schemas/global-settings.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
@@ -35,6 +36,8 @@ import { SensorRepository } from '@process/infrastructure/repositories/sensor.re
 import { SensorMongooseRepository } from '@process/infrastructure/repositories/sensor-mongoose.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { ControlLoopMongooseRepository } from '@process/infrastructure/repositories/control-loop-mongoose.repository';
+import { GlobalSettingsRepository } from '@process/infrastructure/repositories/global-settings.repository';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
 import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
 import { ControlModule } from '@control/infrastructure/control.module';
@@ -69,7 +72,8 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             { name: Trigger.name, schema: TriggerSchema },
             { name: SlaveTemplate.name, schema: SlaveTemplateSchema },
             { name: Sensor.name, schema: SensorSchema },
-            { name: ControlLoop.name, schema: ControlLoopSchema }
+            { name: ControlLoop.name, schema: ControlLoopSchema },
+            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
         ]),
         RegisterMapModule,
         ControlModule
@@ -98,6 +102,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         TriggerMongooseRepository,
         ModbusDeviceService,
         WaveshareDiscoveryService,
+        // instance unique (cache mémoire : langue, rangs, coordonnées) partagée avec ProcessModule
+        GlobalSettingsRepository,
+        GlobalSettingsService,
         // régulation des actionneurs CTRL (ControlLoop + module control) ; ComSensorStrategy (AnalogSensorStrategy si ANALOG) lit le sensor de retour
         ControlLoopRepository,
         ControlLoopMongooseRepository,
@@ -117,7 +124,8 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         ActuatorService, ActuatorRepository, DeviceRepository, SensorRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
         ModbusDeviceService, WaveshareDiscoveryService, CtrlActuatorStrategy,
         CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository,
-        ControlLoopRepository, RegulationService
+        ControlLoopRepository, RegulationService,
+        GlobalSettingsService
     ]
 })
 export class ActuatorModule { }

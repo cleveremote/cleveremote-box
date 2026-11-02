@@ -38,5 +38,8 @@ export class GlobalSettings {
 
     @Prop({ type: ModeRanksSchema })
     public modeRanks?: ModeRanks;
+
+    @Prop({ type: String })
+    public language?: string;
 }
 export const GlobalSettingsSchema = SchemaFactory.createForClass(GlobalSettings);

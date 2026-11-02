@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsNotEmpty, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Language } from '@framework/i18n/language';
 
 export class EventQueryDTO {
 
@@ -17,5 +18,10 @@ export class EventQueryDTO {
     @IsNotEmpty()
     @ApiProperty()
     public endDate: string;
+
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue des messages du journal (défaut : langue de la box)', enum: Language, required: false })
+    public lang?: Language;
 
 }

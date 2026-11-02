@@ -87,6 +87,19 @@ export class EventSequencesSummary {
     public forced: string[] = [];
 }
 
+// condition fausse, structuree pour la traduction par le front (conditions[] : meme contenu en texte)
+export class ConditionCauseModel {
+    public elementId: string;
+    public elementType?: ElementType;
+    public elementName?: string;
+    public operator?: string;
+    public expected?: string | number;
+    public current?: string | number; // absent : valeur inconnue
+    public sequenceId?: string; // condition de securite d'une sequence (cycle refuse : toutes ses sequences fausses)
+    public sequenceName?: string;
+    public error?: string; // conditions inevaluables (structure invalide) : raison technique
+}
+
 export class ProcessEventData {
     public type: string; // manual schedule trigger sensor
     public value?: ExecutableStatus | ExecutableAction;
@@ -107,6 +120,7 @@ export class ProcessEventData {
     public stop?: EventStopModel;
     public isForced?: boolean; // sequence lancee par FORCE_SEQUENCE
     public conditions?: string[]; // START_REFUSED / SEQUENCE_SKIPPED : conditions fausses
+    public conditionCauses?: ConditionCauseModel[]; // idem, structurees
     public preempted?: string[]; // CYCLE_STARTED : cycles stoppes par ce demarrage
     public waitingFor?: string[]; // CYCLE_QUEUED : cycles dont la fin est attendue
     public runStartedAt?: Date;

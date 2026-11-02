@@ -1,4 +1,5 @@
 import { AnalogConversionError } from '../errors/analog-conversion.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 import { AnalogScalingModel, AnalogSignalType } from '../models/sensor.model';
 import { linearScale } from './linear-scale.util';
 
@@ -19,11 +20,13 @@ export function toElectricalValue(value: number, unit: string | undefined, signa
     }
     const divisors = ELECTRICAL_UNIT_DIVISORS[signalType];
     if (!divisors) {
-        throw new AnalogConversionError(`toElectricalValue : type de signal inconnu "${signalType}"`);
+        throw new AnalogConversionError(`toElectricalValue : type de signal inconnu "${signalType}"`,
+            BoxErrorCode.ANALOG_SIGNAL_UNKNOWN, { signalType });
     }
     const divisor = divisors[unit];
     if (divisor === undefined) {
-        throw new AnalogConversionError(`toElectricalValue : unité "${unit}" incompatible avec un signal ${signalType} (attendu : ${Object.keys(divisors).join(', ')})`);
+        throw new AnalogConversionError(`toElectricalValue : unité "${unit}" incompatible avec un signal ${signalType} (attendu : ${Object.keys(divisors).join(', ')})`,
+            BoxErrorCode.ANALOG_UNIT_INCOMPATIBLE, { unit, signalType, allowed: Object.keys(divisors) });
     }
     return divisor === 1 ? value : value / divisor;
 }
@@ -31,10 +34,11 @@ export function toElectricalValue(value: number, unit: string | undefined, signa
 /** Valeur brute lue -> grandeur physique (scaling.unit) : conversion électrique puis mise à l'échelle linéaire */
 export function toPhysicalValue(value: number, unit: string | undefined, scaling: AnalogScalingModel,isFromLoopCtrl?:boolean): number {
     if (!scaling) {
-        throw new AnalogConversionError('toPhysicalValue : mise à l\'échelle absente');
+        throw new AnalogConversionError('toPhysicalValue : mise à l\'échelle absente', BoxErrorCode.ANALOG_SCALING_MISSING);
     }
     if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw new AnalogConversionError(`toPhysicalValue : valeur non numérique (${value})`);
+        throw new AnalogConversionError(`toPhysicalValue : valeur non numérique (${value})`,
+            BoxErrorCode.ANALOG_VALUE_NOT_NUMERIC, { value: String(value) });
     }
     if(isFromLoopCtrl){
         return  toElectricalValue(value, unit, AnalogSignalType.RAW);

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, ValidateNested } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, ValidateNested } from 'class-validator';
+import { Language } from '@framework/i18n/language';
 import { GlobalSettingsModel } from '@process/domain/models/global-settings.model';
 
 export class LocalCoordinatesDTO {
@@ -41,6 +42,11 @@ export class GlobalSettingsSynchronizeDTO {
     @ApiProperty({ description: 'Rang de chaque origine lors d\'un conflit d\'actuator (plus petit = prioritaire)', required: false })
     public modeRanks?: ModeRanksDTO;
 
+    @IsOptional()
+    @IsEnum(Language)
+    @ApiProperty({ description: 'Langue par defaut des textes de la box (register maps, noms generes)', enum: Language, required: false })
+    public language?: Language;
+
     // champ absent = non modifie (cf. GlobalSettingsMapper.mapToSchema)
     public static mapToGlobalSettingsModel(dto: GlobalSettingsSynchronizeDTO): GlobalSettingsModel {
         const model = new GlobalSettingsModel();
@@ -50,6 +56,7 @@ export class GlobalSettingsSynchronizeDTO {
         model.modeRanks = dto.modeRanks
             ? { MANUAL: dto.modeRanks.MANUAL, SCHEDULE: dto.modeRanks.SCHEDULE, TRIGGER: dto.modeRanks.TRIGGER }
             : undefined;
+        model.language = dto.language;
         return model;
     }
 }

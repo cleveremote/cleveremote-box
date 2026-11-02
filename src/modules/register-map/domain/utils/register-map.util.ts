@@ -1,4 +1,5 @@
 import { RegisterMapInputError } from '../errors/register-map.error';
+import { BoxErrorCode } from '@framework/errors/box-error';
 import {
     CompositeField, OperationChannelParam, OperationInput, OperationResult, OperationResultParam, OperationValueParam, READ_FUNCTIONS,
     RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation, RegisterOperationParams, RegisterOperationValue,
@@ -157,7 +158,8 @@ export class RegisterValueEncoder {
         const where = `${operation.id} (${input.type})`;
         switch (input.type) {
             case 'none':
-                if (input.fixedValue === undefined) throw new RegisterMapInputError(`${where} : fixedValue absent du template`);
+                if (input.fixedValue === undefined) throw new RegisterMapInputError(`${where} : fixedValue absent du template`,
+                    BoxErrorCode.FIXED_VALUE_MISSING, { operation: operation.id });
                 return input.fixedValue;
             case 'enum':
                 return RegisterValueEncoder.checkEnumValue(RegisterValueEncoder.entries(template, input.enum, input.only), value, where);
@@ -186,21 +188,24 @@ export class RegisterValueEncoder {
     public static checkEnumValue(entries: RegisterEnumEntry[], value: unknown, where: string): number {
         const entry = entries.find((e) => e.value === (typeof value === 'boolean' ? Number(value) : value));
         if (!entry) {
-            throw new RegisterMapInputError(`${where} : valeur ${value} hors [${entries.map((e) => `${e.value}=${e.label}`).join(', ')}]`);
+            throw new RegisterMapInputError(`${where} : valeur ${value} hors [${entries.map((e) => `${e.value}=${e.label}`).join(', ')}]`,
+                BoxErrorCode.VALUE_NOT_IN_ENUM, { where, value: String(value), allowed: entries.map((e) => e.value) });
         }
         return entry.value;
     }
 
     private static _checkRange(value: unknown, min: number, max: number, where: string): number {
         if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-            throw new RegisterMapInputError(`${where} : entier attendu entre ${min} et ${max}`);
+            throw new RegisterMapInputError(`${where} : entier attendu entre ${min} et ${max}`, BoxErrorCode.VALUE_OUT_OF_RANGE,
+                { where, value: String(value), min, max });
         }
         return value;
     }
 
     private static _checkArray(value: InputValue, length: number, where: string): (number | boolean)[] {
         if (!Array.isArray(value) || value.length !== length) {
-            throw new RegisterMapInputError(`${where} : tableau de ${length} valeurs attendu (booléens ou 0/1 pour des sorties)`);
+            throw new RegisterMapInputError(`${where} : tableau de ${length} valeurs attendu (booléens ou 0/1 pour des sorties)`,
+                BoxErrorCode.ARRAY_LENGTH_MISMATCH, { where, length });
         }
         return value;
     }

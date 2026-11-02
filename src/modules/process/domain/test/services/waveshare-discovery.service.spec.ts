@@ -22,7 +22,7 @@ describe('WaveshareDiscoveryService.discover', () => {
             getByType: jest.fn().mockResolvedValue([]),
             save: jest.fn().mockImplementation(async (model: DeviceModel) => ({ ...model, _id: model._id ?? 'new-id' })),
         };
-        service = new WaveshareDiscoveryService(deviceRepository as any, CreateLoggerMock() as any);
+        service = new WaveshareDiscoveryService(deviceRepository as any, { language: 'fr' } as any, CreateLoggerMock() as any);
     });
 
     it('should create a TCP master for a newly discovered gateway', async () => {

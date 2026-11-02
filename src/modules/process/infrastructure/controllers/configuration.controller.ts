@@ -1,8 +1,10 @@
 import { Controller, Injectable, ParseArrayPipe, PipeTransform, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+import { BoxErrorCode } from '@framework/errors/box-error';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { StructureService } from '@process/domain/services/configuration.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
@@ -48,7 +50,8 @@ function flattenValidationErrors(errors: ValidationError[]): string[] {
 
 function validationExceptionFactory(errors: ValidationError[] | string): RpcException {
     const message = Array.isArray(errors) ? flattenValidationErrors(errors).join(', ') : errors;
-    return new RpcException(message);
+    const fields = Array.isArray(errors) ? errors.map((error) => error.property) : undefined;
+    return new RpcException({ status: 'error', code: BoxErrorCode.VALIDATION, params: { fields }, message });
 }
 
 @Injectable()
@@ -66,7 +69,8 @@ export class ConfigurationController {
         private _configurationService: StructureService,
          private _waveshareDiscoveryService: WaveshareDiscoveryService    ,
         private _synchronizeService: SynchronizeService,
-        private _deviceConnectivityService: DeviceConnectivityService
+        private _deviceConnectivityService: DeviceConnectivityService,
+        private _globalSettingsService: GlobalSettingsService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -191,7 +195,7 @@ export class ConfigurationController {
     // cycle : CycleHistoryModel (runs) ; capteur / sequence : EventModel[]
     public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[] | CycleHistoryModel> {
         const uc = new EventFetchUC(this._configurationService);
-        return uc.execute(eventQueryDTO);
+        return uc.execute({ ...eventQueryDTO, lang: eventQueryDTO.lang ?? this._globalSettingsService.language });
     }
 
     // deviceId : cycle (sequences comprises) ou capteur ; absent = purge globale. before : purge partielle

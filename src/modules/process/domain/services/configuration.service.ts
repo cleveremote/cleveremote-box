@@ -19,6 +19,7 @@ import { EventRepository } from '@process/infrastructure/repositories/event.repo
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
 import { CycleHistoryModel } from '../models/cycle-history.model';
 import { BuildCycleHistory } from '../utils/cycle-history.util';
+import { TranslateEventMessages } from '../utils/process-event-message.util';
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { DeviceWithCommands, SlaveTemplate } from '../models/device.model';
@@ -151,14 +152,15 @@ export class StructureService {
     }
 
     // cycle : historique regroupe par run (events du cycle et de ses sequences) ; capteur / sequence : events bruts
-    public async getEvents(query: { deviceId: string; startDate: string; endDate: string }): Promise<EventModel[] | CycleHistoryModel> {
+    // messages du journal recalcules dans query.lang (historique compris)
+    public async getEvents(query: { deviceId: string; startDate: string; endDate: string; lang?: string }): Promise<EventModel[] | CycleHistoryModel> {
         const startDate = new Date(query.startDate);
         const endDate = new Date(query.endDate);
         const cycle = this.structure?.cycles?.find((cyc) => cyc._id === query.deviceId);
         if (!cycle) {
-            return this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate);
+            return TranslateEventMessages(await this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate), query.lang);
         }
-        return this._getCycleHistory(cycle, startDate, endDate);
+        return this._getCycleHistory(cycle, startDate, endDate, query.lang);
     }
 
     // purge des events d'un cycle (sequences comprises), d'un capteur / autre element, ou de toute la
@@ -193,14 +195,14 @@ export class StructureService {
         return lastEvents.filter(Boolean).map((event) => event._id);
     }
 
-    private async _getCycleHistory(cycle: CycleModel, startDate: Date, endDate: Date): Promise<CycleHistoryModel> {
+    private async _getCycleHistory(cycle: CycleModel, startDate: Date, endDate: Date, lang: string | undefined): Promise<CycleHistoryModel> {
         const elementIds = [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)];
         const inRange = await this.eventRepository.getByDevicesAndDateRange(elementIds, startDate, endDate);
         const runIds = [...new Set(inRange.map((event) => (event.additionalData as ProcessEventData).runId).filter(Boolean))];
         // runs complets : un run commence avant startDate ou fini apres endDate garde toute sa timeline
         const runEvents = await this.eventRepository.getByRunIds(runIds);
         const legacy = inRange.filter((event) => !(event.additionalData as ProcessEventData).runId);
-        return BuildCycleHistory(cycle._id, [...runEvents, ...legacy]);
+        return BuildCycleHistory(cycle._id, TranslateEventMessages([...runEvents, ...legacy], lang));
     }
 
     public async getStatus(type: string): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel> {

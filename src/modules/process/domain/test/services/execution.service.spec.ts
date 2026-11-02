@@ -747,14 +747,14 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(payloads).toContainEqual({
                 type: ExecutableType.CYCLE, id: cycle._id, mode: ProcessMode.MANUAL, status: ExecutableStatus.STOPPED,
                 notification: ProcessNotification.CONDITIONS_NOT_VERIFIED,
-                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (current : 2)' }]
+                causes: [expect.objectContaining({ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (actuel : 2)' })]
             });
             // seule trace persistee : le refus (sans statut, ignore par la rehydratation)
             expect(eventRepository.save).toHaveBeenCalledTimes(1);
             expect(eventRepository.save).toHaveBeenCalledWith(expect.objectContaining({
                 elementId: cycle._id,
                 additionalData: expect.objectContaining({
-                    kind: ProcessEventKind.START_REFUSED, conditions: ['sensor-1 > 5 (current : 2)']
+                    kind: ProcessEventKind.START_REFUSED, conditions: ['sensor-1 > 5 (actuel : 2)']
                 })
             }));
             expect(eventRepository.save.mock.calls[0][0].additionalData.status).toBeUndefined();
@@ -775,7 +775,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             const payloads = wsService.sendMessage.mock.calls.map(([msg]) => JSON.parse(msg.data));
             expect(payloads).toContainEqual(expect.objectContaining({
                 type: ExecutableType.CYCLE, id: cycle._id, notification: ProcessNotification.CONDITIONS_NOT_VERIFIED,
-                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: `sequence ${cycle.sequences[0].name} : sensor-1 > 5 (current : 2)` }]
+                causes: [expect.objectContaining({ id: 'sensor-1', type: 'CONDITION', cause: `séquence ${cycle.sequences[0].name} : sensor-1 > 5 (actuel : 2)` })]
             }));
         });
 
@@ -796,7 +796,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(notifications).toHaveLength(2);
             expect(notifications[0]).toEqual(expect.objectContaining({
                 type: ExecutableType.SEQUENCE, id: cycle.sequences[0]._id,
-                causes: [{ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (current : 2)' }]
+                causes: [expect.objectContaining({ id: 'sensor-1', type: 'CONDITION', cause: 'sensor-1 > 5 (actuel : 2)' })]
             }));
         });
 

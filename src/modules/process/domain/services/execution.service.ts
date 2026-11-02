@@ -33,11 +33,11 @@ import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import {
-    ConfirmationAnswer, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind,
-    StopReason
+    ConditionCauseModel, ConfirmationAnswer, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData,
+    ProcessEventKind, StopReason
 } from '../models/event.model';
 import { RunContextModel } from '../models/run-context.model';
-import { DescribeProcessEvent } from '../utils/process-event-message.util';
+import { DescribeCondition, DescribeProcessEvent } from '../utils/process-event-message.util';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
@@ -50,7 +50,7 @@ import { ConfirmationRequestModel } from '../models/confirmation-request.model';
 
 type ProcessReport = { id: string; type: CauseType; cause: string }[];
 // causes d'une notification CONDITIONS_NOT_VERIFIED : id = element de la condition fausse
-type ConditionReport = { id: string; type: 'CONDITION'; cause: string }[];
+type ConditionReport = { id: string; type: 'CONDITION'; cause: string; condition: ConditionCauseModel }[];
 
 // raison d'arret par defaut d'un ordre OFF, selon son emetteur
 const STOP_REASON_BY_SOURCE: Record<EventSource, StopReason> = {
@@ -215,7 +215,7 @@ export class ProcessService {
         const journal = eventPayload.additionalData as ProcessEventData;
         let payload = wsData;
         if (journal.kind) {
-            journal.message = DescribeProcessEvent(journal);
+            journal.message = DescribeProcessEvent(journal, this.globalSettingsService.language);
             const { kind, runId, origin, stop, message } = journal;
             payload = { ...wsData, kind, runId, origin, stop, message };
         }
@@ -677,9 +677,10 @@ export class ProcessService {
             ...ProcessService._runJournal(RunContextModel.create(this._originOf(process))),
             kind: ProcessEventKind.START_REFUSED,
             name: process.cycle.name,
-            conditions: causes.map((x) => x.cause)
+            conditions: causes.map((x) => x.cause),
+            conditionCauses: causes.map((x) => x.condition)
         };
-        additionalData.message = DescribeProcessEvent(additionalData);
+        additionalData.message = DescribeProcessEvent(additionalData, this.globalSettingsService.language);
         this.eventRepository.save({ elementId: process.cycle._id, date: new Date(), elementType: ElementType.CYCLE, additionalData })
             .catch((err) => this.logger.warn({ err }, 'failed to save start refused event'));
     }
@@ -692,7 +693,10 @@ export class ProcessService {
         for (const sequence of process.cycle.sequences) {
             const sequenceCauses = await this._getSequenceConditionCauses(sequence._id);
             if (!sequenceCauses) { return null; }
-            causes.push(...sequenceCauses.map((x) => ({ ...x, cause: `sequence ${sequence.name} : ${x.cause}` })));
+            causes.push(...sequenceCauses.map((x) => {
+                const condition = { ...x.condition, sequenceId: sequence._id, sequenceName: sequence.name };
+                return { ...x, cause: this._describeCondition(condition), condition };
+            }));
         }
         return causes;
     }
@@ -716,21 +720,33 @@ export class ProcessService {
             onFailure(detail);
         });
         if (isVerified) { return null; }
-        if (!failure?.results) { return [{ id: null, type: 'CONDITION', cause: failure?.reason ?? 'conditions not verified' }]; }
+        if (!failure?.results) {
+            const reason = failure?.reason ?? 'conditions not verified';
+            return [{ id: null, type: 'CONDITION', cause: reason, condition: { elementId: null, error: reason } }];
+        }
         return sortConditions(conditions)
             .filter((_, i) => !failure.results[i])
-            .map((condition) => ({
-                id: condition.elementId, type: 'CONDITION', cause: this._describeCondition(condition, values.get(condition.elementId))
-            }));
+            .map((condition) => {
+                const cause = this._toConditionCause(condition, values.get(condition.elementId));
+                return { id: condition.elementId, type: 'CONDITION', cause: this._describeCondition(cause), condition: cause };
+            });
     }
 
-    private _describeCondition(condition: ConditionModel, current: SensorValueModel | ProcessValueModel | undefined): string {
-        const name = this.configurationService.structure?.sensors?.find((x) => x._id === condition.elementId)?.name
+    private _toConditionCause(condition: ConditionModel, current: SensorValueModel | ProcessValueModel | undefined): ConditionCauseModel {
+        const elementName = this.configurationService.structure?.sensors?.find((x) => x._id === condition.elementId)?.name
             ?? this.configurationService.structure?.cycles?.find((x) => x._id === condition.elementId)?.name
-            ?? this.configurationService.sequences?.find((x) => x._id === condition.elementId)?.name
-            ?? condition.elementId;
-        const currentValue = (current as SensorValueModel)?.value ?? (current as ProcessValueModel)?.status;
-        return `${name} ${condition.operator} ${condition.value} (current : ${currentValue ?? 'unknown'})`;
+            ?? this.configurationService.sequences?.find((x) => x._id === condition.elementId)?.name;
+        return {
+            elementId: condition.elementId, elementType: condition.elementType, elementName,
+            operator: condition.operator, expected: condition.value,
+            current: (current as SensorValueModel)?.value ?? (current as ProcessValueModel)?.status
+        };
+    }
+
+    // texte des causes (notification, conditions[]) dans la langue de la box ; le journal relu est retraduit
+    // depuis ConditionCauseModel (cf. TranslateEventMessages)
+    private _describeCondition(cause: ConditionCauseModel): string {
+        return DescribeCondition(cause, this.globalSettingsService.language);
     }
 
     // pas d'event persiste : la notification ne doit pas devenir le dernier statut rehydrate au boot
@@ -1294,7 +1310,8 @@ export class ProcessService {
                 process.run?.sequences.skipped.push(this._sequenceName(sequence.sequenceId));
                 await this._processProgress(sequence.sequenceId, ExecutableAction.OFF, process.mode, undefined, undefined, {
                     kind: ProcessEventKind.SEQUENCE_SKIPPED, runId: process.run?.runId, cycleId: cycle._id,
-                    conditions: sequenceCauses.map((x) => x.cause)
+                    conditions: sequenceCauses.map((x) => x.cause),
+                    conditionCauses: sequenceCauses.map((x) => x.condition)
                 });
                 // uniquement au premier saut : les rattrapages reevaluent en boucle et spammeraient le front
                 this._notifyConditionsNotVerified(ExecutableType.SEQUENCE, sequence.sequenceId, process.mode, sequenceCauses);

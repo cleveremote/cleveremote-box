@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DEFAULT_LANGUAGE, Language } from '@framework/i18n/language';
 import { APP_VERSION } from '@framework/utils/app-version.util';
 import { GlobalSettingsRepository } from '@process/infrastructure/repositories/global-settings.repository';
 import { DEFAULT_MODE_RANKS, GlobalSettingsModel, LocalCoordinatesModel, ModeRanksModel } from '../models/global-settings.model';
@@ -13,6 +14,8 @@ export class GlobalSettingsService {
     public localCoordinates: LocalCoordinatesModel;
     // meme principe, consulte par l'arbitrage des conflits (ProcessService) ; jamais vide
     public modeRanks: ModeRanksModel = { ...DEFAULT_MODE_RANKS };
+    // langue par defaut des register maps et des noms generes ; jamais vide
+    public language: Language = DEFAULT_LANGUAGE;
 
     public constructor(private globalSettingsRepository: GlobalSettingsRepository) { }
 
@@ -36,6 +39,8 @@ export class GlobalSettingsService {
         this.localCoordinates = globalSettings.localCoordinates;
         this.modeRanks = { ...DEFAULT_MODE_RANKS, ...globalSettings.modeRanks };
         globalSettings.modeRanks = this.modeRanks;
+        this.language = globalSettings.language ?? DEFAULT_LANGUAGE;
+        globalSettings.language = this.language;
         globalSettings.version = APP_VERSION;
         return globalSettings;
     }

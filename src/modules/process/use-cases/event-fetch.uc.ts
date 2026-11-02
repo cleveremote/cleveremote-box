@@ -5,7 +5,7 @@ import { StructureService } from '@process/domain/services/configuration.service
 export class EventFetchUC {
     public constructor(private configurationService: StructureService) { }
 
-    public execute(query: { deviceId: string; startDate: string; endDate: string }): Promise<EventModel[] | CycleHistoryModel> {
+    public execute(query: { deviceId: string; startDate: string; endDate: string; lang?: string }): Promise<EventModel[] | CycleHistoryModel> {
         return this.configurationService.getEvents(query);
     }
 }
