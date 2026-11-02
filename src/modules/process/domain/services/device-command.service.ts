@@ -34,6 +34,9 @@ export interface TypedAction {
     command: DeviceCommandModel;
 }
 
+// Nom d'une commande générée depuis une opération de la register map
+const CommandName = (blockLabel: string, operationLabel: string): string => `${blockLabel} — ${operationLabel}`;
+
 /**
  * Exécution des DeviceCommand : une commande appartient à un modèle et s'exécute sur un slave de ce modèle,
  * fourni à l'appel. Résout le slave, sa register map (par kind) et la connexion de son master, puis délègue
@@ -183,9 +186,35 @@ export class DeviceCommandService {
         return commands.map((command) => this._withParams(kinds.get(command.modelId), command.modelId, command));
     }
 
-    /** Modèles de slave avec leurs commandes enrichies de leurs `params` */
+    /** Modèles de slave avec leurs commandes enrichies de leurs `params`, textes dans la langue de la box (affichage) */
     public async modelsWithParams(): Promise<SlaveTemplate[]> {
-        return (await this.slaveTemplateRepository.get()).map((template) => this.withTemplateParams(template));
+        return (await this.slaveTemplateRepository.get()).map((template) => this.localizeTemplate(this.withTemplateParams(template)));
+    }
+
+    /**
+     * Copie du modèle aux textes issus de sa register map (nom, description, device, commandes) dans la langue de la box,
+     * pour l'affichage uniquement : textes personnalisés conservés, la base garde les textes enregistrés.
+     */
+    public localizeTemplate(template: SlaveTemplate): SlaveTemplate {
+        const { kind } = template;
+        const name = (registerMap: RegisterMapTemplate): string => registerMap.name ?? registerMap.kind;
+        const description = (registerMap: RegisterMapTemplate): string | undefined => registerMap.description;
+        return {
+            ...template,
+            name: this.localizeText(kind, template.name, name),
+            description: this.localizeText(kind, template.description, description),
+            device: {
+                ...template.device,
+                name: this.localizeText(kind, template.device.name, name),
+                description: this.localizeText(kind, template.device.description, description)
+            },
+            deviceCommands: template.deviceCommands.map((command) => ({
+                ...command,
+                name: this.localizeCommandName(kind, command),
+                description: this.localizeText(kind, command.description,
+                    (registerMap) => registerMap.registerMap?.find((block) => block.id === command.blockId)?.description)
+            }))
+        };
     }
 
     /** Même enrichissement pour les commandes d'un slave template (typage des saisies du formulaire front) */
@@ -206,7 +235,7 @@ export class DeviceCommandService {
             const isRead = READ_FUNCTIONS.includes(operation.function);
             return {
                 _id: this._stableId(modelId, block.id, operation.id),
-                name: `${block.label} — ${operation.label}`,
+                name: CommandName(block.label, operation.label),
                 description: block.description,
                 blockId: block.id,
                 operationId: operation.id,
@@ -260,6 +289,21 @@ export class DeviceCommandService {
     public translateTemplate(template: RegisterMapTemplate, lang: string | undefined): RegisterMapTemplate {
         this._loadTemplates();
         return this.registerMapI18n.translate(template, lang);
+    }
+
+    /** Texte enregistré issu de la register map du kind, dans la langue de la box (texte personnalisé ou kind inconnu : inchangé) */
+    public localizeText(kind: string, text: string | undefined, pick: (template: RegisterMapTemplate) => string | undefined): string | undefined {
+        const template = this._loadTemplates().get(kind);
+        return template ? this.registerMapI18n.localize(template, text, this.globalSettingsService.language, pick) : text;
+    }
+
+    /** Nom d'une commande générée depuis la register map (cf. fromRegisterMap), dans la langue de la box */
+    public localizeCommandName(kind: string, command: Pick<DeviceCommandModel, 'name' | 'blockId' | 'operationId'>): string {
+        return this.localizeText(kind, command.name, (template) => {
+            const block = template.registerMap?.find((b) => b.id === command.blockId);
+            const operation = block?.operations.find((o) => o.id === command.operationId);
+            return operation && CommandName(block.label, operation.label);
+        });
     }
 
     private _loadTemplates(): Map<string, RegisterMapTemplate> {

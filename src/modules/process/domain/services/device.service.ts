@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { GENERATED_TEXTS } from '@framework/i18n/generated-texts';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DEVICE_STRATEGIES, DeviceStrategy } from './device-strategies/device-strategy.interface';
 import { ModbusDeviceService } from './modbus-device.service';
+import { GlobalSettingsService } from './global-settings.service';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '../utils/modbus-registers.util';
 
 export interface SlaveDiscoveryHandle {
@@ -20,6 +22,7 @@ export class DeviceService {
         private readonly logger: Logger,
         private deviceRepository: DeviceRepository,
         private modbusDeviceService: ModbusDeviceService,
+        private globalSettingsService: GlobalSettingsService,
         @Inject(DEVICE_STRATEGIES) strategies: DeviceStrategy[]
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.kind, strategy]));
@@ -124,7 +127,7 @@ export class DeviceService {
         const slaveModel = new DeviceModel();
         slaveModel.name = `Slave ${newSlaveId} (auto-detected)`;
         slaveModel.type = DeviceType.SLAVE;
-        slaveModel.description = `Auto-detected on master "${master.name}" via register 0x${detectedRegister.toString(16)}`;
+        slaveModel.description = GENERATED_TEXTS[this.globalSettingsService.language].detectedSlave(master.name, `0x${detectedRegister.toString(16)}`);
         slaveModel.config = slaveConfig;
 
         try {

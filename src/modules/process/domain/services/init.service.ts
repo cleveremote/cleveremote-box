@@ -92,10 +92,11 @@ export class InitService {
         //     // .then(() => wrap('RegisterMapService.tests', () => this.registerMapModuleService.testAnalogOutput8Channel() ))
         //     .then(async () => { 
 
-        return wrap('SlaveTemplateService.seed', () => this.slaveTemplateService.seed())
+        // réglages d'abord : la langue de la box sert aux textes générés dès le seed des templates
+        return wrap('GlobalSettingsService.get', () => this.globalSettingsService.get())
+            .then(() => wrap('SlaveTemplateService.seed', () => this.slaveTemplateService.seed()))
             .then(() => wrap('ControlLoopRepository.migrateFromCtrlActuators', () => this.controlLoopRepository.migrateFromCtrlActuators()))
             .then(() => wrap('StructureService.getStructure', () => this._loadConfiguration()))
-            .then(() => wrap('GlobalSettingsService.get', () => this.globalSettingsService.get()))
             .then(() => wrap('DeviceConnectivityService.watch', () => this.deviceConnectivityService.watch()))
             //.then(() => wrap('CtrlActuatorStrategy.testAo8ch', () => this._testAo8ch()))
             //.then(() => wrap('InitService.testBuildSlaveDeviceCommandsJson', () => this._testBuildSlaveDeviceCommandsJson()))

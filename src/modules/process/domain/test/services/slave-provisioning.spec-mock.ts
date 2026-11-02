@@ -61,12 +61,17 @@ export function WithPorts(template: SlaveTemplate, portCount: number): SlaveTemp
 }
 
 // seul le bloc outputs du template DIGITAL_IO_8CH est un bloc de coils pilotable par voie
-export function CreateDeviceCommandServiceMock(): { isDigitalOutputOf: jest.Mock; withParams: jest.Mock; withTemplateParams: jest.Mock } {
+export function CreateDeviceCommandServiceMock(): {
+    isDigitalOutputOf: jest.Mock; withParams: jest.Mock; withTemplateParams: jest.Mock; localizeText: jest.Mock; localizeCommandName: jest.Mock;
+} {
     return {
         isDigitalOutputOf: jest.fn((_kind: string, command: { blockId: string }) => command.blockId === 'outputs'),
         withParams: jest.fn((commands: unknown) => Promise.resolve(commands)),
         // params des templates de test déjà résolus
-        withTemplateParams: jest.fn((template: SlaveTemplate) => template)
+        withTemplateParams: jest.fn((template: SlaveTemplate) => template),
+        // textes des templates de test déjà dans la langue de la box
+        localizeText: jest.fn((_kind: string, text: string) => text),
+        localizeCommandName: jest.fn((_kind: string, command: { name: string }) => command.name)
     };
 }
 

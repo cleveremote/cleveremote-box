@@ -4,12 +4,14 @@ import { DeviceKind, SlaveTemplate } from '../models/device.model';
 import { RegisterMapTemplate } from '@register-map/domain/models/register-map.model';
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { DeviceCommandService } from './device-command.service';
+import { GlobalSettingsService } from './global-settings.service';
 
 @Injectable()
 export class SlaveTemplateService {
     public constructor(
         private slaveTemplateRepository: SlaveTemplateRepository,
         private deviceCommandService: DeviceCommandService,
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) { }
 
@@ -17,11 +19,12 @@ export class SlaveTemplateService {
     public async save(template: SlaveTemplate): Promise<SlaveTemplate> {
         const saved = await this.slaveTemplateRepository.save(this.deviceCommandService.withTemplateParams(template));
         this.logger.log({ templateId: saved._id, name: saved.name, kind: saved.kind }, 'slave template saved');
-        return this.deviceCommandService.withTemplateParams(saved);
+        return this.deviceCommandService.localizeTemplate(this.deviceCommandService.withTemplateParams(saved));
     }
 
+    // textes dans la langue de la box (affichage)
     public async get(): Promise<SlaveTemplate[]> {
-        return (await this.slaveTemplateRepository.get()).map((template) => this.deviceCommandService.withTemplateParams(template));
+        return this.deviceCommandService.modelsWithParams();
     }
 
     /**
@@ -41,9 +44,11 @@ export class SlaveTemplateService {
         }
     }
 
-    // device : valeurs par défaut de la register map (ex: portConfig), nom et description du template sinon
+    // device : valeurs par défaut de la register map (ex: portConfig), nom et description du template sinon,
+    // dans la langue de la box (retraduits à la création d'un slave si la langue a changé depuis)
     private _fromRegisterMap(registerMap: RegisterMapTemplate): SlaveTemplate {
-        const { _id, name, description, kind, device } = registerMap;
+        const { name, description } = this.deviceCommandService.translateTemplate(registerMap, this.globalSettingsService.language);
+        const { _id, kind, device } = registerMap;
         const label = name ?? kind;
         return {
             _id,

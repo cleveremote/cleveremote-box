@@ -63,6 +63,7 @@ describe('DeviceService', () => {
             logger as never,
             deviceRepository as never,
             modbusService as unknown as ModbusDeviceService,
+            { language: 'fr' } as never,
             [modbusSlaveStrategy, inverterStrategy]
         );
     });

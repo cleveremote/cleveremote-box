@@ -34,10 +34,12 @@ export class AutoCreationService {
     // Slave rattaché au modèle `template` (enregistré, commandes avec _id) : il en partage les DeviceCommand
     public async build(template: SlaveTemplate, masterDeviceId: string, slaveId = DEFAULT_UNCONFIGURED_UNIT_ID,
         existingDevices: DeviceModel[] = []): Promise<SlaveBundle> {
+        // nom et description du template issus de la register map : dans la langue de la box (personnalisés : tels quels)
+        const name = this.deviceCommandService.localizeText(template.kind, template.device.name, (registerMap) => registerMap.name ?? registerMap.kind);
         const device: DeviceModel = {
             _id: randomUUID(),
-            name: this._uniqueDeviceName(template.device.name, DeviceType.SLAVE, existingDevices),
-            description: template.device.description,
+            name: this._uniqueDeviceName(name, DeviceType.SLAVE, existingDevices),
+            description: this.deviceCommandService.localizeText(template.kind, template.device.description, (registerMap) => registerMap.description),
             type: DeviceType.SLAVE,
             config: {
                 slaveId,

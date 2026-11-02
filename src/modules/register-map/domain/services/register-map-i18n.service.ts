@@ -64,6 +64,20 @@ export class RegisterMapI18nService {
         return translated;
     }
 
+    /**
+     * Texte enregistré issu du template (rendu par `pick`) dans `lang` : reconnu s'il vaut ce rendu dans la langue
+     * source ou l'une de ses traductions (le texte sert de code) ; texte personnalisé ou inconnu conservé tel quel.
+     */
+    public localize(template: RegisterMapTemplate, text: string | undefined, lang: string | undefined,
+        pick: (template: RegisterMapTemplate) => string | undefined): string | undefined {
+        if (!text) {
+            return text;
+        }
+        const langs = [...(this._translations.get(template.kind)?.keys() ?? [])];
+        const known = [pick(template), ...langs.map((l) => pick(this.translate(template, l)))];
+        return known.includes(text) ? pick(this.translate(template, lang)) ?? text : text;
+    }
+
     public translateOutcome(template: RegisterMapTemplate, outcome: RegisterOperationOutcome, lang: string | undefined): RegisterOperationOutcome {
         const translated = this.translate(template, lang);
         return translated === template ? outcome : TranslateOutcome(template, translated, outcome);

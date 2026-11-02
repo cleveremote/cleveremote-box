@@ -35,7 +35,7 @@ export class SensorAutoCreationStrategy implements AutoCreationStrategy {
     // params recalculés depuis la register map : ceux persistés peuvent dater d'avant un autoCreate ajouté au template JSON
     public async build({ device, template }: AutoCreationContext): Promise<AutoCreatedElements> {
         const { deviceCommands } = this.deviceCommandService.withTemplateParams(template);
-        const sensors = deviceCommands.flatMap((command) => this._buildCommandSensors(device, command));
+        const sensors = deviceCommands.flatMap((command) => this._buildCommandSensors(device, template.kind, command));
         if (!sensors.length) {
             this.logger.warn({ deviceId: device._id, kind: template.kind }, 'no autoCreate read field, sensors not created');
         }
@@ -43,7 +43,7 @@ export class SensorAutoCreationStrategy implements AutoCreationStrategy {
     }
 
     // Lecture du modèle : parent + un enfant par champ autoCreate retenu par la commande (fields absent = tous)
-    private _buildCommandSensors(device: DeviceModel, command: TemplateCommand): SensorModel[] {
+    private _buildCommandSensors(device: DeviceModel, kind: DeviceKind, command: TemplateCommand): SensorModel[] {
         const result = command.params?.result;
         if (!command._id || !hasCommandType(command, DeviceCommandType.READ) || result?.type !== 'fields') return [];
         const fields = result.fields.filter((field) => field.autoCreate && (!command.fields?.length || command.fields.includes(field.name)));
@@ -54,7 +54,9 @@ export class SensorAutoCreationStrategy implements AutoCreationStrategy {
         parentConfig.deviceId = device._id;
         parentConfig.cronPattern = SENSOR_DEFAULT_CRON_PATTERN;
         // valeurs portées par les enfants : le parent n'est pas affiché
-        const parent = this._buildSensor(`${device.name} ${command.name}`, parentConfig, { display: false });
+        // nom de commande enregistré dans la langue du seed : traduit dans celle de la box
+        const commandName = this.deviceCommandService.localizeCommandName(kind, command);
+        const parent = this._buildSensor(`${device.name} ${commandName}`, parentConfig, { display: true });
         return [parent, ...fields.map((field) => this._buildChildSensor(device, parent, field))];
     }
 
