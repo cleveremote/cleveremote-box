@@ -233,7 +233,10 @@ export class StructureService {
     }
 
     private _buildProcessValues(): ProcessValueModel[] {
-        const cycles = this.structure.cycles.map((cycle) => this._toProcessValue(cycle, ExecutableType.CYCLE));
+        if (!this.structure) {
+            return [];
+        }
+        const cycles = (this.structure.cycles ?? []).map((cycle) => this._toProcessValue(cycle, ExecutableType.CYCLE));
         const sequences = this.structure.getSequences().map((sequence) => this._toProcessValue(sequence, ExecutableType.SEQUENCE));
         return [...cycles, ...sequences];
     }
@@ -251,7 +254,7 @@ export class StructureService {
     }
 
     private _buildSensorValues(): SensorValueModel[] {
-        return this.structure.sensors
+        return (this.structure?.sensors ?? [])
             .filter((sensor) => sensor.value !== undefined)
             .map((sensor) => {
                 const value = new SensorValueModel();
