@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, Subscription } from 'rxjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { RegisterFunction, RegisterMapTemplate } from '@register-map/domain/models/register-map.model';
 import { DeviceModel, DeviceType, SlaveConfigModel } from '../models/device.model';
@@ -62,6 +62,7 @@ export class DigitalIoMonitorService {
     private _devicesRefreshedAt: number | null = null;
     private _isWatching = false;
     private _timer: NodeJS.Timeout | null = null;
+    private _deviceChanges: Subscription | null = null;
 
     public readonly inputChanges$: Observable<DigitalIoChange> = this._inputChanges.asObservable();
     public readonly inputLongPress$: Observable<DigitalInputLongPress> = this._inputLongPress.asObservable();
@@ -80,6 +81,7 @@ export class DigitalIoMonitorService {
             return;
         }
         this._isWatching = true;
+        this._deviceChanges = this.deviceRepository.changes$.subscribe((deviceId) => this._onDeviceChanged(deviceId));
         const tick = async (): Promise<void> => {
             try {
                 await this.poll(longPressMs);
@@ -97,6 +99,8 @@ export class DigitalIoMonitorService {
         this._isWatching = false;
         if (this._timer) clearTimeout(this._timer);
         this._timer = null;
+        this._deviceChanges?.unsubscribe();
+        this._deviceChanges = null;
         this._blockStates.clear();
         this._devicesRefreshedAt = null;
     }
@@ -111,6 +115,15 @@ export class DigitalIoMonitorService {
                 await this._readBlock(device.deviceId, block, longPressMs);
             }
         }
+    }
+
+    // Device créé, modifié ou supprimé : liste rechargée au prochain poll et état du device oublié
+    // (sa register map / son adresse ont pu changer : nouvelle référence à la prochaine lecture)
+    private _onDeviceChanged(deviceId: string): void {
+        this._devicesRefreshedAt = null;
+        [...this._blockStates.keys()]
+            .filter((key) => key.split('/')[0] === deviceId)
+            .forEach((key) => this._blockStates.delete(key));
     }
 
     // Un slave marqué déconnecté n'est pas lu (pas de timeouts empilés sur le bus, cf. DeviceConnectivityService) ;

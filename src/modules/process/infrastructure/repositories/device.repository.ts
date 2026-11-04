@@ -1,5 +1,6 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { Observable, Subject } from 'rxjs';
 import { DeviceConnectivityModel, DeviceKind, DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
@@ -13,6 +14,10 @@ type DeviceCascade = (deviceId: string) => Promise<void>;
 
 @Injectable()
 export class DeviceRepository {
+    private readonly _changes = new Subject<string>();
+
+    // id de chaque device créé, modifié (connectivité comprise) ou soft-supprimé, émis après l'écriture en base
+    public readonly changes$: Observable<string> = this._changes.asObservable();
 
     public constructor(
         private deviceMongooseRepository: DeviceMongooseRepository,
@@ -45,13 +50,14 @@ export class DeviceRepository {
     };
 
     public async save(model: DeviceModel): Promise<DeviceModel> {
-        if (model._id) {
-            if (!isValidUuid(model._id)) {
-                throw new InvalidIdException(model._id, 'device');
-            }
-            return this.deviceMongooseRepository.upsert(model._id, await this._keepSlaveState(model));
+        if (model._id && !isValidUuid(model._id)) {
+            throw new InvalidIdException(model._id, 'device');
         }
-        return this.deviceMongooseRepository.create(model);
+        const saved = model._id
+            ? await this.deviceMongooseRepository.upsert(model._id, await this._keepSlaveState(model))
+            : await this.deviceMongooseRepository.create(model);
+        this._changes.next(saved?._id ?? model._id);
+        return saved;
     }
 
     // cascade : soft-supprime les slaves (config.masterDeviceId), puis les elements rattaches selon le kind
@@ -76,7 +82,9 @@ export class DeviceRepository {
     private async _softDelete(id: string, device: DeviceModel | null): Promise<boolean> {
         const kind = device?.type === DeviceType.SLAVE ? (device.config as SlaveConfigModel)?.kind : undefined;
         await (kind ? this._cascadeByKind[kind] : this._defaultCascade)(id);
-        return this.deviceMongooseRepository.delete(id);
+        const deleted = await this.deviceMongooseRepository.delete(id);
+        this._changes.next(id);
+        return deleted;
     }
 
     // kind, modelId et initDoneCommandIds non fournis (ex: synchro client) : conserves depuis la base, pour ne
@@ -138,7 +146,8 @@ export class DeviceRepository {
     }
 
     public async updateConnectivity(id: string, connectivity: DeviceConnectivityModel): Promise<void> {
-        return this.deviceMongooseRepository.updateConnectivity(id, connectivity);
+        await this.deviceMongooseRepository.updateConnectivity(id, connectivity);
+        this._changes.next(id);
     }
 
     public async getSlavesByMasterId(masterDeviceId: string): Promise<DeviceModel[]> {
