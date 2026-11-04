@@ -12,6 +12,7 @@ export class GlobalSettingsMapper {
             ? { MANUAL: globalSettings.modeRanks.MANUAL, SCHEDULE: globalSettings.modeRanks.SCHEDULE, TRIGGER: globalSettings.modeRanks.TRIGGER }
             : undefined;
         model.language = globalSettings.language as Language;
+        model.timeZone = globalSettings.timeZone;
         return model;
     }
 
@@ -21,6 +22,7 @@ export class GlobalSettingsMapper {
         globalSettings.localCoordinates = model.localCoordinates;
         globalSettings.modeRanks = model.modeRanks;
         globalSettings.language = model.language;
+        globalSettings.timeZone = model.timeZone;
         return globalSettings;
     }
 

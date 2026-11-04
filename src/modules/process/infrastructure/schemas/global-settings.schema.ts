@@ -41,5 +41,9 @@ export class GlobalSettings {
 
     @Prop({ type: String })
     public language?: string;
+
+    // identifiant IANA (ex. Africa/Casablanca)
+    @Prop({ type: String })
+    public timeZone?: string;
 }
 export const GlobalSettingsSchema = SchemaFactory.createForClass(GlobalSettings);

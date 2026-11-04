@@ -65,7 +65,7 @@ const STOP_REASON_BY_SOURCE: Record<EventSource, StopReason> = {
 
 const SOURCE_BY_MODE: Record<ProcessMode, EventSource> = {
     [ProcessMode.MANUAL]: EventSource.MANUAL,
-    [ProcessMode.SCHEDULED]: EventSource.SCHEDULE,
+    [ProcessMode.SCHEDULE]: EventSource.SCHEDULE,
     [ProcessMode.TRIGGER]: EventSource.TRIGGER,
     [ProcessMode.SYSTEM]: EventSource.SYSTEM
 };

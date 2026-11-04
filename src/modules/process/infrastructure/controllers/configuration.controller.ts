@@ -1,6 +1,6 @@
-import { Controller, Injectable, ParseArrayPipe, PipeTransform, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { BoxErrorCode } from '@framework/errors/box-error';
+import { Controller, Injectable, ParseArrayPipe, PipeTransform, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { StructureService } from '@process/domain/services/configuration.service';
@@ -10,7 +10,7 @@ import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc'
 import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
 import { EventFetchUC } from '@process/use-cases/event-fetch.uc';
 import { EventModel } from '@process/domain/models/event.model';
-import { CycleHistoryModel } from '@process/domain/models/cycle-history.model';
+import { CycleRunModel } from '@process/domain/models/cycle-history.model';
 import { EventQueryDTO } from '../dto/event-query.dto';
 import { EventPurgeDTO } from '../dto/event-purge.dto';
 import { EventPurgeUC } from '@process/use-cases/event-purge.uc';
@@ -41,19 +41,6 @@ import { DeviceConnectivityCheckUC } from '@process/use-cases/device-connectivit
 import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 
-function flattenValidationErrors(errors: ValidationError[]): string[] {
-    return errors.flatMap(error => [
-        ...Object.values(error.constraints ?? {}),
-        ...flattenValidationErrors(error.children ?? [])
-    ]);
-}
-
-function validationExceptionFactory(errors: ValidationError[] | string): RpcException {
-    const message = Array.isArray(errors) ? flattenValidationErrors(errors).join(', ') : errors;
-    const fields = Array.isArray(errors) ? errors.map((error) => error.property) : undefined;
-    return new RpcException({ status: 'error', code: BoxErrorCode.VALIDATION, params: { fields }, message });
-}
-
 @Injectable()
 class ToArrayPipe implements PipeTransform {
     public transform(value: unknown): unknown[] {
@@ -62,7 +49,8 @@ class ToArrayPipe implements PipeTransform {
 }
 
 @Controller()
-@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: validationExceptionFactory }))
+@UseFilters(new RpcErrorsFilter())
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: RpcValidationExceptionFactory }))
 export class ConfigurationController {
 
     public constructor(
@@ -82,7 +70,7 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/device'])
     public async synchroniseDevice(
-        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: RpcValidationExceptionFactory }))
             deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
     ): Promise<DeviceModel[]> {
         const uc = new DeviceSynchronizeUC(this._synchronizeService);
@@ -106,7 +94,7 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/device-command'])
     public async synchroniseDeviceCommand(
-        @Payload(new ParseArrayPipe({ items: DeviceCommandDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ParseArrayPipe({ items: DeviceCommandDTO, exceptionFactory: RpcValidationExceptionFactory }))
             deviceCommandDTOs: DeviceCommandDTO[]
     ): Promise<DeviceCommandModel[]> {
         const uc = new DeviceCommandSynchronizeUC(this._synchronizeService);
@@ -157,7 +145,7 @@ export class ConfigurationController {
 
     @MessagePattern(['box/synchronize/actuator'])
     public async synchroniseActuator(
-        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: RpcValidationExceptionFactory }))
             actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
     ): Promise<ActuatorModel[]> {
         const uc = new ActuatorSynchronizeUC(this._synchronizeService);
@@ -192,8 +180,8 @@ export class ConfigurationController {
     }
 
     @MessagePattern(['box/fetch/events'])
-    // cycle : CycleHistoryModel (runs) ; capteur / sequence : EventModel[]
-    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[] | CycleHistoryModel> {
+    // cycle ou deviceId absent (derniers runs tous cycles) : CycleRunModel[] ; capteur / sequence : EventModel[]
+    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[] | CycleRunModel[]> {
         const uc = new EventFetchUC(this._configurationService);
         return uc.execute({ ...eventQueryDTO, lang: eventQueryDTO.lang ?? this._globalSettingsService.language });
     }

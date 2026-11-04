@@ -6,6 +6,7 @@ import { DeviceModel, SlaveTemplate } from './device.model';
 import { ActuatorModel } from './actuator.model';
 import { ControlLoopModel } from './control-loop.model';
 import { isRaspberryPi } from '../utils/platform.util';
+import { GlobalSettingsModel } from './global-settings.model';
 export class StructureModel {
     // Modèles de slave, chacun avec ses DeviceCommand (params résolus)
     public models: SlaveTemplate[] = [];
@@ -15,6 +16,8 @@ export class StructureModel {
     public actuators: ActuatorModel[] = [];
     public controlLoops: ControlLoopModel[] = [];
     public values: any[] = [];
+    // reglages globaux de la box (position, fuseau deduit, rangs, langue, version)
+    public globalSettings: GlobalSettingsModel;
     // box identifiée comme un Raspberry Pi (device tree)
     public isRPI: boolean = isRaspberryPi();
     public getModuleIds(): string[] {

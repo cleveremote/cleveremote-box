@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
 import { SensorService } from '@process/domain/services/sensor.service';
@@ -73,6 +74,7 @@ describe('SensorService', () => {
             wsService as never,
             sensorRepository as never,
             [forcastStrategy, comStrategy],
+            { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
             logger as never
         );
     });
@@ -281,6 +283,7 @@ describe('SensorService', () => {
                 wsService as never,
                 sensorRepository as never,
                 [forcastStrategy],
+                { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
                 logger as never
             );
             const sensor = CreateComSensorModel({ _id: 'unsupported-type-sensor' });

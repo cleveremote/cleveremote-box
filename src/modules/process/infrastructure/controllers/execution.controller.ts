@@ -1,17 +1,19 @@
-import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { ProcessService } from '@process/domain/services/execution.service';
 import { type InverterConfigParam } from '@process/domain/models/device-command.model';
 import { ProcessExecuteUC } from '@process/use-cases/process-execute.uc';
 import { ProcessExecuteDTO } from '../dto/process-execute.dto';
 
 @Controller()
+@UseFilters(new RpcErrorsFilter())
 export class ExecutionController {
     public constructor(
         private readonly _processService: ProcessService
     ) { }
 
-    @UsePipes(ValidationPipe)
+    @UsePipes(new ValidationPipe({ exceptionFactory: RpcValidationExceptionFactory }))
     @MessagePattern(['box/execution/process', 'box/execution/process/local'])
     public async handleSendHello(@Payload() processExecuteDTO: ProcessExecuteDTO): Promise<boolean> {
         const uc = new ProcessExecuteUC(this._processService);

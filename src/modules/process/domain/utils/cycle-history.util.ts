@@ -1,5 +1,5 @@
-import { CycleHistoryModel, CycleRunModel, RunOutcome } from '@process/domain/models/cycle-history.model';
-import { EventModel, ProcessEventData, ProcessEventKind } from '@process/domain/models/event.model';
+import { CycleRunModel, RunOutcome } from '@process/domain/models/cycle-history.model';
+import { ElementType, EventModel, ProcessEventData, ProcessEventKind } from '@process/domain/models/event.model';
 
 const OUTCOME_BY_KIND: Partial<Record<ProcessEventKind, RunOutcome>> = {
     [ProcessEventKind.START_REFUSED]: RunOutcome.REFUSED,
@@ -41,29 +41,29 @@ function ApplyCycleEvent(run: CycleRunModel, event: EventModel, data: ProcessEve
     }
 }
 
-// regroupe les events d'un cycle et de ses sequences par runId
-export function BuildCycleHistory(cycleId: string, events: EventModel[]): CycleHistoryModel {
+// regroupe par runId les events de cycles et de leurs sequences (un ou plusieurs cycles) ;
+// les events sans runId (anterieurs au journal, reset au boot) sont ignores
+export function BuildCycleRuns(events: EventModel[]): CycleRunModel[] {
     const runs = new Map<string, CycleRunModel>();
-    const legacy: EventModel[] = [];
     for (const event of [...events].sort((a, b) => Time(a) - Time(b))) {
         const data = event.additionalData as ProcessEventData;
         if (!data?.runId) {
-            legacy.push(event);
             continue;
         }
+        const isCycleEvent = event.elementType === ElementType.CYCLE;
         let run = runs.get(data.runId);
         if (!run) {
-            run = Object.assign(new CycleRunModel(), { runId: data.runId, cycleId, outcome: RunOutcome.RUNNING, requestedAt: event.date });
+            run = Object.assign(new CycleRunModel(), { runId: data.runId, outcome: RunOutcome.RUNNING, requestedAt: event.date });
             runs.set(data.runId, run);
         }
+        run.cycleId ??= isCycleEvent ? event.elementId : data.cycleId;
         run.timeline.push({
             date: event.date, elementId: event.elementId, elementType: event.elementType,
             kind: data.kind, name: data.name, message: data.message, data
         });
-        if (event.elementId === cycleId) {
+        if (isCycleEvent) {
             ApplyCycleEvent(run, event, data);
         }
     }
-    const sortedRuns = [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-    return { cycleId, runs: sortedRuns, legacy };
+    return [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
 }

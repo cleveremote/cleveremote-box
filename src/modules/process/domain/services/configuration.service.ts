@@ -17,8 +17,8 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
-import { CycleHistoryModel } from '../models/cycle-history.model';
-import { BuildCycleHistory } from '../utils/cycle-history.util';
+import { CycleRunModel } from '../models/cycle-history.model';
+import { BuildCycleRuns } from '../utils/cycle-history.util';
 import { TranslateEventMessages } from '../utils/process-event-message.util';
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
@@ -29,6 +29,9 @@ import { SensorType } from '../interfaces/sensor.interface';
 import { DeviceCommandService } from './device-command.service';
 import { SlaveScanService } from './slave-provisioning/scan/slave-scan.service';
 import { AutoCreationService } from './slave-provisioning/auto-creation/auto-creation.service';
+import { GlobalSettingsService } from './global-settings.service';
+
+const LAST_EVENTS_LIMIT = 50;
 
 @Injectable()
 export class StructureService {
@@ -48,7 +51,8 @@ export class StructureService {
         private deviceCommandService: DeviceCommandService,
         private slaveScanService: SlaveScanService,
         private autoCreationService: AutoCreationService,
-        private controlLoopRepository: ControlLoopRepository
+        private controlLoopRepository: ControlLoopRepository,
+        private globalSettingsService: GlobalSettingsService
     ) {
     }
 
@@ -64,6 +68,7 @@ export class StructureService {
         this._attachSensorCommands(structureModel.sensors, structureModel.models);
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         structureModel.controlLoops = await this.controlLoopRepository.get() as StructureModel['controlLoops'];
+        structureModel.globalSettings = await this.globalSettingsService.get();
         this.structure = structureModel;
 
         // la derniere lecture connue d'un capteur ne vit qu'en Mongo (collection `events`) :
@@ -151,16 +156,23 @@ export class StructureService {
         return this.getStructure();
     }
 
-    // cycle : historique regroupe par run (events du cycle et de ses sequences) ; capteur / sequence : events bruts
+    // cycle ou deviceId absent (tous cycles) : runs (events du cycle et de ses sequences) ; capteur / sequence : events bruts
+    // startDate + endDate : filtre de periode ; sinon les LAST_EVENTS_LIMIT derniers runs / events
     // messages du journal recalcules dans query.lang (historique compris)
-    public async getEvents(query: { deviceId: string; startDate: string; endDate: string; lang?: string }): Promise<EventModel[] | CycleHistoryModel> {
-        const startDate = new Date(query.startDate);
-        const endDate = new Date(query.endDate);
-        const cycle = this.structure?.cycles?.find((cyc) => cyc._id === query.deviceId);
-        if (!cycle) {
-            return TranslateEventMessages(await this.eventRepository.getByDeviceAndDateRange(query.deviceId, startDate, endDate), query.lang);
+    public async getEvents(query: { deviceId?: string; startDate?: string; endDate?: string; lang?: string }): Promise<EventModel[] | CycleRunModel[]> {
+        const range = query.startDate && query.endDate
+            ? { startDate: new Date(query.startDate), endDate: new Date(query.endDate) }
+            : undefined;
+        const cycle = query.deviceId ? this.structure?.cycles?.find((cyc) => cyc._id === query.deviceId) : undefined;
+        if (query.deviceId && !cycle) {
+            const events = range
+                ? await this.eventRepository.getByDeviceAndDateRange(query.deviceId, range.startDate, range.endDate)
+                : await this.eventRepository.getLatestByDevice(query.deviceId, LAST_EVENTS_LIMIT);
+            return TranslateEventMessages(events, query.lang);
         }
-        return this._getCycleHistory(cycle, startDate, endDate, query.lang);
+        const elementIds = cycle ? [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)] : undefined;
+        const runIds = await this.eventRepository.getRunIds({ elementIds, ...range, limit: range ? undefined : LAST_EVENTS_LIMIT });
+        return this._getRuns(runIds, query.lang);
     }
 
     // purge des events d'un cycle (sequences comprises), d'un capteur / autre element, ou de toute la
@@ -195,14 +207,9 @@ export class StructureService {
         return lastEvents.filter(Boolean).map((event) => event._id);
     }
 
-    private async _getCycleHistory(cycle: CycleModel, startDate: Date, endDate: Date, lang: string | undefined): Promise<CycleHistoryModel> {
-        const elementIds = [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)];
-        const inRange = await this.eventRepository.getByDevicesAndDateRange(elementIds, startDate, endDate);
-        const runIds = [...new Set(inRange.map((event) => (event.additionalData as ProcessEventData).runId).filter(Boolean))];
-        // runs complets : un run commence avant startDate ou fini apres endDate garde toute sa timeline
-        const runEvents = await this.eventRepository.getByRunIds(runIds);
-        const legacy = inRange.filter((event) => !(event.additionalData as ProcessEventData).runId);
-        return BuildCycleHistory(cycle._id, TranslateEventMessages([...runEvents, ...legacy], lang));
+    // runs complets : un run commence avant startDate ou fini apres endDate garde toute sa timeline
+    private async _getRuns(runIds: string[], lang: string | undefined): Promise<CycleRunModel[]> {
+        return BuildCycleRuns(TranslateEventMessages(await this.eventRepository.getByRunIds(runIds), lang));
     }
 
     public async getStatus(type: string): Promise<ProcessValueModel[] | SensorValueModel[] | ValueModel> {

@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { Connection } from 'mongoose';
@@ -43,7 +44,7 @@ describe('ScheduleService', () => {
     let scheduleRepository: ScheduleRepository;
     let configurationService: { schedules: ScheduleModel[]; structure: { cycles: CycleModel[] } };
     let processService: { execute: jest.Mock };
-    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined };
+    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined; timeZone: string; onLocationChanged: Subject<void> };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: ScheduleService;
 
@@ -91,7 +92,7 @@ describe('ScheduleService', () => {
         }
         configurationService = { schedules: [], structure: { cycles: [] } };
         processService = CreateProcessServiceMock();
-        globalSettingsService = { localCoordinates: undefined };
+        globalSettingsService = { localCoordinates: undefined, timeZone: 'UTC', onLocationChanged: new Subject<void>() };
         logger = CreateLoggerMock();
         service = new ScheduleService(
             schedulerRegistry,

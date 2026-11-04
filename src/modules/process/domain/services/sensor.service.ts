@@ -11,6 +11,7 @@ import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import { ReadResult, SENSOR_STRATEGIES, SensorStrategy } from './sensor-strategies/sensor-strategy.interface';
+import { GlobalSettingsService } from './global-settings.service';
 
 @Injectable()
 export class SensorService {
@@ -24,9 +25,14 @@ export class SensorService {
         private wsService: SocketIoClientProxyService,
         private sensorRepository: SensorRepository,
         @Inject(SENSOR_STRATEGIES) strategies: SensorStrategy[],
+        private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.type, strategy]));
+        // patterns a recalculer dans le nouveau fuseau (et meteo relue a la nouvelle position)
+        this.globalSettingsService.onLocationChanged.subscribe(() => {
+            this.restartAllScheduledSensors().catch((error) => this.logger.error({ error }, 'failed to restart sensors after location change'));
+        });
     }
 
     public async initialize(): Promise<void> {
@@ -147,7 +153,9 @@ export class SensorService {
             // waitForCompletion : un read (ex. appel HTTP meteo) ne doit pas se chevaucher avec
             // le tick suivant si la lecture precedente n'est pas terminee.
             const cronPattern = (sensor.config as ForcastSensorConfigModel | ComSensorConfigModel).cronPattern;
-            const job = CronJob.from({ cronTime: cronPattern, onTick: () => this._readAndEmit(sensor), waitForCompletion: true });
+            const job = CronJob.from({
+                cronTime: cronPattern, onTick: () => this._readAndEmit(sensor), waitForCompletion: true, timeZone: this.globalSettingsService.timeZone
+            });
             this.schedulerRegistry.addCronJob(sensor._id, job);
             job.start();
         } catch (e) {

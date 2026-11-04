@@ -14,7 +14,7 @@ import { CycleModel } from '@process/domain/models/cycle.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
-import { CycleHistoryModel, RunOutcome } from '@process/domain/models/cycle-history.model';
+import { CycleRunModel, RunOutcome } from '@process/domain/models/cycle-history.model';
 import { EventPurgeSkipReason } from '@process/domain/models/event-purge.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
@@ -43,7 +43,7 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
     let actuatorRepository: ReturnType<typeof CreateEmptyGetRepositoryMock>;
     let eventRepository: {
         save: jest.Mock; getLast: jest.Mock; getLastStatus: jest.Mock; getByDeviceAndDateRange: jest.Mock;
-        getByDevicesAndDateRange: jest.Mock; getByRunIds: jest.Mock; purge: jest.Mock;
+        getByRunIds: jest.Mock; getRunIds: jest.Mock; getLatestByDevice: jest.Mock; purge: jest.Mock;
     };
     let service: StructureService;
 
@@ -87,8 +87,9 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             getLast: jest.fn().mockResolvedValue(null),
             getLastStatus: jest.fn().mockResolvedValue(null),
             getByDeviceAndDateRange: jest.fn().mockResolvedValue([]),
-            getByDevicesAndDateRange: jest.fn().mockResolvedValue([]),
             getByRunIds: jest.fn().mockResolvedValue([]),
+            getRunIds: jest.fn().mockResolvedValue([]),
+            getLatestByDevice: jest.fn().mockResolvedValue([]),
             purge: jest.fn().mockResolvedValue(3)
         };
 
@@ -106,7 +107,8 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             deviceCommandService as never,
             slaveScanService as never,
             autoCreationService as never,
-            { get: jest.fn().mockResolvedValue([]) } as never
+            { get: jest.fn().mockResolvedValue([]) } as never,
+            { get: jest.fn().mockResolvedValue({}) } as never
         );
     });
 
@@ -308,31 +310,55 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             );
         });
 
+        it('should return the last events of a sensor when no date range is given', async () => {
+            await service.getEvents({ deviceId: 'device-1' });
+
+            expect(eventRepository.getLatestByDevice).toHaveBeenCalledWith('device-1', 50);
+        });
+
         it('should return the runs of a cycle, completed with the out-of-range events of those runs', async () => {
             service.structure = Object.assign(new StructureModel(), {
                 cycles: [Object.assign(new CycleModel(), { _id: 'cycle-1', sequences: [{ _id: 'seq-1' }] })]
             });
-            const started = { _id: 'e1', elementId: 'cycle-1', date: new Date('2023-12-31T23:50:00Z'),
+            const started = { _id: 'e1', elementId: 'cycle-1', elementType: 'CYCLE', date: new Date('2023-12-31T23:50:00Z'),
                 additionalData: { type: 'MANUAL', kind: 'CYCLE_STARTED', runId: 'run-1', name: 'Zone A' } };
-            const ended = { _id: 'e2', elementId: 'cycle-1', date: new Date('2024-01-01T00:10:00Z'),
+            const ended = { _id: 'e2', elementId: 'cycle-1', elementType: 'CYCLE', date: new Date('2024-01-01T00:10:00Z'),
                 additionalData: { type: 'MANUAL', kind: 'CYCLE_ENDED', runId: 'run-1', stop: { reason: 'COMPLETED' } } };
-            const old = { _id: 'e3', elementId: 'cycle-1', date: new Date('2024-01-02T00:00:00Z'),
-                additionalData: { type: 'MANUAL', value: 'STOPPED', status: 'STOPPED' } };
-            eventRepository.getByDevicesAndDateRange.mockResolvedValue([ended, old]);
+            eventRepository.getRunIds.mockResolvedValue(['run-1']);
             eventRepository.getByRunIds.mockResolvedValue([started, ended]);
 
-            const history = await service.getEvents({ deviceId: 'cycle-1', startDate: '2024-01-01', endDate: '2024-01-31' }) as CycleHistoryModel;
+            const runs = await service.getEvents({ deviceId: 'cycle-1', startDate: '2024-01-01', endDate: '2024-01-31' }) as CycleRunModel[];
 
-            expect(eventRepository.getByDevicesAndDateRange).toHaveBeenCalledWith(
-                ['cycle-1', 'seq-1'], new Date('2024-01-01'), new Date('2024-01-31')
-            );
+            expect(eventRepository.getRunIds).toHaveBeenCalledWith({
+                elementIds: ['cycle-1', 'seq-1'], startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), limit: undefined
+            });
             expect(eventRepository.getByRunIds).toHaveBeenCalledWith(['run-1']);
-            expect(history.runs).toHaveLength(1);
-            expect(history.runs[0]).toEqual(expect.objectContaining({
-                runId: 'run-1', name: 'Zone A', outcome: RunOutcome.ENDED, startedAt: started.date, stop: { reason: 'COMPLETED' }
+            expect(runs).toHaveLength(1);
+            expect(runs[0]).toEqual(expect.objectContaining({
+                runId: 'run-1', cycleId: 'cycle-1', name: 'Zone A', outcome: RunOutcome.ENDED, startedAt: started.date, stop: { reason: 'COMPLETED' }
             }));
-            expect(history.runs[0].timeline.map((x) => x.kind)).toEqual(['CYCLE_STARTED', 'CYCLE_ENDED']);
-            expect(history.legacy).toEqual([old]);
+            expect(runs[0].timeline.map((x) => x.kind)).toEqual(['CYCLE_STARTED', 'CYCLE_ENDED']);
+        });
+
+        it('should return the runs of all cycles in the date range when deviceId is absent', async () => {
+            await service.getEvents({ startDate: '2024-01-01', endDate: '2024-01-31' });
+
+            expect(eventRepository.getRunIds).toHaveBeenCalledWith({
+                elementIds: undefined, startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), limit: undefined
+            });
+        });
+
+        it('should return the last runs of all cycles when no parameter is given', async () => {
+            const started = { _id: 'e1', elementId: 'cycle-2', elementType: 'CYCLE', date: new Date('2024-01-01T00:00:00Z'),
+                additionalData: { type: 'MANUAL', kind: 'CYCLE_STARTED', runId: 'run-2' } };
+            eventRepository.getRunIds.mockResolvedValue(['run-2']);
+            eventRepository.getByRunIds.mockResolvedValue([started]);
+
+            const runs = await service.getEvents({}) as CycleRunModel[];
+
+            expect(eventRepository.getRunIds).toHaveBeenCalledWith({ elementIds: undefined, limit: 50 });
+            expect(eventRepository.getByRunIds).toHaveBeenCalledWith(['run-2']);
+            expect(runs.map((x) => [x.runId, x.cycleId, x.outcome])).toEqual([['run-2', 'cycle-2', RunOutcome.RUNNING]]);
         });
     });
 

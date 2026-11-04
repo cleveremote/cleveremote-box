@@ -24,14 +24,14 @@ export enum ExecutableAction {
 // de Group) herite de l'origine de ce cycle et porte son id dans ProcessModel.sourceCycleId.
 // SYSTEM : arret interne (enfant stoppe par son Group, Group eteint, conflit perdu), sans rang.
 export enum ProcessMode {
-    SCHEDULED = 'SCHEDULE',
+    SCHEDULE = 'SCHEDULE',
     MANUAL = 'MANUAL',
     TRIGGER = 'TRIGGER',
     SYSTEM = 'SYSTEM'
 }
 
 // origines comparees par l'arbitrage (rang dans GlobalSettingsModel.modeRanks)
-export type RankedProcessMode = ProcessMode.MANUAL | ProcessMode.SCHEDULED | ProcessMode.TRIGGER;
+export type RankedProcessMode = ProcessMode.MANUAL | ProcessMode.SCHEDULE | ProcessMode.TRIGGER;
 
 export enum CycleType {
     GROUP = 'GROUP',

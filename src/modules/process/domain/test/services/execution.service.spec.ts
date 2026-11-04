@@ -192,7 +192,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             { withParams: (commands: unknown) => Promise.resolve(commands) } as never,
             {} as never,
             {} as never,
-            emptyGetRepo as never
+            emptyGetRepo as never,
+            { get: jest.fn().mockResolvedValue({}) } as never
         );
 
         actuatorService = {
@@ -535,7 +536,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             ]);
             await service.execute(CreateProcess(cycleA, ProcessMode.TRIGGER, ExecutableAction.ON));
 
-            const process = CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            const process = CreateProcess(cycleB, ProcessMode.SCHEDULE, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
             await service.execute(process);
 
@@ -559,7 +560,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
         it('should require confirmation without any conflict when shouldConfirmation is set', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a']);
-            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULE, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
 
             await service.execute(process);
@@ -589,7 +590,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await service.execute(CreateProcess(cycleModule, ProcessMode.MANUAL, ExecutableAction.ON));
             expect(cycleModule.status).toEqual(ExecutableStatus.IN_PROCCESS);
 
-            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULE, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { shouldConfirmation: true });
             await service.execute(process);
             await Flush(50);
@@ -634,7 +635,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         });
 
         it('should follow the global ranks configured in the settings', async () => {
-            globalSettingsService.modeRanks = { [ProcessMode.MANUAL]: 2, [ProcessMode.SCHEDULED]: 1, [ProcessMode.TRIGGER]: 0 };
+            globalSettingsService.modeRanks = { [ProcessMode.MANUAL]: 2, [ProcessMode.SCHEDULE]: 1, [ProcessMode.TRIGGER]: 0 };
             const [cycleA, cycleB] = await SeedCycles([
                 { name: 'cycle-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
                 { name: 'cycle-b', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
@@ -953,7 +954,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             // cycleB n'a jamais reellement demarre (deja STOPPED) : le filtre process.action !== 'OFF'
             // fait que cycleA n'est jamais traite comme un conflit ici, donc aucune confirmation
             // n'est demandee et ce process OFF passe directement en FORCE (no-op, cycleB deja STOPPED).
-            await service.execute(CreateProcess(cycleB, ProcessMode.SCHEDULED, ExecutableAction.OFF, StartPolicy.ARBITRATE));
+            await service.execute(CreateProcess(cycleB, ProcessMode.SCHEDULE, ExecutableAction.OFF, StartPolicy.ARBITRATE));
 
             expect(eventRepository.save).not.toHaveBeenCalledWith(
                 expect.objectContaining({ additionalData: expect.objectContaining({ status: ExecutableStatus.WAITTING_CONFIRMATION }) })
@@ -1034,7 +1035,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             const conditionGate = new Promise<{ value: number }>((resolve) => { releaseCondition = resolve; });
             valueRepository.getDeviceValue.mockImplementation(() => conditionGate);
 
-            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULE, ExecutableAction.ON));
             // laisse la sequence 1 (maxDuration=20ms) se terminer et la transition vers la sequence 2
             // demarrer, jusqu'a se bloquer sur conditionGate.
             await Flush(60);
@@ -1073,7 +1074,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 .mockImplementationOnce((moduleIds: string[]) =>
                     actuatorsGate.then(() => new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i)]))));
 
-            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON));
+            await service.execute(CreateProcess(cycle, ProcessMode.SCHEDULE, ExecutableAction.ON));
             // reservation synchrone faite (cycle.status = IN_PROCCESS) mais _executeWithActuators n'a
             // pas encore pu pousser ce process dans processList : son _resolveActuators() est bloque.
             expect(cycle.status).toEqual(ExecutableStatus.IN_PROCCESS);
@@ -1186,7 +1187,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
 
         it('should take the schedule as origin of a scheduled run and stop reason of a manual OFF', async () => {
             const cycle = await SeedCycle('cycle-1', ['module-a'], 5000);
-            const process = CreateProcess(cycle, ProcessMode.SCHEDULED, ExecutableAction.ON, StartPolicy.ARBITRATE);
+            const process = CreateProcess(cycle, ProcessMode.SCHEDULE, ExecutableAction.ON, StartPolicy.ARBITRATE);
             process.schedule = Object.assign(new ScheduleModel(), { _id: 'schedule-1', name: 'Matin', shouldConfirmation: false });
 
             await service.execute(process);

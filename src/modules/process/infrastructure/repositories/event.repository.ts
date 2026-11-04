@@ -16,10 +16,6 @@ export class EventRepository {
         return this.eventMongooseRepository.findByDeviceAndDateRange(elementId, startDate, endDate);
     }
 
-    public async getByDevicesAndDateRange(elementIds: string[], startDate: Date, endDate: Date): Promise<EventModel[]> {
-        return this.eventMongooseRepository.findByDevicesAndDateRange(elementIds, startDate, endDate);
-    }
-
     // tous les events de ces runs, meme hors de la periode demandee (run a cheval sur une borne)
     public async getByRunIds(runIds: string[]): Promise<EventModel[]> {
         return runIds.length ? this.eventMongooseRepository.findByRunIds(runIds) : [];
@@ -32,6 +28,15 @@ export class EventRepository {
 
     public async getLast(elementId: string): Promise<EventModel> {
         return this.eventMongooseRepository.findLastByDevice(elementId);
+    }
+
+    // elementIds absent : tous les cycles ; startDate / endDate absentes : pas de filtre de date
+    public async getRunIds(filter: { elementIds?: string[]; startDate?: Date; endDate?: Date; limit?: number }): Promise<string[]> {
+        return this.eventMongooseRepository.findRunIds(filter);
+    }
+
+    public async getLatestByDevice(elementId: string, limit: number): Promise<EventModel[]> {
+        return this.eventMongooseRepository.findLatestByDevice(elementId, limit);
     }
 
     // dernier event portant un statut (ignore les traces START_REFUSED) : rehydratation au boot

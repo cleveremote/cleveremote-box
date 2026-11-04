@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
 import { TriggerService } from '@process/domain/services/trigger.service';
@@ -67,7 +68,7 @@ describe('TriggerService', () => {
     let eventRepository: { save: jest.Mock };
     let sensorRepository: Record<string, never>;
     let processService: { execute: jest.Mock };
-    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined };
+    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined; timeZone: string; onLocationChanged: Subject<void> };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: TriggerService;
 
@@ -116,7 +117,7 @@ describe('TriggerService', () => {
         logger = CreateLoggerMock();
 
         processService = { execute: jest.fn().mockResolvedValue(undefined) };
-        globalSettingsService = { localCoordinates: undefined };
+        globalSettingsService = { localCoordinates: undefined, timeZone: 'UTC', onLocationChanged: new Subject<void>() };
         scheduleService = new ScheduleService(
             schedulerRegistry,
             configurationService as unknown as StructureService,

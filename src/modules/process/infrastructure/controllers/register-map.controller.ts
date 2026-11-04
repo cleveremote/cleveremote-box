@@ -1,22 +1,16 @@
-import { Controller, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
+import { Controller, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { BoxErrorCode } from '@framework/errors/box-error';
 import { ToErrorPayload } from '@framework/errors/box-error.messages';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { Language } from '@framework/i18n/language';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { RegisterMapTemplate, RegisterOperationOutcome } from '@register-map/domain/models/register-map.model';
 import { DeviceCommandExecuteDTO, RegisterMapFetchDTO, RegisterMapListDTO, RegisterOperationExecuteDTO } from '../dto/register-map.dto';
 
-function ValidationExceptionFactory(errors: ValidationError[]): RpcException {
-    return new RpcException({
-        status: 'error', code: BoxErrorCode.VALIDATION, params: { fields: errors.map((e) => e.property) },
-        message: errors.flatMap((e) => Object.values(e.constraints ?? {})).join(', ')
-    });
-}
-
 @Controller()
-@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: ValidationExceptionFactory }))
+@UseFilters(new RpcErrorsFilter())
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: RpcValidationExceptionFactory }))
 export class RegisterMapController {
 
     public constructor(private _deviceCommandService: DeviceCommandService, private _globalSettingsService: GlobalSettingsService) { }

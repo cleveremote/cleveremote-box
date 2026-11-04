@@ -1,10 +1,12 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter } from '@framework/errors/rpc-errors';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationCheckUC } from '@process/use-cases/authentication-check.uc';
 import { AuthenticationModel } from '@process/domain/models/authentication.model';
 
 @Controller()
+@UseFilters(new RpcErrorsFilter())
 export class AuthenticationController {
 
     public constructor(

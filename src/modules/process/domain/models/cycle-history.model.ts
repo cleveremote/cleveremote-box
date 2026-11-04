@@ -1,5 +1,5 @@
 import {
-    ConditionCauseModel, ElementType, EventConfirmationModel, EventModel, EventOriginModel, EventSequencesSummary, EventStopModel, ProcessEventData,
+    ConditionCauseModel, ElementType, EventConfirmationModel, EventOriginModel, EventSequencesSummary, EventStopModel, ProcessEventData,
     ProcessEventKind
 } from './event.model';
 
@@ -23,7 +23,8 @@ export class RunTimelineEntryModel {
     public data: ProcessEventData;
 }
 
-// une execution d'un cycle (tous les events d'un meme runId), resumee pour l'historique du front
+// une execution d'un cycle (tous les events d'un meme runId), resumee pour l'historique du front ;
+// box/fetch/events renvoie ces runs du plus recent au plus ancien
 export class CycleRunModel {
     public runId: string;
     public cycleId: string;
@@ -44,12 +45,4 @@ export class CycleRunModel {
     public conditionCauses?: ConditionCauseModel[];
     public message?: string; // message du dernier event de cycle
     public timeline: RunTimelineEntryModel[] = [];
-}
-
-// reponse de box/fetch/events pour un cycle : runs du plus recent au plus ancien ; legacy = events
-// sans runId (anterieurs au journal, reset au boot d'un element deja arrete), ordre chronologique
-export class CycleHistoryModel {
-    public cycleId: string;
-    public runs: CycleRunModel[];
-    public legacy: EventModel[];
 }

@@ -1,5 +1,6 @@
-import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { GlobalSettingsSynchronizeUC } from '@process/use-cases/global-settings-synchronize.uc';
 import { GlobalSettingsFetchUC } from '@process/use-cases/global-settings-fetch.uc';
@@ -7,7 +8,8 @@ import { GlobalSettingsModel } from '@process/domain/models/global-settings.mode
 import { GlobalSettingsSynchronizeDTO } from '../dto/global-settings.dto';
 
 @Controller()
-@UsePipes(new ValidationPipe({ transform: true }))
+@UseFilters(new RpcErrorsFilter())
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: RpcValidationExceptionFactory }))
 export class GlobalSettingsController {
 
     public constructor(

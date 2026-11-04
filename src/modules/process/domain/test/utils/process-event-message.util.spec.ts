@@ -18,7 +18,7 @@ describe('process-event-message.util', () => {
     describe('DescribeProcessEvent', () => {
         it('should describe a confirmed scheduled start that preempted another cycle', () => {
             expect(DescribeProcessEvent({
-                type: ProcessMode.SCHEDULED, kind: ProcessEventKind.CYCLE_STARTED, name: 'Arrosage Nord',
+                type: ProcessMode.SCHEDULE, kind: ProcessEventKind.CYCLE_STARTED, name: 'Arrosage Nord',
                 origin: { source: EventSource.SCHEDULE, refName: 'Matin 6h' },
                 confirmation: { isRequested: false, conflicts: [], answer: ConfirmationAnswer.FORCE, waitMs: 133000 },
                 preempted: ['Pompe Sud']
@@ -58,7 +58,7 @@ describe('process-event-message.util', () => {
                 type: ProcessMode.MANUAL, kind: ProcessEventKind.SEQUENCE_SKIPPED, name: 'Zone 2', conditions: ['humidité > 60 (current : 72)']
             })).toEqual('Séquence « Zone 2 » sautée : conditions non vérifiées — humidité > 60 (current : 72)');
             expect(DescribeProcessEvent({
-                type: ProcessMode.SCHEDULED, kind: ProcessEventKind.START_REFUSED, name: 'Arrosage Est',
+                type: ProcessMode.SCHEDULE, kind: ProcessEventKind.START_REFUSED, name: 'Arrosage Est',
                 origin: { source: EventSource.SCHEDULE, refName: 'Soir' }, conditions: ['cuve < 20 (current : 12)']
             })).toEqual('« Arrosage Est » non démarré (déclenché par le planning « Soir ») : conditions non vérifiées — cuve < 20 (current : 12)');
         });

@@ -1,12 +1,14 @@
-import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { SlaveTemplate } from '@process/domain/models/device.model';
 import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
 import { SlaveTemplateSynchronizeUC } from '@process/use-cases/slave-template-synchronize.uc';
 import { SlaveTemplateDTO } from '../dto/slave-template.dto';
 
 @Controller()
-@UsePipes(new ValidationPipe({ transform: true }))
+@UseFilters(new RpcErrorsFilter())
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: RpcValidationExceptionFactory }))
 export class SlaveTemplateController {
 
     public constructor(private _slaveTemplateService: SlaveTemplateService) { }

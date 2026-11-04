@@ -12,7 +12,7 @@ export class SensorMapper {
         model.style = sensor.style;
         model.type = sensor.type;
         model.parentId = sensor.parentId ?? null;
-        model.isEnabled = sensor.isEnabled;
+        model.isEnabled =  sensor.display; //sensor.isEnabled;
         model.display = sensor.display;
         model.config = SensorMapper._mapConfigToModel(sensor);
         model.createdAt = (sensor as unknown as { createdAt?: Date }).createdAt;

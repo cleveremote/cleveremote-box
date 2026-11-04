@@ -22,6 +22,7 @@ import { ValueRepository } from '@process/infrastructure/repositories/value.repo
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType, EventSource } from '../models/event.model';
 import { evaluateConditions } from '../utils/evaluate-conditions.util';
+import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 @Injectable()
 export class TriggerService {
     // toujours lire la liste courante de ConfigurationService : getStructure() (ex: synchronizeCycle)
@@ -33,6 +34,9 @@ export class TriggerService {
     public triggerCheckQueue = [];
     public checkTriggerQueueProcess = new BehaviorSubject<{ trigger: TriggerModel; data: SensorValueModel | ProcessValueModel }>(null);
     public onElementValueChanged = new BehaviorSubject<SensorValueModel | ProcessValueModel>(null);
+    // executions solaires planifiees et pas encore declenchees (cle : schedule._id) : leur date est
+    // recalculee quand localCoordinates ou timeZone changent (cf. _replanSunSchedules)
+    private _pendingSunSchedules = new Map<string, { schedule: ScheduleModel; sunBehavior: SunBehavior; methode: () => Promise<void> }>();
     public constructor(
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
@@ -50,6 +54,9 @@ export class TriggerService {
     public initilize(): void {
         this._processQueueCheckInProgress();
         this._listenValueChanged();
+        this.globalSettingsService.onLocationChanged.subscribe(() => {
+            this._replanSunSchedules().catch((error) => this.logger.error({ error }, 'failed to replan sun triggers'));
+        });
     }
 
     public async initTrigger(trigger: TriggerModel, isDeleted: boolean = false): Promise<TriggerModel> {
@@ -171,7 +178,7 @@ export class TriggerService {
 
         const sunBehavior = trigger.trigger.sunBehavior;
         const executionDate = sunBehavior
-            ? ComputeSunEventDate(sunBehavior, new Date(), ResolveCoordinates(this.globalSettingsService.localCoordinates)).getTime()
+            ? this._computeSunDate(sunBehavior).getTime()
             : new Date().getTime() + trigger.trigger.timeAfter;
 
         const scheduleModel = new ScheduleModel();
@@ -187,12 +194,44 @@ export class TriggerService {
         const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, trigger.action,
             { source: EventSource.TRIGGER, refId: trigger.id, refName: trigger.name });
         const methode = async (): Promise<void> => {
+            this._pendingSunSchedules.delete(scheduleSaved._id);
             await this.scheduleService.clearAllSchedules();
             await this.processService.execute({ ...process });
             trigger.isCheckInProgress = false;
             this.checkTriggerQueueProcess.next({ trigger, data })
         };
 
+        if (sunBehavior) {
+            this._pendingSunSchedules.set(scheduleSaved._id, { schedule: scheduleSaved, sunBehavior, methode });
+        }
         this.scheduleService.initSchedule(scheduleSaved, false, ProcessMode.TRIGGER, methode);
+    }
+
+    private _computeSunDate(sunBehavior: SunBehavior): Date {
+        return ComputeSunEventDate(sunBehavior, new Date(), ResolveCoordinates(this.globalSettingsService.localCoordinates),
+            this.globalSettingsService.timeZone);
+    }
+
+    // recalcule l'heure des executions solaires en attente avec la nouvelle position / le nouveau fuseau ;
+    // si la nouvelle heure est deja passee, on garde le job existant plutot que de perdre l'execution
+    private async _replanSunSchedules(): Promise<void> {
+        for (const [scheduleId, pending] of this._pendingSunSchedules) {
+            // schedule supprime entre-temps (synchro) : rien a replanifier
+            if (!this.configurationService.schedules.some(x => x._id === scheduleId)) {
+                this._pendingSunSchedules.delete(scheduleId);
+                continue;
+            }
+            const executionDate = this._computeSunDate(pending.sunBehavior);
+            if (executionDate.getTime() <= Date.now()) {
+                this.logger.warn({ scheduleId, executionDate }, 'replanned sun trigger already passed, keeping previous date');
+                continue;
+            }
+            const schedule = await this.scheduleRepository.save({ ...pending.schedule, cron: { ...pending.schedule.cron, date: executionDate } });
+            pending.schedule = schedule;
+            // index relu apres l'await : la liste a pu bouger pendant la sauvegarde
+            const index = this.configurationService.schedules.findIndex(x => x._id === scheduleId);
+            if (index !== -1) { this.configurationService.schedules[index] = schedule; }
+            this.scheduleService.createSchedule(schedule, pending.methode);
+        }
     }
 }
