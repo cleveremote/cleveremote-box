@@ -14,6 +14,8 @@ function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock
 
 describe('AuthenticationService (fs mocked)', () => {
     let authenticationRepository: { get: jest.Mock; update: jest.Mock };
+    let recoveryCodeRepository: { getByLogin: jest.Mock; upsert: jest.Mock; deleteByLogin: jest.Mock };
+    let mailService: { send: jest.Mock };
     let config: { get: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: AuthenticationService;
@@ -22,10 +24,12 @@ describe('AuthenticationService (fs mocked)', () => {
         jest.clearAllMocks();
         (fs.readFileSync as jest.Mock).mockReturnValue('device-serial-42');
         authenticationRepository = { get: jest.fn(), update: jest.fn() };
+        recoveryCodeRepository = { getByLogin: jest.fn(), upsert: jest.fn(), deleteByLogin: jest.fn() };
+        mailService = { send: jest.fn() };
         config = { get: jest.fn().mockReturnValue('super-secret-initial-password') };
         logger = CreateLoggerMock();
 
-        service = new AuthenticationService(authenticationRepository as never, config as never, logger as never);
+        service = new AuthenticationService(authenticationRepository as never, recoveryCodeRepository as never, mailService as never, config as never, logger as never);
     });
 
     describe('_getSerial', () => {

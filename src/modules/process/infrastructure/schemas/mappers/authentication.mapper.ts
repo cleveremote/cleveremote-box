@@ -8,6 +8,7 @@ export class AuthenticationMapper {
         model.id = authentication._id;
         model.login = authentication.login;
         model.password = authentication.password;
+        model.email = authentication.email ?? null;
         return model;
     }
 

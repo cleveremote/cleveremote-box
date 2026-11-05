@@ -5,6 +5,9 @@ import { Connection } from 'mongoose';
 import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
+import { RecoveryCode, RecoveryCodeSchema } from './schemas/recovery-code.schema';
+import { RecoveryCodeRepository } from './repositories/recovery-code.repository';
+import { MailService } from '@process/domain/services/mail.service';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
 import { ProcessService } from '@process/domain/services/execution.service';
@@ -64,7 +67,8 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
         }),
         MongooseModule.forFeature([
             { name: Event.name, schema: EventSchema },
-            { name: Authentication.name, schema: AuthenticationSchema }
+            { name: Authentication.name, schema: AuthenticationSchema },
+            { name: RecoveryCode.name, schema: RecoveryCodeSchema }
         ]),
         ActuatorModule,
         DeviceModule,
@@ -83,11 +87,13 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
     providers: [
         //----Repositories------//
         AuthenticationRepository,
+        RecoveryCodeRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
         //---------------------//
         AuthenticationService,
+        MailService,
         // GlobalSettingsService : fourni par ActuatorModule (instance unique)
         SlaveTemplateService,
         StructureService,

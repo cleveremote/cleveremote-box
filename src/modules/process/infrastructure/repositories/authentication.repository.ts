@@ -17,6 +17,18 @@ export class AuthenticationRepository {
         return authentication ? AuthenticationMapper.mapToModel(authentication) : new AuthenticationModel();
     }
 
+    // deletedAt est géré par cleveremote-updater (soft delete) : un utilisateur supprimé est ignoré
+    public async findByLogin(login: string): Promise<AuthenticationModel | null> {
+        const authentication = await this.authenticationModel.findOne({ login, deletedAt: null });
+        return authentication ? AuthenticationMapper.mapToModel(authentication) : null;
+    }
+
+    // password : hash bcrypt
+    public async updatePasswordByLogin(login: string, password: string): Promise<boolean> {
+        const result = await this.authenticationModel.updateOne({ login, deletedAt: null }, { $set: { password } });
+        return result.modifiedCount > 0 || result.matchedCount > 0;
+    }
+
     public async update(entity: AuthenticationModel): Promise<AuthenticationModel> {
         const saved = await this.authenticationModel.findOneAndUpdate(
             {},

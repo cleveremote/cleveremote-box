@@ -14,5 +14,9 @@ export class Authentication {
 
     @Prop({ required: true })
     public password: string;
+
+    // renseigné par cleveremote-updater (collection partagée) : destinataire du code de récupération
+    @Prop({ type: String, default: null, trim: true, lowercase: true })
+    public email: string | null;
 }
 export const AuthenticationSchema = SchemaFactory.createForClass(Authentication);
