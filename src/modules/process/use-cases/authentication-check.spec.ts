@@ -17,8 +17,8 @@ describe('Process use case test', () => {
         const isValid = await uc.execute(authenticationModel);
 
         // THEN
-        expect(authenticationService.checkPassword).toHaveBeenLastCalledWith(authenticationModel);
-        expect(authenticationService.checkPassword).toHaveBeenCalledTimes(1);
+        expect(authenticationService.manageAuthentication).toHaveBeenLastCalledWith(authenticationModel);
+        expect(authenticationService.manageAuthentication).toHaveBeenCalledTimes(1);
         expect(isValid).toBe(true);
     });
 });

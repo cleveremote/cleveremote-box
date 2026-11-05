@@ -41,6 +41,7 @@ describe('SensorService', () => {
     let triggerService: { onElementValueChanged: { next: jest.Mock } };
     let wsService: { sendMessage: jest.Mock };
     let sensorRepository: { get: jest.Mock; getChildren: jest.Mock };
+    let deviceRepository: { get: jest.Mock; isPendingDeletion: jest.Mock };
     let forcastStrategy: SensorStrategy;
     let comStrategy: SensorStrategy;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -63,6 +64,7 @@ describe('SensorService', () => {
         triggerService = { onElementValueChanged: { next: jest.fn() } };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
         sensorRepository = { get: jest.fn().mockResolvedValue([]), getChildren: jest.fn().mockResolvedValue([]) };
+        deviceRepository = { get: jest.fn().mockResolvedValue(null), isPendingDeletion: jest.fn().mockReturnValue(false) };
         forcastStrategy = { type: SensorType.FORCAST, read: jest.fn().mockResolvedValue([{ value: 25, isFormated: true, unit: '°C', name: 'sensor' }]) };
         comStrategy = { type: SensorType.COM, read: jest.fn().mockRejectedValue(new NotImplementedError('not implemented')) };
         logger = CreateLoggerMock();
@@ -75,6 +77,7 @@ describe('SensorService', () => {
             sensorRepository as never,
             [forcastStrategy, comStrategy],
             { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
+            deviceRepository as never,
             logger as never
         );
     });
@@ -275,6 +278,32 @@ describe('SensorService', () => {
             schedulerRegistry.getCronJob('cron-sensor-5').stop();
         });
 
+        it('should not read a COM sensor whose device is marked disconnected', async () => {
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-offline' });
+            (sensor.config as ComSensorConfigModel).deviceId = 'slave-1';
+            deviceRepository.get.mockResolvedValue({ _id: 'slave-1', connectivity: { connected: false } });
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-offline').fireOnTick();
+
+            expect(deviceRepository.get).toHaveBeenCalledWith('slave-1');
+            expect(comStrategy.read).not.toHaveBeenCalled();
+            expect(triggerService.onElementValueChanged.next).not.toHaveBeenCalled();
+            schedulerRegistry.getCronJob('cron-sensor-offline').stop();
+        });
+
+        it('should not read a COM sensor whose device is being deleted', async () => {
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-deleting' });
+            (sensor.config as ComSensorConfigModel).deviceId = 'slave-2';
+            deviceRepository.isPendingDeletion.mockReturnValue(true);
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-deleting').fireOnTick();
+
+            expect(comStrategy.read).not.toHaveBeenCalled();
+            schedulerRegistry.getCronJob('cron-sensor-deleting').stop();
+        });
+
         it('should log and swallow a NotImplementedError when the sensor type has no registered strategy', async () => {
             const serviceWithoutComStrategy = new SensorService(
                 schedulerRegistry,
@@ -284,6 +313,7 @@ describe('SensorService', () => {
                 sensorRepository as never,
                 [forcastStrategy],
                 { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
+                deviceRepository as never,
                 logger as never
             );
             const sensor = CreateComSensorModel({ _id: 'unsupported-type-sensor' });

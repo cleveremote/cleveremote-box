@@ -12,6 +12,8 @@ import { SensorRepository } from '@process/infrastructure/repositories/sensor.re
 import { NotImplementedError } from '../errors/not-implemented.error';
 import { ReadResult, SENSOR_STRATEGIES, SensorStrategy } from './sensor-strategies/sensor-strategy.interface';
 import { GlobalSettingsService } from './global-settings.service';
+import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
+import { DeviceModel } from '../models/device.model';
 
 @Injectable()
 export class SensorService {
@@ -26,6 +28,7 @@ export class SensorService {
         private sensorRepository: SensorRepository,
         @Inject(SENSOR_STRATEGIES) strategies: SensorStrategy[],
         private globalSettingsService: GlobalSettingsService,
+        private deviceRepository: DeviceRepository,
         private readonly logger: Logger
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.type, strategy]));
@@ -75,6 +78,9 @@ export class SensorService {
 
     private async _readAndEmit(sensor: SensorModel): Promise<void> {
         try {
+            if (await this._isDeviceUnavailable(sensor)) {
+                return;
+            }
             const results = await this._resolveStrategy(sensor.type).read(sensor);
             const children = await this.sensorRepository.getChildren(sensor._id);
 
@@ -98,6 +104,26 @@ export class SensorService {
         } catch (error) {
             this.logger.warn({ error, sensorId: sensor._id }, 'sensor read failed');
         }
+    }
+
+    // Capteur sur un device marqué déconnecté (slave injoignable ou derrière un master injoignable, cf.
+    // DeviceConnectivityService) ou en cours de suppression : pas de lecture, pour ne pas empiler des timeouts
+    // sur le bus. Le polling reprend au tick suivant le retour de la connectivité. Device introuvable : lecture
+    // tentée (l'échec est loggé comme avant).
+    private async _isDeviceUnavailable(sensor: SensorModel): Promise<boolean> {
+        const deviceId = (sensor.config as ComSensorConfigModel)?.deviceId;
+        if (!deviceId) {
+            return false;
+        }
+        if (this.deviceRepository.isPendingDeletion(deviceId)) {
+            return true;
+        }
+        const device = await this.deviceRepository.get(deviceId) as DeviceModel | null;
+        if (device?.connectivity?.connected === false) {
+            this.logger.debug({ sensorId: sensor._id, deviceId }, 'sensor read skipped: device disconnected');
+            return true;
+        }
+        return false;
     }
 
     // valeur du champ de l'enfant dans la lecture du parent, transformée par la stratégie de l'enfant (ex: ANALOG)

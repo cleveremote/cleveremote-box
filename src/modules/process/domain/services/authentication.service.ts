@@ -40,7 +40,7 @@ export class AuthenticationService {
         return true;
     }
 
-    public async checkPassword(data: AuthenticationModel): Promise<boolean> {
+    public async manageAuthentication(data: AuthenticationModel): Promise<boolean> {
         const result = await bcrypt.compare(data.password, (await this.authenticationRepository.get()).password);
         if (!result) {
             this.logger.warn({ login: data.login }, 'authentication failed');

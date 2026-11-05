@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
@@ -14,8 +14,10 @@ const MASTER_NOT_FOUND = 'master not found';
  * (pas d'écriture en base à chaque vérification).
  */
 @Injectable()
-export class DeviceConnectivityService {
+export class DeviceConnectivityService implements OnModuleInit {
     private _isWatching = false;
+    // sondes en cours (watch et vérifications à la demande peuvent se chevaucher)
+    private readonly _inFlightProbes = new Set<Promise<void>>();
 
     public constructor(
         private deviceRepository: DeviceRepository,
@@ -24,15 +26,26 @@ export class DeviceConnectivityService {
         private readonly logger: Logger
     ) { }
 
+    // suppression d'un device : reset d'adresse seulement une fois les sondes en cours terminées.
+    // Pas dans le constructeur : DeviceRepository est dans un cycle forwardRef (ModbusDeviceService) et
+    // peut être injecté avant d'être construit
+    public onModuleInit(): void {
+        this.deviceRepository.onBeforeDelete(async () => { await Promise.allSettled([...this._inFlightProbes]); });
+    }
+
     /**
      * Vérifie un device : un MASTER entraîne la vérification de ses slaves, un SLAVE celle de son
      * master d'abord. Un slave n'est jamais sondé derrière un master injoignable (marqué déconnecté,
-     * pour ne pas empiler des timeouts sur le bus). Renvoie les états mis à jour.
+     * pour ne pas empiler des timeouts sur le bus). Un device en cours de suppression n'est pas vérifié.
+     * Renvoie les états mis à jour.
      */
     public async checkConnectivity(deviceId: string): Promise<DeviceConnectivityModel[]> {
         const device = await this.deviceRepository.get(deviceId) as DeviceModel | null;
         if (!device) {
             throw new Error(`Device ${deviceId} not found`);
+        }
+        if (this._isPendingDeletion(device)) {
+            return [];
         }
         if (device.type === DeviceType.MASTER) {
             return this._checkMaster(device);
@@ -52,12 +65,14 @@ export class DeviceConnectivityService {
         const masters = await this.deviceRepository.getByType(DeviceType.MASTER);
         const states: DeviceConnectivityModel[] = [];
         for (const master of masters) {
+            if (this._isPendingDeletion(master)) continue;
             states.push(...await this._checkMaster(master));
         }
         const masterIds = new Set(masters.map((master) => master._id));
         const orphans = (await this.deviceRepository.getByType(DeviceType.SLAVE))
             .filter((slave) => !masterIds.has((slave.config as SlaveConfigModel).masterDeviceId));
         for (const orphan of orphans) {
+            if (this._isPendingDeletion(orphan)) continue;
             states.push(await this._update(orphan, false, MASTER_NOT_FOUND));
         }
         return states;
@@ -86,6 +101,8 @@ export class DeviceConnectivityService {
         const slaves = await this.deviceRepository.getSlavesByMasterId(master._id);
         const states = [masterState];
         for (const slave of slaves) {
+            // vérifié juste avant la sonde (aucun await entre les deux) : la suppression peut survenir pendant la boucle
+            if (this._isPendingDeletion(slave)) continue;
             states.push(masterState.connected
                 ? await this._checkSlave(slave, master)
                 : await this._update(slave, false, MASTER_UNREACHABLE));
@@ -101,13 +118,22 @@ export class DeviceConnectivityService {
         return this._probe(slave, () => this.modbusDeviceService.checkSlave(slave, master));
     }
 
+    // sonde suivie dans _inFlightProbes, attendue avant tout reset d'adresse (cf onModuleInit)
     private async _probe(device: DeviceModel, check: () => Promise<void>): Promise<DeviceConnectivityModel> {
+        const probe = check();
+        this._inFlightProbes.add(probe);
         try {
-            await check();
+            await probe;
             return await this._update(device, true);
         } catch (err) {
             return this._update(device, false, this._getErrorMessage(err));
+        } finally {
+            this._inFlightProbes.delete(probe);
         }
+    }
+
+    private _isPendingDeletion(device: DeviceModel): boolean {
+        return this.deviceRepository.isPendingDeletion(device._id);
     }
 
     // les erreurs de modbus-serial (TransactionTimedOutError, PortNotOpenError...) ne sont pas des

@@ -128,7 +128,7 @@ export class BleService {
 
 
     private async buildContenteConfigFile(data: { ssid: string; psk: string; password: string; localCoordinates?: LocalCoordinatesModel }) {
-        const isValid = await this.authenticationService.checkPassword({ id: data.ssid, login: data.ssid, password: data.password });
+        const isValid = await this.authenticationService.manageAuthentication({ id: data.ssid, login: data.ssid, password: data.password });
         if (!isValid) {
             return AttErrors.WRITE_NOT_PERMITTED;
         }

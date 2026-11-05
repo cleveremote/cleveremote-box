@@ -11,6 +11,7 @@ import { ActuatorRepository } from './actuator.repository';
 import { SensorRepository } from './sensor.repository';
 
 type DeviceCascade = (deviceId: string) => Promise<void>;
+type BeforeDeleteHook = () => Promise<void>;
 
 @Injectable()
 export class DeviceRepository {
@@ -18,6 +19,10 @@ export class DeviceRepository {
 
     // id de chaque device créé, modifié (connectivité comprise) ou soft-supprimé, émis après l'écriture en base
     public readonly changes$: Observable<string> = this._changes.asObservable();
+
+    // devices en cours de suppression : plus lus par les pollers (leur adresse va etre reinitialisee)
+    private readonly _pendingDeletions = new Set<string>();
+    private readonly _beforeDeleteHooks = new Set<BeforeDeleteHook>();
 
     public constructor(
         private deviceMongooseRepository: DeviceMongooseRepository,
@@ -64,19 +69,39 @@ export class DeviceRepository {
     // (cf _cascadeByKind), avant le device lui-meme (les commandes appartiennent au modele, partage avec d'autres slaves). Chaque slave concerne est d'abord remis sur
     // l'adresse d'origine de sa plage (cf ModbusDeviceService.resetSlaveAddress) : tous les resets sont
     // faits avant toute suppression, et un echec de reset annule la suppression (exception propagee).
+    // Les devices concernes sont d'abord retires du polling (cf isPendingDeletion / onBeforeDelete) : aucune
+    // lecture a l'ancienne adresse une fois le reset envoye. Reprise du polling si la suppression echoue.
     public async delete(id: string): Promise<boolean> {
         const device = await this.deviceMongooseRepository.findById(id);
         const slaves = await this.deviceMongooseRepository.findSlavesByMasterId(id);
-        for (const slave of slaves) {
-            await this._resetSlaveAddress(slave);
+        const ids = [...slaves.map((slave) => slave._id), id];
+        ids.forEach((deviceId) => this._pendingDeletions.add(deviceId));
+        try {
+            await Promise.allSettled([...this._beforeDeleteHooks].map((hook) => hook()));
+            for (const slave of slaves) {
+                await this._resetSlaveAddress(slave);
+            }
+            if (device?.type === DeviceType.SLAVE) {
+                await this._resetSlaveAddress(device);
+            }
+            for (const slave of slaves) {
+                await this._softDelete(slave._id, slave);
+            }
+            return await this._softDelete(id, device);
+        } finally {
+            ids.forEach((deviceId) => this._pendingDeletions.delete(deviceId));
         }
-        if (device?.type === DeviceType.SLAVE) {
-            await this._resetSlaveAddress(device);
-        }
-        for (const slave of slaves) {
-            await this._softDelete(slave._id, slave);
-        }
-        return this._softDelete(id, device);
+    }
+
+    public isPendingDeletion(id: string): boolean {
+        return this._pendingDeletions.has(id);
+    }
+
+    // hook attendu apres le marquage des devices en suppression et avant tout reset d'adresse (ex: fin de la
+    // lecture en cours d'un poller) ; renvoie la fonction de desinscription
+    public onBeforeDelete(hook: BeforeDeleteHook): () => void {
+        this._beforeDeleteHooks.add(hook);
+        return () => this._beforeDeleteHooks.delete(hook);
     }
 
     private async _softDelete(id: string, device: DeviceModel | null): Promise<boolean> {

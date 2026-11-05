@@ -13,7 +13,8 @@ function CreateSlave(_id: string, masterDeviceId = 'master-1'): DeviceModel {
 
 describe('DeviceConnectivityService', () => {
     let devices: DeviceModel[];
-    let deviceRepository: { get: jest.Mock; getByType: jest.Mock; getSlavesByMasterId: jest.Mock; updateConnectivity: jest.Mock };
+    let deviceRepository: { get: jest.Mock; getByType: jest.Mock; getSlavesByMasterId: jest.Mock; updateConnectivity: jest.Mock;
+        isPendingDeletion: jest.Mock; onBeforeDelete: jest.Mock };
     let modbusDeviceService: { checkMaster: jest.Mock; checkSlave: jest.Mock };
     let wsService: { sendMessage: jest.Mock };
     let logger: { log: jest.Mock; warn: jest.Mock };
@@ -27,7 +28,9 @@ describe('DeviceConnectivityService', () => {
             getByType: jest.fn(async (type: DeviceType) => devices.filter((device) => device.type === type)),
             getSlavesByMasterId: jest.fn(async (id: string) =>
                 devices.filter((device) => (device.config as SlaveConfigModel).masterDeviceId === id)),
-            updateConnectivity: jest.fn().mockResolvedValue(undefined)
+            updateConnectivity: jest.fn().mockResolvedValue(undefined),
+            isPendingDeletion: jest.fn().mockReturnValue(false),
+            onBeforeDelete: jest.fn()
         };
         modbusDeviceService = { checkMaster: jest.fn().mockResolvedValue(undefined), checkSlave: jest.fn().mockResolvedValue(undefined) };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };

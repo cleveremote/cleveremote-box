@@ -20,7 +20,7 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ProcessService } from './execution.service';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
-import { ElementType, EventSource } from '../models/event.model';
+import { ElementType, EventSource, SensorEventData } from '../models/event.model';
 import { evaluateConditions } from '../utils/evaluate-conditions.util';
 import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 @Injectable()
@@ -37,6 +37,8 @@ export class TriggerService {
     // executions solaires planifiees et pas encore declenchees (cle : schedule._id) : leur date est
     // recalculee quand localCoordinates ou timeZone changent (cf. _replanSunSchedules)
     private _pendingSunSchedules = new Map<string, { schedule: ScheduleModel; sunBehavior: SunBehavior; methode: () => Promise<void> }>();
+    // derniere valeur capteur journalisee (cle : sensor id) : evite un event par lecture identique
+    private _lastSavedSensorValues = new Map<string, string | null>();
     public constructor(
         private configurationService: StructureService,
         private scheduleService: ScheduleService,
@@ -85,18 +87,37 @@ export class TriggerService {
                 // seule une valeur capteur est enregistree ici.
                 const isSensor = Object.prototype.hasOwnProperty.call(element, 'value');
                 if (isSensor) {
-                    await this.eventRepository.save({
-                        elementId: element.id,
-                        date: new Date(),
-                        elementType: ElementType.SENSOR,
-                        additionalData: { value: (element as SensorValueModel).value?.toString() }
-                    });
+                    await this._saveSensorEventIfChanged(element as SensorValueModel);
                 }
                 for (const trigger of triggers) {
                     this._checkTriggerConditions(trigger, element);
                 }
             }
         })
+    }
+
+    // un event capteur n'est journalise que si sa valeur differe de la derniere enregistree ;
+    // cache vide (boot) : initialise depuis le dernier event en base.
+    private async _saveSensorEventIfChanged(element: SensorValueModel): Promise<void> {
+        const value = element.value?.toString();
+        if (!this._lastSavedSensorValues.has(element.id)) {
+            const lastEvent = await this.eventRepository.getLast(element.id);
+            // re-test : une lecture concurrente du meme capteur a pu remplir le cache pendant l'await
+            if (!this._lastSavedSensorValues.has(element.id)) {
+                // null (aucun event) : la premiere lecture est toujours journalisee, meme sans valeur
+                this._lastSavedSensorValues.set(element.id, lastEvent ? (lastEvent.additionalData as SensorEventData).value : null);
+            }
+        }
+        if (this._lastSavedSensorValues.get(element.id) === value) {
+            return;
+        }
+        this._lastSavedSensorValues.set(element.id, value);
+        await this.eventRepository.save({
+            elementId: element.id,
+            date: new Date(),
+            elementType: ElementType.SENSOR,
+            additionalData: { value }
+        });
     }
 
     private _enqueueCheckTrigger(trigger: TriggerModel, data: SensorValueModel | ProcessValueModel): boolean {

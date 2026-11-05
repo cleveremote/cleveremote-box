@@ -34,6 +34,7 @@ import { outcomeValues } from '../utils/device-command.util';
 import { SlaveTemplateService } from './slave-template.service';
 import { DeviceConnectivityService } from './device-connectivity.service';
 import { DigitalIoMonitorService } from './digital-io-monitor.service';
+import { createTransport } from 'nodemailer';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -76,6 +77,9 @@ export class InitService {
 
     public async initialize(): Promise<void> {
         this.logger.log('patch/test-version-watchtowerd1234');
+        // TEST mail : lancé hors de la chaîne d'init (une étape qui échoue ou ne se résout jamais ne doit pas l'empêcher)
+        this.logger.log('test mail : start');
+        //void this._testSendMail().catch((error) => this.logger.warn({ err: error?.message, code: error?.code, response: error?.response }, 'test mail failed'));
         const wrap = (name: string, fn: () => Promise<any> | void) =>
             Promise.resolve(fn()).catch((error) => { throw new Error(`[${name}] ${String(error)}`); });
 
@@ -176,6 +180,34 @@ export class InitService {
     }
 
 
+
+    /**
+     * TEST - envoie un mail via le SMTP (AWS SES Mail Manager, STARTTLS sur 587).
+     * Config lue dans .env.local : SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TEST_TO.
+     */
+    private async _testSendMail(to = process.env.SMTP_TEST_TO): Promise<void> {
+        const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM } = process.env;
+        if (!SMTP_HOST || !SMTP_USER || !SMTP_PASSWORD || !SMTP_FROM || !to) {
+            this.logger.warn({ SMTP_HOST, SMTP_USER, SMTP_FROM, to }, 'test mail skipped : config SMTP incomplète');
+            return; 
+        }
+        const port = Number(SMTP_PORT || 587);
+        const transporter = createTransport({
+            host: SMTP_HOST,
+            port,
+            secure: port === 465, // 587 : STARTTLS
+            requireTLS: port !== 465,
+            auth: { user: SMTP_USER, pass: SMTP_PASSWORD }
+        });
+        await transporter.verify();
+        const info = await transporter.sendMail({
+            from: SMTP_FROM,
+            to,
+            subject: 'CleveRemote box - mail de test',
+            text: `Mail de test envoyé par la box le ${new Date().toISOString()}.`
+        });
+        this.logger.log({ messageId: info.messageId, accepted: info.accepted, rejected: info.rejected, response: info.response }, 'test mail sent');
+    }
 
     /**
      * TEST - commissionnement du module Waveshare "Modbus RTU Analog Output 8CH" utilisé par

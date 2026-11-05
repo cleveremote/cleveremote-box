@@ -63,6 +63,8 @@ export class DigitalIoMonitorService {
     private _isWatching = false;
     private _timer: NodeJS.Timeout | null = null;
     private _deviceChanges: Subscription | null = null;
+    private _releaseBeforeDelete: (() => void) | null = null;
+    private _inFlightRead: Promise<void> | null = null;
 
     public readonly inputChanges$: Observable<DigitalIoChange> = this._inputChanges.asObservable();
     public readonly inputLongPress$: Observable<DigitalInputLongPress> = this._inputLongPress.asObservable();
@@ -82,6 +84,8 @@ export class DigitalIoMonitorService {
         }
         this._isWatching = true;
         this._deviceChanges = this.deviceRepository.changes$.subscribe((deviceId) => this._onDeviceChanged(deviceId));
+        // suppression d'un device : reset d'adresse seulement une fois la lecture en cours terminee
+        this._releaseBeforeDelete = this.deviceRepository.onBeforeDelete(async () => { await this._inFlightRead; });
         const tick = async (): Promise<void> => {
             try {
                 await this.poll(longPressMs);
@@ -101,6 +105,8 @@ export class DigitalIoMonitorService {
         this._timer = null;
         this._deviceChanges?.unsubscribe();
         this._deviceChanges = null;
+        this._releaseBeforeDelete?.();
+        this._releaseBeforeDelete = null;
         this._blockStates.clear();
         this._devicesRefreshedAt = null;
     }
@@ -112,7 +118,14 @@ export class DigitalIoMonitorService {
         }
         for (const device of this._devices) {
             for (const block of device.blocks) {
-                await this._readBlock(device.deviceId, block, longPressMs);
+                // slave en cours de suppression : plus lu, son adresse va être réinitialisée
+                if (this.deviceRepository.isPendingDeletion(device.deviceId)) break;
+                this._inFlightRead = this._readBlock(device.deviceId, block, longPressMs);
+                try {
+                    await this._inFlightRead;
+                } finally {
+                    this._inFlightRead = null;
+                }
             }
         }
     }
@@ -131,7 +144,7 @@ export class DigitalIoMonitorService {
     private async _refreshDevices(): Promise<void> {
         const slaves = await this.deviceRepository.getByType(DeviceType.SLAVE);
         this._devices = slaves
-            .filter((slave) => slave.connectivity?.connected !== false)
+            .filter((slave) => slave.connectivity?.connected !== false && !this.deviceRepository.isPendingDeletion(slave._id))
             .map((slave) => ({ deviceId: slave._id, blocks: this._digitalBlocks(slave) }))
             .filter((device) => device.blocks.length > 0);
         this._devicesRefreshedAt = Date.now();

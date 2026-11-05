@@ -15,7 +15,10 @@ const execDirEnvPath = join(dirname(process.execPath), '.env');
 @Module({
     imports: [
         ConfigModule.forRoot({
-            envFilePath: existsSync(execDirEnvPath) ? execDirEnvPath : undefined
+            // .env.local (non versionné : secrets SMTP...) prioritaire sur .env
+            envFilePath: existsSync(execDirEnvPath)
+                ? [join(dirname(process.execPath), '.env.local'), execDirEnvPath]
+                : ['.env.local', '.env']
         }),
         LoggerModule.forRoot({
             pinoHttp: {

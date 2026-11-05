@@ -65,7 +65,7 @@ describe('TriggerService', () => {
     let scheduleService: ScheduleService;
     let configurationService: { triggers: TriggerModel[]; schedules: unknown[]; structure: { cycles: unknown[] } };
     let valueRepository: { getDeviceValue: jest.Mock };
-    let eventRepository: { save: jest.Mock };
+    let eventRepository: { save: jest.Mock; getLast: jest.Mock };
     let sensorRepository: Record<string, never>;
     let processService: { execute: jest.Mock };
     let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined; timeZone: string; onLocationChanged: Subject<void> };
@@ -112,7 +112,7 @@ describe('TriggerService', () => {
 
         configurationService = { triggers: [], schedules: [], structure: { cycles: [] } };
         valueRepository = { getDeviceValue: jest.fn() };
-        eventRepository = { save: jest.fn().mockResolvedValue(undefined) };
+        eventRepository = { save: jest.fn().mockResolvedValue(undefined), getLast: jest.fn().mockResolvedValue(null) };
         sensorRepository = {};
         logger = CreateLoggerMock();
 

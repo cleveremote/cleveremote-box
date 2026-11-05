@@ -15,6 +15,6 @@ export class AuthenticationCheckUC {
     public constructor(private _authenticationService: AuthenticationService) { }
 
     public execute(data: AuthenticationModel): Promise<boolean> {
-        return this._authenticationService.checkPassword(data);
+        return this._authenticationService.manageAuthentication(data);
     }
 }

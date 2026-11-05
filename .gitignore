@@ -45,3 +45,6 @@ junit.xml
 *firebase-adminsdk*.json
 *serviceAccountKey*.json
 /backup*/
+
+# Secrets locaux (SMTP, ...)
+.env.local

@@ -85,7 +85,7 @@ describe('AuthenticationService (fs mocked)', () => {
             const hash = bcrypt.hashSync('correct-password', bcrypt.genSaltSync(4));
             authenticationRepository.get.mockResolvedValue({ login: 'user', password: hash });
 
-            const isValid = await service.checkPassword({ id: 'x', login: 'user', password: 'correct-password' });
+            const isValid = await service.manageAuthentication({ id: 'x', login: 'user', password: 'correct-password' });
 
             expect(isValid).toBe(true);
             expect(logger.warn).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe('AuthenticationService (fs mocked)', () => {
             const hash = bcrypt.hashSync('correct-password', bcrypt.genSaltSync(4));
             authenticationRepository.get.mockResolvedValue({ login: 'user', password: hash });
 
-            const isValid = await service.checkPassword({ id: 'x', login: 'user', password: 'wrong-password' });
+            const isValid = await service.manageAuthentication({ id: 'x', login: 'user', password: 'wrong-password' });
 
             expect(isValid).toBe(false);
             expect(logger.warn).toHaveBeenCalledWith({ login: 'user' }, 'authentication failed');
