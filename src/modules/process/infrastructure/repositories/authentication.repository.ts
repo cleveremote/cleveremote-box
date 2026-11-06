@@ -25,8 +25,25 @@ export class AuthenticationRepository {
 
     // password : hash bcrypt
     public async updatePasswordByLogin(login: string, password: string): Promise<boolean> {
-        const result = await this.authenticationModel.updateOne({ login, deletedAt: null }, { $set: { password } });
+        const result = await this.authenticationModel.updateOne(
+            { login, deletedAt: null },
+            { $set: { password, failedAttempts: 0, lockedUntil: null } }
+        );
         return result.modifiedCount > 0 || result.matchedCount > 0;
+    }
+
+    // atomique : renvoie le nombre d'échecs consécutifs après incrément
+    public async incrementFailedAttempts(id: string): Promise<number> {
+        const updated = await this.authenticationModel.findOneAndUpdate({ _id: id }, { $inc: { failedAttempts: 1 } }, { new: true });
+        return updated?.failedAttempts ?? 0;
+    }
+
+    public async setLockedUntil(id: string, lockedUntil: Date | null): Promise<void> {
+        await this.authenticationModel.updateOne({ _id: id }, { $set: { lockedUntil } });
+    }
+
+    public async resetFailedAttempts(id: string): Promise<void> {
+        await this.authenticationModel.updateOne({ _id: id }, { $set: { failedAttempts: 0, lockedUntil: null } });
     }
 
     public async update(entity: AuthenticationModel): Promise<AuthenticationModel> {

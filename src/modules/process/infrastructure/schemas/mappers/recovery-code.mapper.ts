@@ -9,6 +9,7 @@ export class RecoveryCodeMapper {
         model.login = recoveryCode.login;
         model.code = recoveryCode.code;
         model.expiresAt = recoveryCode.expiresAt;
+        model.attempts = recoveryCode.attempts ?? 0;
         return model;
     }
 

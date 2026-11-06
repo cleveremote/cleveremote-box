@@ -9,6 +9,8 @@ export class AuthenticationMapper {
         model.login = authentication.login;
         model.password = authentication.password;
         model.email = authentication.email ?? null;
+        model.failedAttempts = authentication.failedAttempts ?? 0;
+        model.lockedUntil = authentication.lockedUntil ?? null;
         return model;
     }
 

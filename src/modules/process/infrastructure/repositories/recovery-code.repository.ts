@@ -20,10 +20,16 @@ export class RecoveryCodeRepository {
     public async upsert(login: string, code: string, expiresAt: Date): Promise<RecoveryCodeModel> {
         const saved = await this.recoveryCodeModel.findOneAndUpdate(
             { login },
-            { login, code, expiresAt },
+            { login, code, expiresAt, attempts: 0 },
             { new: true, upsert: true, setDefaultsOnInsert: true }
         );
         return RecoveryCodeMapper.mapToModel(saved);
+    }
+
+    // atomique : renvoie le nombre d'essais échoués après incrément
+    public async incrementAttempts(login: string): Promise<number> {
+        const updated = await this.recoveryCodeModel.findOneAndUpdate({ login }, { $inc: { attempts: 1 } }, { new: true });
+        return updated?.attempts ?? 0;
     }
 
     public async deleteByLogin(login: string): Promise<void> {

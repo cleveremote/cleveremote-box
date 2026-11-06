@@ -1,4 +1,5 @@
 import { AuthenticationModel } from '@process/domain/models/authentication.model';
+import { AuthenticationResultModel } from '@process/domain/models/authentication-result.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
@@ -14,7 +15,7 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 export class AuthenticationCheckUC {
     public constructor(private _authenticationService: AuthenticationService) { }
 
-    public execute(data: AuthenticationModel): Promise<boolean> {
+    public execute(data: AuthenticationModel): Promise<AuthenticationResultModel> {
         return this._authenticationService.manageAuthentication(data);
     }
 }

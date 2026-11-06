@@ -9,4 +9,8 @@ export class AuthenticationModel {
     public code?: string;
     // nouveau mot de passe (en clair) qui remplace l'ancien si le code est valide
     public newPassword?: string;
+    // échecs de connexion consécutifs
+    public failedAttempts?: number;
+    // connexion refusée jusqu'à cet instant
+    public lockedUntil?: Date | null;
 }

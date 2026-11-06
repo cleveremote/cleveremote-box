@@ -4,6 +4,7 @@ import { Logger } from 'nestjs-pino';
 import * as fs from 'fs';
 import * as HciSocket from 'hci-socket';
 import { AuthenticationService } from './authentication.service';
+import { AuthenticationStatus } from '../models/authentication-result.model';
 import { GlobalSettingsService } from './global-settings.service';
 import { GlobalSettingsModel, LocalCoordinatesModel } from '../models/global-settings.model';
 const NodeBleHost = require('ble-host');
@@ -128,8 +129,8 @@ export class BleService {
 
 
     private async buildContenteConfigFile(data: { ssid: string; psk: string; password: string; localCoordinates?: LocalCoordinatesModel }) {
-        const isValid = await this.authenticationService.manageAuthentication({ id: data.ssid, login: data.ssid, password: data.password });
-        if (!isValid) {
+        const authentication = await this.authenticationService.manageAuthentication({ id: data.ssid, login: data.ssid, password: data.password });
+        if (authentication.status !== AuthenticationStatus.SUCCESS) {
             return AttErrors.WRITE_NOT_PERMITTED;
         }
         if (data.localCoordinates) {
