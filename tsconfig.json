@@ -31,6 +31,9 @@
       ],
       "@control/*": [
         "src/modules/control/*"
+      ],
+      "@simulator/*": [
+        "src/modules/simulator/*"
       ]
 
     }

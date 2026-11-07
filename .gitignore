@@ -48,3 +48,7 @@ junit.xml
 
 # Secrets locaux (SMTP, ...)
 .env.local
+
+# Simulateur Modbus (SimulatorService)
+simulator-state.json
+simulator-state.json.tmp

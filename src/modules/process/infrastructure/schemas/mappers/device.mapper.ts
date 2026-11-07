@@ -15,9 +15,9 @@ export class DeviceMapper {
             config.timeout = device.config.timeout;
             config.interFrameDelay = device.config.interFrameDelay;
             config.discoveryRegisters = device.config.discoveryRegisters;
-            return config;
+            return config; 
         }
-        const config = new SlaveConfigModel();
+        const config = new SlaveConfigModel(); 
         config.slaveId = device.config.slaveId;
         config.masterDeviceId = device.config.masterDeviceId;
         // 'INVERTER' : ancienne valeur de DeviceKind encore présente en base
@@ -34,7 +34,7 @@ export class DeviceMapper {
     public static mapToModel(device: DeviceDocument): DeviceModel {
         const model = new DeviceModel();
         model._id = device._id;
-        model.name = device.name;
+        model.name = device.name; 
         model.type = device.type;
         model.description = device.description;
         model.config = DeviceMapper._mapConfig(device);
