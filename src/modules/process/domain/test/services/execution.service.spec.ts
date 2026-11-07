@@ -193,6 +193,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             {} as never,
             {} as never,
             emptyGetRepo as never,
+            { get: jest.fn().mockResolvedValue({}) } as never,
             { get: jest.fn().mockResolvedValue({}) } as never
         );
 

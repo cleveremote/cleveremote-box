@@ -19,6 +19,7 @@ describe('AuthenticationService (fs mocked)', () => {
         incrementFailedAttempts: jest.Mock; setLockedUntil: jest.Mock; resetFailedAttempts: jest.Mock;
     };
     let recoveryCodeRepository: { getByLogin: jest.Mock; upsert: jest.Mock; deleteByLogin: jest.Mock; incrementAttempts: jest.Mock };
+    let verificationCodeRepository: { getByLogin: jest.Mock; upsert: jest.Mock; deleteByLogin: jest.Mock; incrementAttempts: jest.Mock };
     let globalSettingsService: { language: string; timeZone: string };
     let mailService: { send: jest.Mock };
     let config: { get: jest.Mock };
@@ -33,12 +34,13 @@ describe('AuthenticationService (fs mocked)', () => {
             incrementFailedAttempts: jest.fn(), setLockedUntil: jest.fn(), resetFailedAttempts: jest.fn()
         };
         recoveryCodeRepository = { getByLogin: jest.fn(), upsert: jest.fn(), deleteByLogin: jest.fn(), incrementAttempts: jest.fn() };
+        verificationCodeRepository = { getByLogin: jest.fn(), upsert: jest.fn(), deleteByLogin: jest.fn(), incrementAttempts: jest.fn() };
         globalSettingsService = { language: 'fr', timeZone: 'UTC' };
         mailService = { send: jest.fn() };
         config = { get: jest.fn().mockReturnValue('super-secret-initial-password') };
         logger = CreateLoggerMock();
 
-        service = new AuthenticationService(authenticationRepository as never, recoveryCodeRepository as never, mailService as never, globalSettingsService as never, config as never, logger as never);
+        service = new AuthenticationService(authenticationRepository as never, recoveryCodeRepository as never, verificationCodeRepository as never, mailService as never, globalSettingsService as never, config as never, logger as never);
     });
 
     describe('_getSerial', () => {

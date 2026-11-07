@@ -7,6 +7,8 @@ import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
 import { RecoveryCode, RecoveryCodeSchema } from './schemas/recovery-code.schema';
 import { RecoveryCodeRepository } from './repositories/recovery-code.repository';
+import { VerificationCode, VerificationCodeSchema } from './schemas/verification-code.schema';
+import { VerificationCodeRepository } from './repositories/verification-code.repository';
 import { MailService } from '@process/domain/services/mail.service';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
@@ -68,7 +70,8 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
         MongooseModule.forFeature([
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema },
-            { name: RecoveryCode.name, schema: RecoveryCodeSchema }
+            { name: RecoveryCode.name, schema: RecoveryCodeSchema },
+            { name: VerificationCode.name, schema: VerificationCodeSchema }
         ]),
         ActuatorModule,
         DeviceModule,
@@ -88,6 +91,7 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
         //----Repositories------//
         AuthenticationRepository,
         RecoveryCodeRepository,
+        VerificationCodeRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,

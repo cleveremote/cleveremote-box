@@ -46,6 +46,24 @@ export class AuthenticationRepository {
         await this.authenticationModel.updateOne({ _id: id }, { $set: { failedAttempts: 0, lockedUntil: null } });
     }
 
+    // password : hash bcrypt ; champ undefined = inchangé. Un nouveau mot de passe lève le verrou.
+    // null : login inconnu (pas de création : l'identité est vérifiée sur le compte existant)
+    public async synchronizeByLogin(login: string, password?: string, email?: string): Promise<AuthenticationModel | null> {
+        const $set: Partial<Authentication> = {};
+        if (password !== undefined) {
+            Object.assign($set, { password, failedAttempts: 0, lockedUntil: null });
+        }
+        if (email) {
+            $set.email = email;
+        }
+        const saved = await this.authenticationModel.findOneAndUpdate(
+            { login, deletedAt: null },
+            Object.keys($set).length ? { $set } : {},
+            { new: true }
+        );
+        return saved ? AuthenticationMapper.mapToModel(saved) : null;
+    }
+
     public async update(entity: AuthenticationModel): Promise<AuthenticationModel> {
         const saved = await this.authenticationModel.findOneAndUpdate(
             {},

@@ -20,7 +20,17 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.RECOVERY_CODE_EXPIRED]: () => 'Code de récupération expiré ou inexistant, demandez un nouveau code',
         [AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS]: () => 'Trop de tentatives : le code a été invalidé, demandez un nouveau code',
         [AuthenticationStatus.PASSWORD_RESET]: () => 'Mot de passe modifié avec succès',
-        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'La modification du mot de passe a échoué'
+        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'La modification du mot de passe a échoué',
+        [AuthenticationStatus.ACCOUNT_NOT_FOUND]: () => 'Compte introuvable',
+        [AuthenticationStatus.ACCOUNT_UPDATED]: () => 'Compte mis à jour avec succès',
+        [AuthenticationStatus.ACCOUNT_UPDATE_FAILED]: () => 'La mise à jour du compte a échoué',
+        [AuthenticationStatus.VERIFICATION_CODE_SENT]: (r, time) => `Un code de vérification a été envoyé par e-mail. Il est valable jusqu'à ${time(r.codeExpiresAt)}`,
+        [AuthenticationStatus.VERIFICATION_UNAVAILABLE]: () => 'Vérification impossible : identifiant inconnu ou aucune adresse e-mail associée',
+        [AuthenticationStatus.VERIFICATION_MAIL_FAILED]: () => 'L\'envoi du code de vérification a échoué, veuillez réessayer',
+        [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'Code de vérification valide',
+        [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `Code de vérification incorrect. Encore ${r.attemptsRemaining} tentative(s)`,
+        [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'Code de vérification expiré ou inexistant, demandez un nouveau code',
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Trop de tentatives : le code a été invalidé, demandez un nouveau code'
     },
     [Language.EN]: {
         [AuthenticationStatus.SUCCESS]: () => 'Login successful',
@@ -36,7 +46,17 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.RECOVERY_CODE_EXPIRED]: () => 'Recovery code expired or missing, please request a new code',
         [AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS]: () => 'Too many attempts: the code has been invalidated, please request a new code',
         [AuthenticationStatus.PASSWORD_RESET]: () => 'Password changed successfully',
-        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'Changing the password failed'
+        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'Changing the password failed',
+        [AuthenticationStatus.ACCOUNT_NOT_FOUND]: () => 'Account not found',
+        [AuthenticationStatus.ACCOUNT_UPDATED]: () => 'Account updated successfully',
+        [AuthenticationStatus.ACCOUNT_UPDATE_FAILED]: () => 'Updating the account failed',
+        [AuthenticationStatus.VERIFICATION_CODE_SENT]: (r, time) => `A verification code has been sent by email. It is valid until ${time(r.codeExpiresAt)}`,
+        [AuthenticationStatus.VERIFICATION_UNAVAILABLE]: () => 'Verification unavailable: unknown login or no email address associated',
+        [AuthenticationStatus.VERIFICATION_MAIL_FAILED]: () => 'Sending the verification code failed, please try again',
+        [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'Verification code valid',
+        [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `Incorrect verification code. ${r.attemptsRemaining} attempt(s) left`,
+        [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'Verification code expired or missing, please request a new code',
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Too many attempts: the code has been invalidated, please request a new code'
     },
     [Language.AR]: {
         [AuthenticationStatus.SUCCESS]: () => 'تم تسجيل الدخول بنجاح',
@@ -52,7 +72,17 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.RECOVERY_CODE_EXPIRED]: () => 'رمز الاسترداد منتهي الصلاحية أو غير موجود، يرجى طلب رمز جديد',
         [AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS]: () => 'محاولات كثيرة جدًا: تم إلغاء الرمز، يرجى طلب رمز جديد',
         [AuthenticationStatus.PASSWORD_RESET]: () => 'تم تغيير كلمة المرور بنجاح',
-        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'فشل تغيير كلمة المرور'
+        [AuthenticationStatus.PASSWORD_RESET_FAILED]: () => 'فشل تغيير كلمة المرور',
+        [AuthenticationStatus.ACCOUNT_NOT_FOUND]: () => 'الحساب غير موجود',
+        [AuthenticationStatus.ACCOUNT_UPDATED]: () => 'تم تحديث الحساب بنجاح',
+        [AuthenticationStatus.ACCOUNT_UPDATE_FAILED]: () => 'فشل تحديث الحساب',
+        [AuthenticationStatus.VERIFICATION_CODE_SENT]: (r, time) => `تم إرسال رمز التحقق عبر البريد الإلكتروني. صالح حتى الساعة ${time(r.codeExpiresAt)}`,
+        [AuthenticationStatus.VERIFICATION_UNAVAILABLE]: () => 'التحقق غير ممكن: اسم مستخدم غير معروف أو لا يوجد بريد إلكتروني مرتبط',
+        [AuthenticationStatus.VERIFICATION_MAIL_FAILED]: () => 'فشل إرسال رمز التحقق، يرجى المحاولة مرة أخرى',
+        [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'رمز التحقق صالح',
+        [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `رمز التحقق غير صحيح. المحاولات المتبقية: ${r.attemptsRemaining}`,
+        [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'رمز التحقق منتهي الصلاحية أو غير موجود، يرجى طلب رمز جديد',
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'محاولات كثيرة جدًا: تم إلغاء الرمز، يرجى طلب رمز جديد'
     }
 };
 

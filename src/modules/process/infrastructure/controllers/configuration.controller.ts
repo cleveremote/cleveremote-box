@@ -40,6 +40,10 @@ import { CheckDeviceDTO, DiscoverDeviceDTO } from '../dto/discover.dto';
 import { DeviceConnectivityCheckUC } from '@process/use-cases/device-connectivity-check.uc';
 import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
+import { AuthenticationService } from '@process/domain/services/authentication.service';
+import { AccountSynchronizeUC } from '@process/use-cases/account-synchronize.uc';
+import { AccountSynchronizeResultModel } from '@process/domain/models/authentication-result.model';
+import { AccountSynchronizeDTO } from '../dto/account-synchronize.dto';
 
 @Injectable()
 class ToArrayPipe implements PipeTransform {
@@ -58,7 +62,8 @@ export class ConfigurationController {
          private _waveshareDiscoveryService: WaveshareDiscoveryService    ,
         private _synchronizeService: SynchronizeService,
         private _deviceConnectivityService: DeviceConnectivityService,
-        private _globalSettingsService: GlobalSettingsService
+        private _globalSettingsService: GlobalSettingsService,
+        private _authenticationService: AuthenticationService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -66,6 +71,22 @@ export class ConfigurationController {
         const uc = new ConfigurationSynchronizeUC(this._synchronizeService);
         const input = StructureSynchronizeDTO.mapToStructureModel(configurationSynchronizeDTO);
         return uc.execute(input);
+    }
+
+    // currentPassword requis ; password / email absents (ou email null) = inchangés.
+    // status/message : même logique que box/check/login ; account renseigné si ACCOUNT_UPDATED
+    @MessagePattern(['box/synchronize/account'])
+    public async synchroniseAccount(@Payload() accountSynchronizeDTO: AccountSynchronizeDTO): Promise<AccountSynchronizeResultModel> {
+        const uc = new AccountSynchronizeUC(this._authenticationService);
+        const input = AccountSynchronizeDTO.mapToAccountModel(accountSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    // resetPassword : code requis ; newPassword requis
+    @MessagePattern(['box/reset/account'])
+    public async resetAccount(@Payload() resetPasswordDTO: any): Promise<boolean> {
+       
+        return true;
     }
 
     @MessagePattern(['box/synchronize/device'])

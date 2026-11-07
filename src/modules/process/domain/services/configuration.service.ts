@@ -6,6 +6,8 @@ import { DeviceRepository } from '@process/infrastructure/repositories/device.re
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
+import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
+import { ToAccountModel } from '../models/authentication.model';
 import { CycleModel } from '../models/cycle.model';
 import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
@@ -52,7 +54,8 @@ export class StructureService {
         private slaveScanService: SlaveScanService,
         private autoCreationService: AutoCreationService,
         private controlLoopRepository: ControlLoopRepository,
-        private globalSettingsService: GlobalSettingsService
+        private globalSettingsService: GlobalSettingsService,
+        private authenticationRepository: AuthenticationRepository
     ) {
     }
 
@@ -69,6 +72,8 @@ export class StructureService {
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         structureModel.controlLoops = await this.controlLoopRepository.get() as StructureModel['controlLoops'];
         structureModel.globalSettings = await this.globalSettingsService.get();
+        const authentication = await this.authenticationRepository.get();
+        structureModel.account = authentication?.id ? ToAccountModel(authentication) : null;
         this.structure = structureModel;
 
         // la derniere lecture connue d'un capteur ne vit qu'en Mongo (collection `events`) :

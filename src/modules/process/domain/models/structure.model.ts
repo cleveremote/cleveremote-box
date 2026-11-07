@@ -7,6 +7,7 @@ import { ActuatorModel } from './actuator.model';
 import { ControlLoopModel } from './control-loop.model';
 import { isRaspberryPi } from '../utils/platform.util';
 import { GlobalSettingsModel } from './global-settings.model';
+import { AccountModel } from './authentication.model';
 export class StructureModel {
     // Modèles de slave, chacun avec ses DeviceCommand (params résolus)
     public models: SlaveTemplate[] = [];
@@ -18,6 +19,8 @@ export class StructureModel {
     public values: any[] = [];
     // reglages globaux de la box (position, fuseau deduit, rangs, langue, version)
     public globalSettings: GlobalSettingsModel;
+    // compte de la box (login, email de récupération, verrou) ; jamais de hash ; null si non initialisé
+    public account: AccountModel | null = null;
     // box identifiée comme un Raspberry Pi (device tree)
     public isRPI: boolean = isRaspberryPi();
     public getModuleIds(): string[] {

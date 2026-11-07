@@ -1,4 +1,6 @@
-// code retour de AuthenticationService.manageAuthentication (login standard et flux de récupération)
+import { AccountModel } from './authentication.model';
+
+// code retour de AuthenticationService.manageAuthentication (login standard et flux de récupération) et synchronizeAccount
 export enum AuthenticationStatus {
     SUCCESS = 'SUCCESS',
     MISSING_PASSWORD = 'MISSING_PASSWORD',
@@ -13,7 +15,17 @@ export enum AuthenticationStatus {
     RECOVERY_CODE_EXPIRED = 'RECOVERY_CODE_EXPIRED', // absent ou expiré
     RECOVERY_CODE_TOO_MANY_ATTEMPTS = 'RECOVERY_CODE_TOO_MANY_ATTEMPTS', // code invalidé
     PASSWORD_RESET = 'PASSWORD_RESET',
-    PASSWORD_RESET_FAILED = 'PASSWORD_RESET_FAILED'
+    PASSWORD_RESET_FAILED = 'PASSWORD_RESET_FAILED',
+    ACCOUNT_NOT_FOUND = 'ACCOUNT_NOT_FOUND', // box/synchronize/account : login inconnu
+    ACCOUNT_UPDATED = 'ACCOUNT_UPDATED',
+    ACCOUNT_UPDATE_FAILED = 'ACCOUNT_UPDATE_FAILED',
+    VERIFICATION_CODE_SENT = 'VERIFICATION_CODE_SENT', // box/send/verificationcode
+    VERIFICATION_UNAVAILABLE = 'VERIFICATION_UNAVAILABLE', // login inconnu ou aucune adresse de destination
+    VERIFICATION_MAIL_FAILED = 'VERIFICATION_MAIL_FAILED',
+    VERIFICATION_CODE_VALID = 'VERIFICATION_CODE_VALID', // box/check/verificationcode : code consommé
+    VERIFICATION_CODE_INVALID = 'VERIFICATION_CODE_INVALID',
+    VERIFICATION_CODE_EXPIRED = 'VERIFICATION_CODE_EXPIRED', // absent ou expiré
+    VERIFICATION_CODE_TOO_MANY_ATTEMPTS = 'VERIFICATION_CODE_TOO_MANY_ATTEMPTS' // code invalidé
 }
 
 // statuts considérés comme une réussite ; tout autre statut est une erreur à afficher
@@ -21,7 +33,10 @@ export const AUTHENTICATION_SUCCESS_STATUSES: ReadonlySet<AuthenticationStatus> 
     AuthenticationStatus.SUCCESS,
     AuthenticationStatus.RECOVERY_CODE_SENT,
     AuthenticationStatus.RECOVERY_CODE_VALID,
-    AuthenticationStatus.PASSWORD_RESET
+    AuthenticationStatus.PASSWORD_RESET,
+    AuthenticationStatus.ACCOUNT_UPDATED,
+    AuthenticationStatus.VERIFICATION_CODE_SENT,
+    AuthenticationStatus.VERIFICATION_CODE_VALID
 ]);
 
 export class AuthenticationResultModel {
@@ -36,6 +51,11 @@ export class AuthenticationResultModel {
     public attemptsRemaining?: number;
     // instant UTC de déblocage du compte
     public lockedUntil?: Date | null;
-    // instant UTC d'expiration du code de récupération envoyé
+    // instant UTC d'expiration du code de récupération / de vérification envoyé
     public codeExpiresAt?: Date;
+}
+
+// box/synchronize/account : account renseigné uniquement si la mise à jour a réussi
+export class AccountSynchronizeResultModel extends AuthenticationResultModel {
+    public account?: AccountModel;
 }

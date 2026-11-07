@@ -2,14 +2,15 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
-import { AuthenticationModel } from '../models/authentication.model';
-import { AUTHENTICATION_SUCCESS_STATUSES, AuthenticationResultModel, AuthenticationStatus } from '../models/authentication-result.model';
+import { AccountSynchronizeModel, AuthenticationModel, ToAccountModel, VerificationCodeCheckModel, VerificationCodeSendModel } from '../models/authentication.model';
+import { AccountSynchronizeResultModel, AUTHENTICATION_SUCCESS_STATUSES, AuthenticationResultModel, AuthenticationStatus } from '../models/authentication-result.model';
 import * as bcrypt from 'bcrypt';
 //var fs = require('fs');
 import * as fs from 'fs'
 import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'node:crypto';
 import { RecoveryCodeRepository } from '@process/infrastructure/repositories/recovery-code.repository';
+import { VerificationCodeRepository } from '@process/infrastructure/repositories/verification-code.repository';
 import { MailService } from './mail.service';
 import { GlobalSettingsService } from './global-settings.service';
 import { DescribeAuthentication } from '../utils/authentication-messages';
@@ -19,6 +20,7 @@ const RECOVERY_CODE_TTL_MS = 1 * 60 * 1000;
 // sans 0/O ni 1/I pour éviter les confusions à la saisie
 const RECOVERY_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_RECOVERY_CODE_ATTEMPTS = 5;
+const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
 
 // verrou progressif : [échecs consécutifs, durée du verrou] ; au-delà du dernier palier, dernier palier
 const LOCKOUT_POLICY_MS: [number, number][] = [
@@ -32,16 +34,93 @@ const LOCKOUT_THRESHOLD = LOCKOUT_POLICY_MS[0][0];
 
 type ResultDetails = Omit<AuthenticationResultModel, 'success' | 'status' | 'message'>;
 
+// stockage d'un code à usage unique haché (recovery_codes / verification_codes)
+type OneTimeCodeRepository = Pick<RecoveryCodeRepository, 'getByLogin' | 'upsert' | 'incrementAttempts' | 'deleteByLogin'>;
+
+// paramètres d'un flux "code envoyé par mail puis vérifié" (récupération de mot de passe, vérification)
+interface OneTimeCodeFlow {
+    name: string;
+    repository: OneTimeCodeRepository;
+    ttlMs: number;
+    subject: string;
+    body: (code: string, ttlMinutes: number) => string;
+    // true : un code valide est supprimé dès la vérification
+    consumeOnValid: boolean;
+    statuses: {
+        sent: AuthenticationStatus;
+        unavailable: AuthenticationStatus;
+        mailFailed: AuthenticationStatus;
+        valid: AuthenticationStatus;
+        invalid: AuthenticationStatus;
+        expired: AuthenticationStatus;
+        tooManyAttempts: AuthenticationStatus;
+    };
+}
+
 @Injectable()
 export class AuthenticationService {
     public constructor(
         private authenticationRepository: AuthenticationRepository,
         private readonly recoveryCodeRepository: RecoveryCodeRepository,
+        private readonly verificationCodeRepository: VerificationCodeRepository,
         private readonly mailService: MailService,
         private readonly globalSettingsService: GlobalSettingsService,
         private readonly _config: ConfigService,
         private readonly logger: Logger
     ) {
+    }
+
+    private get _recoveryFlow(): OneTimeCodeFlow {
+        return {
+            name: 'recovery',
+            repository: this.recoveryCodeRepository,
+            ttlMs: RECOVERY_CODE_TTL_MS,
+            subject: 'CleveRemote - code de récupération',
+            body: (code, ttlMinutes) => `Votre code de récupération : ${code}\nIl expire dans ${ttlMinutes} minutes.`,
+            // conservé pour l'étape code + newPassword
+            consumeOnValid: false,
+            statuses: {
+                sent: AuthenticationStatus.RECOVERY_CODE_SENT,
+                unavailable: AuthenticationStatus.RECOVERY_UNAVAILABLE,
+                mailFailed: AuthenticationStatus.RECOVERY_MAIL_FAILED,
+                valid: AuthenticationStatus.RECOVERY_CODE_VALID,
+                invalid: AuthenticationStatus.RECOVERY_CODE_INVALID,
+                expired: AuthenticationStatus.RECOVERY_CODE_EXPIRED,
+                tooManyAttempts: AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS
+            }
+        };
+    }
+
+    private get _verificationFlow(): OneTimeCodeFlow {
+        return {
+            name: 'verification',
+            repository: this.verificationCodeRepository,
+            ttlMs: VERIFICATION_CODE_TTL_MS,
+            subject: 'CleveRemote - code de vérification',
+            body: (code, ttlMinutes) => `Votre code de vérification : ${code}\nIl expire dans ${ttlMinutes} minutes.`,
+            consumeOnValid: true,
+            statuses: {
+                sent: AuthenticationStatus.VERIFICATION_CODE_SENT,
+                unavailable: AuthenticationStatus.VERIFICATION_UNAVAILABLE,
+                mailFailed: AuthenticationStatus.VERIFICATION_MAIL_FAILED,
+                valid: AuthenticationStatus.VERIFICATION_CODE_VALID,
+                invalid: AuthenticationStatus.VERIFICATION_CODE_INVALID,
+                expired: AuthenticationStatus.VERIFICATION_CODE_EXPIRED,
+                tooManyAttempts: AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS
+            }
+        };
+    }
+
+    // box/send/verificationcode : envoi à data.email si fourni, sinon à l'email du compte ;
+    // une nouvelle demande remplace le code précédent
+    public async sendVerificationCode(data: VerificationCodeSendModel): Promise<AuthenticationResultModel> {
+        const user = data.login ? await this.authenticationRepository.findByLogin(data.login) : null;
+        return this._sendCode(this._verificationFlow, data.login, user ? (data.email || user.email) : null);
+    }
+
+    // box/check/verificationcode : un code valide est consommé (un second check renvoie VERIFICATION_CODE_EXPIRED)
+    public async checkVerificationCode(data: VerificationCodeCheckModel): Promise<AuthenticationResultModel> {
+        return this._verifyCode(this._verificationFlow, data.login, data.code);
     }
 
     private async _managePassword(): Promise<AuthenticationModel> {
@@ -66,6 +145,32 @@ export class AuthenticationService {
         return true;
     }
 
+    // box/synchronize/account : currentPassword vérifié (verrou progressif compris) avant toute mise à jour
+    // du mot de passe et/ou de l'email ; un échec compte comme une tentative de connexion ratée
+    public async synchronizeAccount(account: AccountSynchronizeModel): Promise<AccountSynchronizeResultModel> {
+        const stored = account.login ? await this.authenticationRepository.findByLogin(account.login) : null;
+        if (!stored) {
+            this.logger.warn({ login: account.login }, 'account synchronization failed : unknown login');
+            return this._result(AuthenticationStatus.ACCOUNT_NOT_FOUND);
+        }
+        const check = await this._checkPassword(stored, account.password, account.login);
+        if (check.status !== AuthenticationStatus.SUCCESS) {
+            return check;
+        }
+        const hash = account.newPassword ? bcrypt.hashSync(account.newPassword, bcrypt.genSaltSync(13)) : undefined;
+        const saved = await this.authenticationRepository.synchronizeByLogin(account.login, hash, account.email);
+        if (!saved) {
+            this.logger.warn({ login: account.login }, 'account synchronization failed : account not updated');
+            return this._result(AuthenticationStatus.ACCOUNT_UPDATE_FAILED);
+        }
+        if (hash) {
+            // un code de récupération en cours ne doit plus permettre d'écraser le nouveau mot de passe
+            await this.recoveryCodeRepository.deleteByLogin(account.login);
+        }
+        this.logger.log({ login: account.login, password: !!hash, email: account.email !== undefined }, 'account synchronized');
+        return { ...this._result(AuthenticationStatus.ACCOUNT_UPDATED), account: ToAccountModel(saved) };
+    }
+
     public async manageAuthentication(data: AuthenticationModel): Promise<AuthenticationResultModel> {
         if (data.isRecovery) {
             return data.code ? this._resetPassword(data.login, data.code, data.newPassword) : this._sendRecoveryCode(data.login);
@@ -74,24 +179,32 @@ export class AuthenticationService {
             this.logger.warn({ login: data.login }, 'authentication failed : no password provided');
             return this._result(AuthenticationStatus.MISSING_PASSWORD);
         }
-        const stored = await this.authenticationRepository.get();
+        return this._checkPassword(await this.authenticationRepository.get(), data.password, data.login);
+    }
+
+    // SUCCESS : mot de passe valide (compteur d'échecs remis à 0) ; sinon statut d'erreur à renvoyer tel quel
+    private async _checkPassword(stored: AuthenticationModel, password: string, login: string): Promise<AuthenticationResultModel> {
+        if (!password) {
+            this.logger.warn({ login }, 'authentication failed : no password provided');
+            return this._result(AuthenticationStatus.MISSING_PASSWORD);
+        }
         if (!stored.password) {
-            this.logger.warn({ login: data.login }, 'authentication failed : no credentials stored');
+            this.logger.warn({ login }, 'authentication failed : no credentials stored');
             return this._result(AuthenticationStatus.NOT_INITIALIZED);
         }
         // verrou actif : refus sans comparer le mot de passe ni incrémenter le compteur
         if (stored.lockedUntil && stored.lockedUntil.getTime() > Date.now()) {
-            this.logger.warn({ login: data.login, failedAttempts: stored.failedAttempts, lockedUntil: stored.lockedUntil }, 'authentication refused : account locked');
+            this.logger.warn({ login, failedAttempts: stored.failedAttempts, lockedUntil: stored.lockedUntil }, 'authentication refused : account locked');
             return this._result(AuthenticationStatus.ACCOUNT_LOCKED, { failedAttempts: stored.failedAttempts, lockedUntil: stored.lockedUntil });
         }
-        const isValid = await bcrypt.compare(data.password, stored.password);
+        const isValid = await bcrypt.compare(password, stored.password);
         if (isValid) {
             if (stored.failedAttempts || stored.lockedUntil) {
                 await this.authenticationRepository.resetFailedAttempts(stored.id);
             }
             return this._result(AuthenticationStatus.SUCCESS);
         }
-        return this._registerFailure(stored, data.login);
+        return this._registerFailure(stored, login);
     }
 
     private async _registerFailure(stored: AuthenticationModel, login: string): Promise<AuthenticationResultModel> {
@@ -121,34 +234,34 @@ export class AuthenticationService {
         return delay;
     }
 
-    // Génère un code, le stocke haché (remplace un éventuel code précédent) et l'envoie à l'email du login
     private async _sendRecoveryCode(login: string): Promise<AuthenticationResultModel> {
         const user = login ? await this.authenticationRepository.findByLogin(login) : null;
-        if (!user?.email) {
-            this.logger.warn({ login }, 'recovery code not sent : unknown login or no email');
-            return this._result(AuthenticationStatus.RECOVERY_UNAVAILABLE);
+        return this._sendCode(this._recoveryFlow, login, user?.email);
+    }
+
+    // Génère un code, le stocke haché (remplace un éventuel code précédent) et l'envoie à email
+    private async _sendCode(flow: OneTimeCodeFlow, login: string, email: string | null | undefined): Promise<AuthenticationResultModel> {
+        if (!login || !email) {
+            this.logger.warn({ login }, `${flow.name} code not sent : unknown login or no email`);
+            return this._result(flow.statuses.unavailable);
         }
         const code = this._generateRecoveryCode();
-        const expiresAt = new Date(Date.now() + RECOVERY_CODE_TTL_MS);
-        await this.recoveryCodeRepository.upsert(login, bcrypt.hashSync(code, bcrypt.genSaltSync(10)), expiresAt);
+        const expiresAt = new Date(Date.now() + flow.ttlMs);
+        await flow.repository.upsert(login, bcrypt.hashSync(code, bcrypt.genSaltSync(10)), expiresAt);
         try {
-            await this.mailService.send(
-                user.email,
-                'CleveRemote - code de récupération',
-                `Votre code de récupération : ${code}\nIl expire dans ${RECOVERY_CODE_TTL_MS / 60000} minutes.`
-            );
-            return this._result(AuthenticationStatus.RECOVERY_CODE_SENT, { codeExpiresAt: expiresAt });
+            await this.mailService.send(email, flow.subject, flow.body(code, flow.ttlMs / 60000));
+            return this._result(flow.statuses.sent, { codeExpiresAt: expiresAt });
         } catch (error) {
-            this.logger.warn({ login, err: error?.message }, 'recovery code mail failed');
-            await this.recoveryCodeRepository.deleteByLogin(login);
-            return this._result(AuthenticationStatus.RECOVERY_MAIL_FAILED);
+            this.logger.warn({ login, err: error?.message }, `${flow.name} code mail failed`);
+            await flow.repository.deleteByLogin(login);
+            return this._result(flow.statuses.mailFailed);
         }
     }
 
     // code seul : vérification (code conservé pour l'étape suivante) ;
     // code + newPassword : revérification du code puis remplacement du mot de passe (code consommé)
     private async _resetPassword(login: string, code: string, newPassword?: string): Promise<AuthenticationResultModel> {
-        const verification = await this._verifyRecoveryCode(login, code);
+        const verification = await this._verifyCode(this._recoveryFlow, login, code);
         if (!newPassword || verification.status !== AuthenticationStatus.RECOVERY_CODE_VALID) {
             return verification;
         }
@@ -163,29 +276,32 @@ export class AuthenticationService {
         return this._result(AuthenticationStatus.PASSWORD_RESET);
     }
 
-    // ne supprime pas un code valide ; un code invalidé (trop d'essais) est supprimé
-    private async _verifyRecoveryCode(login: string, code: string): Promise<AuthenticationResultModel> {
-        const stored = login ? await this.recoveryCodeRepository.getByLogin(login) : null;
+    // un code valide n'est supprimé que si flow.consumeOnValid ; un code invalidé (trop d'essais) est supprimé
+    private async _verifyCode(flow: OneTimeCodeFlow, login: string, code: string): Promise<AuthenticationResultModel> {
+        const stored = login ? await flow.repository.getByLogin(login) : null;
         if (!stored || stored.expiresAt.getTime() < Date.now()) {
-            this.logger.warn({ login }, 'recovery failed : no code or code expired');
-            return this._result(AuthenticationStatus.RECOVERY_CODE_EXPIRED);
+            this.logger.warn({ login }, `${flow.name} failed : no code or code expired`);
+            return this._result(flow.statuses.expired);
         }
         if (stored.attempts >= MAX_RECOVERY_CODE_ATTEMPTS) {
-            await this.recoveryCodeRepository.deleteByLogin(login);
-            return this._result(AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS, { failedAttempts: stored.attempts });
+            await flow.repository.deleteByLogin(login);
+            return this._result(flow.statuses.tooManyAttempts, { failedAttempts: stored.attempts });
         }
-        const isValid = await bcrypt.compare(code.trim().toUpperCase(), stored.code);
+        const isValid = !!code && await bcrypt.compare(code.trim().toUpperCase(), stored.code);
         if (isValid) {
-            return this._result(AuthenticationStatus.RECOVERY_CODE_VALID, { codeExpiresAt: stored.expiresAt });
+            if (flow.consumeOnValid) {
+                await flow.repository.deleteByLogin(login);
+            }
+            return this._result(flow.statuses.valid, { codeExpiresAt: stored.expiresAt });
         }
-        const attempts = await this.recoveryCodeRepository.incrementAttempts(login);
+        const attempts = await flow.repository.incrementAttempts(login);
         if (attempts >= MAX_RECOVERY_CODE_ATTEMPTS) {
-            this.logger.warn({ login, attempts }, 'recovery failed : too many invalid codes, code invalidated');
-            await this.recoveryCodeRepository.deleteByLogin(login);
-            return this._result(AuthenticationStatus.RECOVERY_CODE_TOO_MANY_ATTEMPTS, { failedAttempts: attempts });
+            this.logger.warn({ login, attempts }, `${flow.name} failed : too many invalid codes, code invalidated`);
+            await flow.repository.deleteByLogin(login);
+            return this._result(flow.statuses.tooManyAttempts, { failedAttempts: attempts });
         }
-        this.logger.warn({ login, attempts }, 'recovery failed : invalid code');
-        return this._result(AuthenticationStatus.RECOVERY_CODE_INVALID, {
+        this.logger.warn({ login, attempts }, `${flow.name} failed : invalid code`);
+        return this._result(flow.statuses.invalid, {
             failedAttempts: attempts,
             attemptsRemaining: MAX_RECOVERY_CODE_ATTEMPTS - attempts
         });
