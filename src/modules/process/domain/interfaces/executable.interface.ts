@@ -70,7 +70,7 @@ export enum TASK {
     RECURSIVE = 'RECURSIVE'
 }
 
-export type SequenceExecutionEntry = { sequenceId: string; names: string[]; securityConfig: SecurityConfig };
+export type SequenceExecutionEntry = { sequenceId: string; moduleIds: string[]; securityConfig: SecurityConfig };
 
 export interface IExecutable {
     _id: string;

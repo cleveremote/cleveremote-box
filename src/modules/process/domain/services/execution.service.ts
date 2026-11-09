@@ -1346,13 +1346,13 @@ export class ProcessService {
         }
 
         if (isCancelled() || !lastRun) { return null; }
-        for (const previousName of lastRun.names) {
-            const mod = modules.find(x => x.name === previousName);
+        for (const previousId of lastRun.moduleIds) {
+            const mod = modules.find(x => x._id === previousId);
             await this.actuatorService.execute(mod, 0);
             try {
                 await this._triggerOwningModuleCycle(mod, 0, sourceCycleId, process.mode);
             } catch (error) {
-                this.logger.warn({ error, name: previousName }, 'module cycle trigger error');
+                this.logger.warn({ error, moduleId: previousId, name: mod?.name }, 'module cycle trigger error');
             }
         }
         await this._processProgress(lastRun.sequenceId, ExecutableAction.OFF, process.mode, undefined, undefined,
@@ -1381,9 +1381,9 @@ export class ProcessService {
         this.queuedSequences.push(ref);
         const done = firstValueFrom(ref.flag);
         const previousData =
-            { id: previousSeq?.sequenceId, names: previousSeq?.names ?? [], duration: previousSeq?.securityConfig.maxDuration };
+            { id: previousSeq?.sequenceId, moduleIds: previousSeq?.moduleIds ?? [], duration: previousSeq?.securityConfig.maxDuration };
         const currentData =
-            { id: currentSeq.sequenceId, names: currentSeq.names, duration: currentSeq.securityConfig.maxDuration };
+            { id: currentSeq.sequenceId, moduleIds: currentSeq.moduleIds, duration: currentSeq.securityConfig.maxDuration };
         if (cycle.status === ExecutableStatus.IN_PROCCESS) {
             await this._switchProcess(previousData, currentData, modules, timings, mode, sourceCycleId, cycle._id, isForced);
             ref.timeoutHandle = setTimeout(() => ref.flag.next(null), currentSeq.securityConfig.maxDuration);
@@ -1455,17 +1455,17 @@ export class ProcessService {
         }, { type: ElementType.INVERTER, id: inverter._id, ...status, ...detail, mode: detail.mode ?? status?.mode });
     }
 
-    private async _switchProcess(previousData: { id: string; names: string[]; duration: number },
-        currentData: { id: string; names: string[]; duration: number }, modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>,
+    private async _switchProcess(previousData: { id: string; moduleIds: string[]; duration: number },
+        currentData: { id: string; moduleIds: string[]; duration: number }, modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>,
         mode: ProcessMode, sourceCycleId?: string, cycleId?: string, isForced = false): Promise<boolean> {
 
         if (previousData.id) {
-            await this._switchModule(previousData.names, modules, timings, 0, sourceCycleId, mode);
+            await this._switchModule(previousData.moduleIds, modules, timings, 0, sourceCycleId, mode);
             await this._processProgress(previousData.id, ExecutableAction.OFF, mode, undefined, undefined,
                 this._sequenceEndJournal(previousData.id, cycleId)).then(() => true);
         }
 
-        await this._switchModule(currentData.names, modules, timings, 1, sourceCycleId, mode);
+        await this._switchModule(currentData.moduleIds, modules, timings, 1, sourceCycleId, mode);
         const run = this._runOf(cycleId);
         const name = this._sequenceName(currentData.id);
         if (run) {
@@ -1477,13 +1477,13 @@ export class ProcessService {
     }
 
     private async _switchModule(
-        dataNames: string[], modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>, action: number,
+        moduleIds: string[], modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>, action: number,
         sourceCycleId?: string, mode?: ProcessMode
     ): Promise<void> {
 
-        await Promise.all(dataNames.map(async (dataName) => {
-            const mod = modules.find(x => x.name === dataName);
-            const cfg = timings.get(dataName);
+        await Promise.all(moduleIds.map(async (moduleId) => {
+            const mod = modules.find(x => x._id === moduleId);
+            const cfg = timings.get(moduleId);
             const waitBefore = action === 1 ? cfg?.waitBeforeExec : cfg?.waitBeforeExecOff;
             const waitAfter = action === 1 ? cfg?.waitAfterExec : cfg?.waitAfterExecOff;
             if (waitBefore > 0) {
@@ -1492,12 +1492,12 @@ export class ProcessService {
             try {
                 await this.actuatorService.execute(mod, action);
             } catch (error) {
-                this.logger.warn({ error, name: dataName }, 'execution module error');
+                this.logger.warn({ error, moduleId, name: mod?.name }, 'execution module error');
             }
             try {
                 await this._triggerOwningModuleCycle(mod, action, sourceCycleId, mode);
             } catch (error) {
-                this.logger.warn({ error, name: dataName }, 'module cycle trigger error');
+                this.logger.warn({ error, moduleId, name: mod?.name }, 'module cycle trigger error');
             }
             if (waitAfter > 0) {
                 await new Promise(resolve => setTimeout(resolve, waitAfter));

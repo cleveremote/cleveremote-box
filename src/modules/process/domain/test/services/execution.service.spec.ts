@@ -1939,16 +1939,15 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     describe('executeModuleCycleForDigitalOutput', () => {
         const deviceId = 'io-8ch-1';
 
-        // le nom '100' reproduit ce que renvoie CreateFakeActuator(id, 100 + i, ...) pour le
-        // premier (et seul) moduleId d'une sequence : cycle.exists() matche par nom, pas par id.
-        function CreateComActuatorModel(id: string, name: string, channel: number): ActuatorModel {
+        // cycle.exists() matche par _id : l'id doit être celui référencé par la séquence du cycle MODULE
+        function CreateComActuatorModel(id: string, name: string, channel: number, onDeviceId = deviceId): ActuatorModel {
             const actuator = new ActuatorModel();
             actuator._id = id;
             actuator.name = name;
             actuator.type = ActuatorType.COM;
             actuator.status = ModuleStatus.OFF;
             const config = new ComActuatorConfigModel();
-            config.deviceId = deviceId;
+            config.deviceId = onDeviceId;
             config.actions = [{ commandId: 'command-1', channel }];
             actuator.config = config;
             return actuator;
@@ -2001,9 +2000,6 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 { name: 'cycle-c', sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] },
                 { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
             ]);
-            // deux cycles referencent 'actuator-com-1' ici (cycle-c puis cycle-m) : structure.getModuleIds()
-            // le liste deux fois, et le Map de actuatorService.resolve() dedup sur la derniere occurrence
-            // (index 1, cf. CreateFakeActuator(id, 100 + i, ...)) -> nom resolu '101', pas '100'.
             structureService.structure.actuators = [CreateComActuatorModel('actuator-com-1', '101', 2)];
 
             await service.execute(CreateProcess(cycleC, ProcessMode.MANUAL, ExecutableAction.ON));
@@ -2028,7 +2024,6 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
                 { name: 'cycle-c', sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 300 }] },
                 { name: 'cycle-m', type: CycleType.MODULE, sequences: [{ moduleIds: ['actuator-com-1'], maxDuration: 5000 }] }
             ]);
-            // cf. commentaire plus haut : deux cycles referencent 'actuator-com-1' -> nom resolu '101'.
             structureService.structure.actuators = [CreateComActuatorModel('actuator-com-1', '101', 2)];
 
             // regle 2 : cycleC ON demarre automatiquement cycleM (son cycle MODULE proprietaire).
@@ -2051,6 +2046,30 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             await Flush(400);
             expect(cycleC.status).toEqual(ExecutableStatus.STOPPED);
             expect(cycleM.status).toEqual(ExecutableStatus.STOPPED);
+        });
+
+        it('should only drive the MODULE cycle of the changed slave when two slaves expose homonym outputs (regression)', async () => {
+            actuatorTypeOverrides['do7-slave-1'] = ActuatorType.COM;
+            actuatorTypeOverrides['do7-slave-2'] = ActuatorType.COM;
+            const [cycleM1, cycleM2] = await SeedCycles([
+                { name: 'cycle-m-slave-1', type: CycleType.MODULE, sequences: [{ moduleIds: ['do7-slave-1'], maxDuration: 5000 }] },
+                { name: 'cycle-m-slave-2', type: CycleType.MODULE, sequences: [{ moduleIds: ['do7-slave-2'], maxDuration: 5000 }] }
+            ]);
+            // auto-création : chaque slave Digital IO a son propre "DO7"
+            structureService.structure.actuators = [
+                CreateComActuatorModel('do7-slave-1', 'DO7', 7, 'io-8ch-1'),
+                CreateComActuatorModel('do7-slave-2', 'DO7', 7, 'io-8ch-2')
+            ];
+
+            await service.executeModuleCycleForDigitalOutput('io-8ch-2', 7, true);
+            await Flush(50);
+
+            expect(cycleM2.status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(cycleM1.status).toEqual(ExecutableStatus.STOPPED);
+
+            await service.executeModuleCycleForDigitalOutput('io-8ch-2', 7, false);
+            await Flush(50);
+            expect(cycleM2.status).toEqual(ExecutableStatus.STOPPED);
         });
 
         it('should do nothing when no COM actuator matches the deviceId/channel', async () => {

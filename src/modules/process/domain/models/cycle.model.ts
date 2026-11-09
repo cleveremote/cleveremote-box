@@ -66,17 +66,19 @@ export class CycleModel implements IExecutable {
         return modules;
     }
 
+    // Identité par _id : deux slaves du même modèle créent des actuators homonymes (ex: DO7)
     public exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean {
-        return !!this.getModules(actuatorRegistry).find(x => x.name === module.name);
+        return this.getModules(actuatorRegistry).some(x => x._id === module._id);
     }
 
+    // Timings indexés par _id d'actuator
     public getModuleTimings(actuatorRegistry: Map<string, IActuatorModule>): Map<string, ModuleTimingConfig> {
         const timings = new Map<string, ModuleTimingConfig>();
         this.sequences.forEach((sequence) => {
             sequence.moduleConfigs.forEach((ref) => {
                 const actuator = actuatorRegistry.get(ref.moduleId);
                 if (actuator) {
-                    timings.set(actuator.name, ref.configTiming);
+                    timings.set(actuator._id, ref.configTiming);
                 }
             });
         });
@@ -88,13 +90,13 @@ export class CycleModel implements IExecutable {
         const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         sequences.forEach((sequence) => {
             const sequenceId = sequence._id;
-            const names = sequence.getActuatorIds()
-                .map((moduleId) => actuatorRegistry.get(moduleId)?.name)
-                .filter((name): name is string => name !== undefined);
+            const moduleIds = sequence.getActuatorIds()
+                .map((moduleId) => actuatorRegistry.get(moduleId)?._id)
+                .filter((id): id is string => id !== undefined);
             sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
             const securityConfig = sequence.securityConfig;
 
-            executionLst.push({ sequenceId, names, securityConfig });
+            executionLst.push({ sequenceId, moduleIds, securityConfig });
         });
         return executionLst;
     }

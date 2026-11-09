@@ -129,10 +129,10 @@ describe('CyleModel model', () => {
 
         const struct = cycle.getExecutionStructure(undefined, registry);
         const desiredStruct = [
-            { sequenceId: '11', names: ['16', '26'], securityConfig: { maxDuration: 10000 } },
-            { sequenceId: '12', names: ['16', '19'], securityConfig: { maxDuration: 10000 } },
-            { sequenceId: '13', names: ['16', '21'], securityConfig: { maxDuration: 10000 } },
-            { sequenceId: '14', names: ['16', '20'], securityConfig: { maxDuration: 10000 } }
+            { sequenceId: '11', moduleIds: ['pump', 'valve1'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '12', moduleIds: ['pump', 'valve2'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '13', moduleIds: ['pump', 'valve3'], securityConfig: { maxDuration: 10000 } },
+            { sequenceId: '14', moduleIds: ['pump', 'valve4'], securityConfig: { maxDuration: 10000 } }
         ];
 
         expect(struct).toMatchObject(desiredStruct);
@@ -221,6 +221,10 @@ describe('CyleModel model', () => {
 
         const isExists = cycle.exists(valve3, registry);
         expect(isExists).toBeTruthy();
+
+        // homonyme (ex: DO7 d'un autre slave) : même nom, autre _id -> absent du cycle
+        const homonym = { ...valve3, _id: 'valve3-other-slave' } as ActuatorModel;
+        expect(cycle.exists(homonym, registry)).toBeFalsy();
     });
 
     it('Should create a new cycle Model & and reset it', async () => {
@@ -290,6 +294,6 @@ describe('CyleModel model', () => {
 
         const struct = cycle.getExecutionStructure(undefined, new Map());
 
-        expect(struct).toEqual([{ sequenceId: '11', names: [], securityConfig: { maxDuration: 10000 } }]);
+        expect(struct).toEqual([{ sequenceId: '11', moduleIds: [], securityConfig: { maxDuration: 10000 } }]);
     });
 });
