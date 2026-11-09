@@ -36,7 +36,8 @@ const STOP_LABELS: Record<StopReason, (stop: EventStopModel) => string> = {
     [StopReason.CONFIRMATION_REFUSED]: (stop) => 'confirmation refused' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_WAITING]: (stop) => 'stopped while waiting for confirmation' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_QUEUED]: (stop) => 'stopped while queued' + ByUser(stop.by),
-    [StopReason.SKIPPED_BY_USER]: () => 'skipped manually'
+    [StopReason.SKIPPED_BY_USER]: () => 'skipped manually',
+    [StopReason.INVERTER_MANUAL]: (stop) => `stopped: inverter ${Quote(stop.by?.refName)} switched to manual`
 };
 
 const Origin = (origin: EventOriginModel | undefined): string => {
@@ -117,6 +118,14 @@ export const EN_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_STARTED]: (data, name) => `Sequence ${name} started` +
             (data.plannedDuration ? ` (${FormatDuration(data.plannedDuration)} planned)` : '') + (data.isForced ? ' — forced' : ''),
         [ProcessEventKind.SEQUENCE_ENDED]: DescribeSequenceEnd,
-        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Sequence ${name} skipped: conditions not met${ConditionList(data)}`
+        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Sequence ${name} skipped: conditions not met${ConditionList(data)}`,
+        [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `Inverter ${name} set to ${data.inverter?.mode ?? ''}` +
+            (data.inverter?.frequency !== undefined ? ` at ${data.inverter.frequency} Hz` : '') +
+            (data.inverter?.pidSetpoint !== undefined ? `, setpoint ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.sequenceName ? ` (sequence ${Quote(data.inverter.sequenceName)})` : ' (default mode)'),
+        [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `Inverter ${name} switched to manual: sequence directives ignored`,
+        [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `Inverter ${name} back to auto mode`,
+        [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `Directive of sequence ${Quote(data.inverter?.sequenceName ?? '')}` +
+            ` ignored: inverter ${name} in manual mode`
     }
 };

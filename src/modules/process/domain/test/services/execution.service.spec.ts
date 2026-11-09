@@ -1,4 +1,4 @@
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, filter } from 'rxjs';
 import { Connection } from 'mongoose';
 import { SchedulerRegistry, ScheduleModule } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
@@ -193,6 +193,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             {} as never,
             {} as never,
             emptyGetRepo as never,
+            emptyGetRepo as never,
             { get: jest.fn().mockResolvedValue({}) } as never,
             { get: jest.fn().mockResolvedValue({}) } as never
         );
@@ -246,7 +247,11 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             scheduleService as never,
             logger as never,
             deviceCommandService as never,
-            globalSettingsService
+            globalSettingsService,
+            {
+                events$: new BehaviorSubject<unknown>(null).pipe(filter(Boolean)), isManual: jest.fn().mockReturnValue(false), get: jest.fn(),
+                getStatus: jest.fn(), request: jest.fn().mockResolvedValue(undefined), release: jest.fn(), writeParameters: jest.fn().mockResolvedValue(undefined)
+            } as never
         );
     });
 

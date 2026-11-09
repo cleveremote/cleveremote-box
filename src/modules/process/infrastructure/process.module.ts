@@ -46,6 +46,7 @@ import { RegisterMapModule } from '@register-map/infrastructure/register-map.mod
 import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
 import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
 import { DigitalIoMonitorService } from '@process/domain/services/digital-io-monitor.service';
+import { InverterControlService } from '@process/domain/services/inverter/inverter-control.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -120,7 +121,9 @@ import { DigitalIoMonitorService } from '@process/domain/services/digital-io-mon
         BleService,
         CycleGroupService,
         DeviceConnectivityService,
-        DigitalIoMonitorService
+        DigitalIoMonitorService,
+        // pilotage des variateurs par les séquences (directives, détection du manuel)
+        InverterControlService
     ],
     exports: [
         ProcessService,

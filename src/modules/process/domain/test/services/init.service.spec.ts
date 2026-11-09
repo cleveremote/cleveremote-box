@@ -130,7 +130,8 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             { seed: jest.fn().mockResolvedValue(undefined) } as never,
             { watch: jest.fn() } as never,
             { migrateFromCtrlActuators: jest.fn().mockResolvedValue(undefined) } as never,
-            { watch: jest.fn(), outputChanges$: new Subject() } as never
+            { watch: jest.fn(), outputChanges$: new Subject() } as never,
+            { load: jest.fn().mockResolvedValue(undefined) } as never
         );
     });
 

@@ -15,6 +15,7 @@ import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.
 import { SlaveTemplate, SlaveTemplateSchema } from '@process/infrastructure/schemas/slave-template.schema';
 import { Sensor, SensorSchema } from '@process/infrastructure/schemas/sensor.schema';
 import { ControlLoop, ControlLoopSchema } from '@process/infrastructure/schemas/control-loop.schema';
+import { Inverter, InverterSchema } from '@process/infrastructure/schemas/inverter.schema';
 import { GlobalSettings, GlobalSettingsSchema } from '@process/infrastructure/schemas/global-settings.schema';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
@@ -36,6 +37,8 @@ import { SensorRepository } from '@process/infrastructure/repositories/sensor.re
 import { SensorMongooseRepository } from '@process/infrastructure/repositories/sensor-mongoose.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { ControlLoopMongooseRepository } from '@process/infrastructure/repositories/control-loop-mongoose.repository';
+import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
+import { InverterMongooseRepository } from '@process/infrastructure/repositories/inverter-mongoose.repository';
 import { GlobalSettingsRepository } from '@process/infrastructure/repositories/global-settings.repository';
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { DeviceCommandService } from '@process/domain/services/device-command.service';
@@ -73,6 +76,7 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
             { name: SlaveTemplate.name, schema: SlaveTemplateSchema },
             { name: Sensor.name, schema: SensorSchema },
             { name: ControlLoop.name, schema: ControlLoopSchema },
+            { name: Inverter.name, schema: InverterSchema },
             { name: GlobalSettings.name, schema: GlobalSettingsSchema }
         ]),
         RegisterMapModule,
@@ -87,6 +91,9 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         // DeviceRepository.delete supprime les sensors lus sur un slave capteur
         SensorRepository,
         SensorMongooseRepository,
+        // DeviceRepository.delete supprime l'élément variateur d'un slave variateur
+        InverterRepository,
+        InverterMongooseRepository,
         DeviceCommandRepository,
         DeviceCommandMongooseRepository,
         SlaveTemplateRepository,
@@ -124,7 +131,7 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         ActuatorService, ActuatorRepository, DeviceRepository, SensorRepository, DeviceCommandRepository, SlaveTemplateRepository, DeviceCommandService,
         ModbusDeviceService, WaveshareDiscoveryService, CtrlActuatorStrategy,
         CycleRepository, CycleMongooseRepository, SequenceRepository, ScheduleRepository, TriggerRepository,
-        ControlLoopRepository, RegulationService,
+        ControlLoopRepository, RegulationService, InverterRepository,
         GlobalSettingsService
     ]
 })

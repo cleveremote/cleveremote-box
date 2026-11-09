@@ -5,6 +5,7 @@ import { SequenceModel } from './sequence.model';
 import { DeviceModel, SlaveTemplate } from './device.model';
 import { ActuatorModel } from './actuator.model';
 import { ControlLoopModel } from './control-loop.model';
+import { InverterModel } from './inverter.model';
 import { isRaspberryPi } from '../utils/platform.util';
 import { GlobalSettingsModel } from './global-settings.model';
 import { AccountModel } from './authentication.model';
@@ -16,6 +17,8 @@ export class StructureModel {
     public sensors: SensorModel[] = [];
     public actuators: ActuatorModel[] = [];
     public controlLoops: ControlLoopModel[] = [];
+    // éléments variateur (pilotés par les directives des séquences)
+    public inverters: InverterModel[] = [];
     public values: any[] = [];
     // reglages globaux de la box (position, fuseau deduit, rangs, langue, version)
     public globalSettings: GlobalSettingsModel;

@@ -9,6 +9,7 @@ import {
     SynchronizeCycleModel,
     SynchronizeDeviceCommandModel,
     SynchronizeDeviceModel,
+    SynchronizeInverterModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
     SynchronizeTriggerModel
@@ -36,6 +37,9 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 import { ControlLoopMode, ControlLoopModel } from '../models/control-loop.model';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { RegulationService } from './regulation.service';
+import { InverterModel } from '../models/inverter.model';
+import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
+import { ElementNotFoundExeception } from '../errors/db-errors';
 
 @Injectable()
 export class SynchronizeService {
@@ -55,7 +59,8 @@ export class SynchronizeService {
         private deviceCommandRepository: DeviceCommandRepository,
         private deviceCommandService: DeviceCommandService,
         private controlLoopRepository: ControlLoopRepository,
-        private regulationService: RegulationService
+        private regulationService: RegulationService,
+        private inverterRepository: InverterRepository
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -133,6 +138,37 @@ export class SynchronizeService {
             this.regulationService.stopFollow(previous.actuatorId);
         }
         return controlLoop;
+    }
+
+    /**
+     * Réglages d'un élément variateur : nom, mode par défaut, délai de retour au mode par défaut, valeurs imposées des
+     * paramètres. Enregistré, il est repris par InverterControlService (paramètres réécrits s'ils diffèrent de l'appareil).
+     */
+    public async synchronizeInverter(model: SynchronizeInverterModel): Promise<InverterModel> {
+        const inverter = await this.inverterRepository.get(model._id) as InverterModel;
+        if (!inverter) {
+            throw new ElementNotFoundExeception(model._id, 'synchronize', 'inverter');
+        }
+        if (model.delete) {
+            await this.inverterRepository.delete(model._id);
+            await this.configurationService.refreshInverters();
+            return { ...inverter, deletedAt: new Date() };
+        }
+        inverter.name = model.name ?? inverter.name;
+        inverter.description = model.description ?? inverter.description;
+        inverter.defaultMode = model.defaultMode ?? inverter.defaultMode;
+        inverter.releaseGraceMs = model.releaseGraceMs ?? inverter.releaseGraceMs;
+        for (const update of model.parameters ?? []) {
+            const parameter = inverter.parameters.find((p) => p.blockId === update.blockId);
+            if (!parameter) continue;
+            if (update.value !== undefined) {
+                parameter.value = update.value ?? undefined;
+            }
+            parameter.isPersistent = update.isPersistent ?? parameter.isPersistent;
+        }
+        const saved = await this.inverterRepository.save(inverter);
+        await this.configurationService.refreshInverters();
+        return saved;
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {

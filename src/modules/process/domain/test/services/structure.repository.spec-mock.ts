@@ -107,6 +107,7 @@ export async function createStructureServiceDeps(falsyType?: number): Promise<{
         {} as any,
         {} as any,
         { get: jest.fn().mockResolvedValue([]) } as any,
+        { get: jest.fn().mockResolvedValue([]), getByDeviceId: jest.fn().mockResolvedValue([]) } as any,
         { get: jest.fn().mockResolvedValue({}) } as any,
         { get: jest.fn().mockResolvedValue({}) } as any
     );

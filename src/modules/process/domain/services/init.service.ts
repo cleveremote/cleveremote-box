@@ -35,6 +35,7 @@ import { SlaveTemplateService } from './slave-template.service';
 import { DeviceConnectivityService } from './device-connectivity.service';
 import { DigitalIoMonitorService } from './digital-io-monitor.service';
 import { createTransport } from 'nodemailer';
+import { InverterControlService } from './inverter/inverter-control.service';
 
 // TODO: adapter a l'installation reelle une fois la connexion Modbus AO8CH configuree
 const DEFAULT_VALVE_DEVICE_ID = '8d6f3fe2-af41-405b-9523-a0a6fb589b80';
@@ -71,9 +72,15 @@ export class InitService {
         private readonly slaveTemplateService: SlaveTemplateService,
         private readonly deviceConnectivityService: DeviceConnectivityService,
         private readonly controlLoopRepository: ControlLoopRepository,
-        private readonly digitalIoMonitorService: DigitalIoMonitorService
+        private readonly digitalIoMonitorService: DigitalIoMonitorService,
+        private readonly inverterControlService: InverterControlService
     ) { }
 
+
+    private async _initInverters(): Promise<void> {
+        await this.configurationService.completeInverterSlaves();
+        await this.inverterControlService.load();
+    }
 
     public async initialize(): Promise<void> {
         this.logger.log('patch/test-version-watchtowerd1234');
@@ -110,6 +117,8 @@ export class InitService {
             
             //.then(() => wrap('DeviceService.watchMasterDevicesForNewSlaves', () => this.deviceService.watchMasterDevicesForNewSlaves()))
             //.then(() => wrap('InitService.testModbusFrame', () => this.testModbusFrame('<masterDeviceId>', 1, ModbusFunctionName.READ_COILS, 0, 8)))
+            // après le scan : variateurs créés sans leur élément INVERTER rattrapés, puis pilotés (baseline, mode par défaut)
+            .then(() => wrap('InverterControlService.load', () => this._initInverters()))
             .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
             .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))

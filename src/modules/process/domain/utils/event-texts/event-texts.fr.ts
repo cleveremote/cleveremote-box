@@ -36,7 +36,8 @@ const STOP_LABELS: Record<StopReason, (stop: EventStopModel) => string> = {
     [StopReason.CONFIRMATION_REFUSED]: (stop) => 'confirmation refusée' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_WAITING]: (stop) => 'arrêté pendant l\'attente de confirmation' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_QUEUED]: (stop) => 'arrêté pendant l\'attente en file' + ByUser(stop.by),
-    [StopReason.SKIPPED_BY_USER]: () => 'passée manuellement'
+    [StopReason.SKIPPED_BY_USER]: () => 'passée manuellement',
+    [StopReason.INVERTER_MANUAL]: (stop) => `arrêté : variateur ${Quote(stop.by?.refName)} passé en manuel`
 };
 
 const Origin = (origin: EventOriginModel | undefined): string => {
@@ -118,6 +119,14 @@ export const FR_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_STARTED]: (data, name) => `Séquence ${name} démarrée` +
             (data.plannedDuration ? ` (${FormatDuration(data.plannedDuration)} prévues)` : '') + (data.isForced ? ' — forcée' : ''),
         [ProcessEventKind.SEQUENCE_ENDED]: DescribeSequenceEnd,
-        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Séquence ${name} sautée : conditions non vérifiées${ConditionList(data)}`
+        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Séquence ${name} sautée : conditions non vérifiées${ConditionList(data)}`,
+        [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `Variateur ${name} en ${data.inverter?.mode ?? ''}` +
+            (data.inverter?.frequency !== undefined ? ` à ${data.inverter.frequency} Hz` : '') +
+            (data.inverter?.pidSetpoint !== undefined ? `, consigne ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.sequenceName ? ` (séquence ${Quote(data.inverter.sequenceName)})` : ' (mode par défaut)'),
+        [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `Variateur ${name} passé en manuel : directives des séquences ignorées`,
+        [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `Variateur ${name} revenu en mode auto`,
+        [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `Directive de la séquence ${Quote(data.inverter?.sequenceName ?? '')}` +
+            ` ignorée : variateur ${name} en manuel`
     }
 };

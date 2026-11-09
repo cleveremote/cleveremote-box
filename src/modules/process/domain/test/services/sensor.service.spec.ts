@@ -78,7 +78,8 @@ describe('SensorService', () => {
             [forcastStrategy, comStrategy],
             { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
             deviceRepository as never,
-            logger as never
+            logger as never,
+            { sensorsCreated$: new Subject<unknown>() } as never
         );
     });
 
@@ -314,7 +315,8 @@ describe('SensorService', () => {
                 [forcastStrategy],
                 { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
                 deviceRepository as never,
-                logger as never
+                logger as never,
+                { sensorsCreated$: new Subject<unknown>() } as never
             );
             const sensor = CreateComSensorModel({ _id: 'unsupported-type-sensor' });
             await serviceWithoutComStrategy.initScheduledSensor(sensor);

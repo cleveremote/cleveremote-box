@@ -1,7 +1,7 @@
 import { RegisterMapInputError } from '../errors/register-map.error';
 import { BoxErrorCode } from '@framework/errors/box-error';
 import {
-    CompositeField, OperationChannelParam, OperationInput, OperationResult, OperationResultParam, OperationValueParam, READ_FUNCTIONS,
+    AutoCreateType, CompositeField, OperationChannelParam, OperationInput, OperationResult, OperationResultParam, OperationValueParam, READ_FUNCTIONS,
     RegisterBlock, RegisterEnumEntry, RegisterFunction, RegisterMapTemplate, RegisterOperation, RegisterOperationParams, RegisterOperationValue,
     RegisterRequest
 } from '../models/register-map.model';
@@ -73,6 +73,10 @@ export class RegisterMapValidator {
             names.add(field.name);
             if (field.offset + RegisterFieldDecoder.wordCount(field) > length) errors.push(`${where}.${field.name}: dépasse params.length`);
             if (field.formula && !RegisterFieldDecoder.isNumeric(field)) errors.push(`${where}.${field.name}: formule sur un champ texte`);
+            if (field.autoCreateType !== undefined && !field.autoCreate) errors.push(`${where}.${field.name}: autoCreateType sans autoCreate`);
+            if (field.autoCreateType !== undefined && !(Object.values(AutoCreateType) as string[]).includes(field.autoCreateType)) {
+                errors.push(`${where}.${field.name}: autoCreateType "${field.autoCreateType}" inconnu`);
+            }
         }
     }
 
@@ -118,15 +122,17 @@ export class RegisterOperationDescriber {
         return { min: 0, max: count - 1, labelStart: template.hardware.channels?.labelStart ?? 1 };
     }
 
-    // Champs : nom, libellé, type et unité / description / autoCreate (si présents) ; autres résultats : type seul
+    // Champs : nom, libellé, type et unité / description / autoCreate / autoCreateType (si présents) ; autres résultats : type seul
     private static _result(result: Exclude<OperationResult, { type: 'echo' }>): OperationResultParam {
         if (result.type !== 'fields') {
             return { type: result.type };
         }
         return {
             type: 'fields',
-            fields: result.fields.map(({ name, label, type, unit, description, autoCreate }) =>
-                ({ name, label, type, ...(unit && { unit }), ...(description && { description }), ...(autoCreate && { autoCreate }) }))
+            fields: result.fields.map(({ name, label, type, unit, description, autoCreate, autoCreateType }) => ({
+                name, label, type, ...(unit && { unit }), ...(description && { description }), ...(autoCreate && { autoCreate }),
+                ...(autoCreateType && { autoCreateType })
+            }))
         };
     }
 

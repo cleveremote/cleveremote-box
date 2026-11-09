@@ -1894,7 +1894,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_01",
@@ -1902,7 +1904,9 @@
                 "offset": 1,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_02",
@@ -1910,7 +1914,9 @@
                 "offset": 2,
                 "type": "uint16",
                 "unit": "A",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_03",
@@ -1957,7 +1963,9 @@
                 "offset": 8,
                 "type": "uint16",
                 "unit": "%",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_09",
@@ -1965,7 +1973,9 @@
                 "offset": 9,
                 "type": "uint16",
                 "unit": "%",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_10",
@@ -2006,7 +2016,9 @@
                 "offset": 14,
                 "type": "bits",
                 "enum": "inputTerminals",
-                "description": "Bit n = Xn+1 : à vérifier sur l'appareil"
+                "description": "Bit n = Xn+1 : à vérifier sur l'appareil",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_15",
@@ -3847,7 +3859,9 @@
                 "label": "Canal de commande de marche",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "runChannel"
+                "enum": "runChannel",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -3905,7 +3919,9 @@
                 "label": "Source de fréquence canal A",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "frequencySource"
+                "enum": "frequencySource",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -3963,7 +3979,9 @@
                 "label": "Source de fréquence canal B",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "frequencySource"
+                "enum": "frequencySource",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4021,7 +4039,9 @@
                 "label": "Référence du canal B",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "channelBReference"
+                "enum": "channelBReference",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4079,7 +4099,9 @@
                 "label": "Combinaison des canaux de fréquence",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "frequencySourceSelection"
+                "enum": "frequencySourceSelection",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4136,7 +4158,9 @@
                 "name": "f00_07",
                 "label": "Liaison commande / source de fréquence",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4260,7 +4284,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4381,7 +4407,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4444,7 +4472,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4564,7 +4594,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "s",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -4625,7 +4657,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "s",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -5361,7 +5395,9 @@
                 "label": "Mode d'arrêt",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "stopMode"
+                "enum": "stopMode",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -6675,7 +6711,9 @@
                 "label": "Redémarrage après coupure secteur",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "invalidValid"
+                "enum": "invalidValid",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7237,7 +7275,9 @@
                 "label": "Fonction de l'entrée X1",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "inputFunction"
+                "enum": "inputFunction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7295,7 +7335,9 @@
                 "label": "Fonction de l'entrée X2",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "inputFunction"
+                "enum": "inputFunction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7353,7 +7395,9 @@
                 "label": "Fonction de l'entrée X3",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "inputFunction"
+                "enum": "inputFunction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7411,7 +7455,9 @@
                 "label": "Fonction de l'entrée X4",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "inputFunction"
+                "enum": "inputFunction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7469,7 +7515,9 @@
                 "label": "Fonction de l'entrée X5",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "inputFunction"
+                "enum": "inputFunction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -7816,7 +7864,9 @@
                 "name": "f02_10",
                 "label": "Logique des entrées X1-X4",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -8624,7 +8674,9 @@
                 "label": "Mode de commande par bornier",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "terminalMode"
+                "enum": "terminalMode",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -8681,7 +8733,9 @@
                 "name": "f02_24",
                 "label": "Protection de démarrage par bornier",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -23850,7 +23904,9 @@
                 "label": "Source de la consigne PID",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "pidSource"
+                "enum": "pidSource",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -23909,7 +23965,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "%",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -25893,7 +25951,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -25956,7 +26016,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -26019,7 +26081,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -26082,7 +26146,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -26145,7 +26211,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -26208,7 +26276,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -26271,7 +26341,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "Hz",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29094,7 +29166,9 @@
                 "name": "f13_00",
                 "label": "Maître / esclave",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29154,7 +29228,9 @@
                 "name": "f13_01",
                 "label": "Adresse RS485",
                 "offset": 0,
-                "type": "uint16"
+                "type": "uint16",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29214,7 +29290,9 @@
                 "name": "f13_02",
                 "label": "Vitesse de communication",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29275,7 +29353,9 @@
                 "label": "Format des données Modbus",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "dataFormat"
+                "enum": "dataFormat",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29456,7 +29536,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "s",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -29518,7 +29600,9 @@
                 "label": "Action sur défaut de communication",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "commFaultAction"
+                "enum": "commFaultAction",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }

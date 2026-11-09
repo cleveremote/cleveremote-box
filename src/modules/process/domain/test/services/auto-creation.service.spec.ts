@@ -87,7 +87,8 @@ describe('AutoCreationService (integration mongodb-memory-server for cycles)', (
             new DeviceOnlyAutoCreationStrategy()
         );
         const persister = new SlaveBundlePersister(
-            deviceRepository as never, actuatorRepository as never, cycleRepository, sequences, sensorRepository as never, logger as never
+            deviceRepository as never, actuatorRepository as never, cycleRepository, sequences, sensorRepository as never,
+            { save: jest.fn(), delete: jest.fn() } as never, logger as never
         );
         return new AutoCreationService(resolver, persister, deviceCommandRepository as never, deviceCommandService as never, logger as never);
     }

@@ -21,7 +21,7 @@ import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.int
 import { ComActuatorConfigModel } from '../models/actuator.model';
 import { DeviceCommandService } from './device-command.service';
 import { DeviceCommandType, InverterConfigParam } from '../models/device-command.model';
-import { ModuleTimingConfig } from '../models/sequence.model';
+import { ModuleTimingConfig, SequenceModel } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
 import { ActuatorService } from './actuator.service';
@@ -47,6 +47,7 @@ import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import { GlobalSettingsService } from './global-settings.service';
 import { ConfirmationRequestModel } from '../models/confirmation-request.model';
+import { InverterControlEvent, InverterControlService } from './inverter/inverter-control.service';
 
 type ProcessReport = { id: string; type: CauseType; cause: string }[];
 // causes d'une notification CONDITIONS_NOT_VERIFIED : id = element de la condition fausse
@@ -86,6 +87,8 @@ export class ProcessService {
     private forcedSequences = new Map<string, string[]>();
     // sequences terminees par un SKIP du front (journal : raison de fin de la sequence)
     private sequencesSkippedByUser = new Set<string>();
+    // sequences terminees parce que leur variateur est passe en manuel : sequence id -> variateur
+    private sequencesSkippedByInverter = new Map<string, { id: string; name: string }>();
     // cycle id -> process recu en QUEUED, demarre (FORCE) par _startQueuedCycles quand plus aucun
     // cycle en cours n'est en conflit avec lui ; ordre d'insertion = ordre de demarrage.
     private queuedCycles = new Map<string, ProcessModel>();
@@ -104,9 +107,12 @@ export class ProcessService {
         @Inject(forwardRef(() => ScheduleService)) private scheduleService: ScheduleService,
         private readonly logger: Logger,
         private deviceCommandService: DeviceCommandService,
-        private globalSettingsService: GlobalSettingsService
+        private globalSettingsService: GlobalSettingsService,
+        private inverterControlService: InverterControlService
     ) {
-
+        this.inverterControlService.events$.subscribe((event) => {
+            this._onInverterEvent(event).catch((error) => this.logger.warn({ error, kind: event.kind }, 'inverter event handling failed'));
+        });
     }
 
     public async execute(process: ProcessModel): Promise<void> {
@@ -1054,7 +1060,13 @@ export class ProcessService {
         const modules = cycle.getModules(actuators);
         return this.configurationService.structure.cycles.filter((cyc) =>
             cyc._id !== cycle._id && cyc.type !== CycleType.MODULE && cyc.status === ExecutableStatus.IN_PROCCESS &&
-            modules.some((module) => cyc.exists(module, actuators)));
+            (modules.some((module) => cyc.exists(module, actuators)) || ProcessService._sharesInverter(cycle, cyc)));
+    }
+
+    // deux cycles pilotant le meme variateur (directives de leurs sequences) sont en conflit, comme sur un actuator
+    private static _sharesInverter(cycle: CycleModel, other: CycleModel): boolean {
+        const inverterIds = cycle.getInverterIds?.() ?? [];
+        return inverterIds.length > 0 && (other.getInverterIds?.() ?? []).some((id) => inverterIds.includes(id));
     }
 
     // un cycle MODULE partageant un actuator n'est jamais un "conflit" a arbitrer ici (rang/
@@ -1078,6 +1090,14 @@ export class ProcessService {
                     conflictedExecutable.push(proc);
                 }
             });
+        });
+        this.processList.forEach((proc) => {
+            const isConflicting = proc.cycle._id !== process.cycle._id && proc.cycle.type !== CycleType.MODULE
+                && process.action !== 'OFF' && !conflictedExecutable.find((x) => x.cycle._id === proc.cycle._id)
+                && ProcessService._sharesInverter(process.cycle, proc.cycle);
+            if (isConflicting) {
+                conflictedExecutable.push(proc);
+            }
         });
 
         return conflictedExecutable;
@@ -1200,14 +1220,19 @@ export class ProcessService {
         );
     }
 
-    // termine la sequence en cours (reveille _runSequence) : le cycle passe a la suivante
-    private _skipSequence(sequenceId: string): void {
+    // termine la sequence en cours (reveille _runSequence) : le cycle passe a la suivante. byInverter : variateur
+    // passe en manuel (sinon SKIP du front)
+    private _skipSequence(sequenceId: string, byInverter?: { id: string; name: string }): void {
         const running = this.queuedSequences.find(x => x.sequenceId === sequenceId);
         if (!running) {
             this.logger.warn({ sequenceId }, 'sequence skip ignored (sequence not running)');
             return;
         }
-        this.sequencesSkippedByUser.add(sequenceId);
+        if (byInverter) {
+            this.sequencesSkippedByInverter.set(sequenceId, byInverter);
+        } else {
+            this.sequencesSkippedByUser.add(sequenceId);
+        }
         running.flag.next(null);
     }
 
@@ -1338,10 +1363,12 @@ export class ProcessService {
     // SEQUENCE_ENDED au passage a la suivante / en fin de cycle : duree ecoulee ou SKIP du front
     private _sequenceEndJournal(sequenceId: string, cycleId: string): Partial<ProcessEventData> {
         const isSkippedByUser = this.sequencesSkippedByUser.delete(sequenceId);
-        return {
-            runId: this._runOf(cycleId)?.runId, cycleId,
-            stop: { reason: isSkippedByUser ? StopReason.SKIPPED_BY_USER : StopReason.COMPLETED }
-        };
+        const inverter = this.sequencesSkippedByInverter.get(sequenceId);
+        this.sequencesSkippedByInverter.delete(sequenceId);
+        const stop: EventStopModel = inverter
+            ? { reason: StopReason.INVERTER_MANUAL, by: { source: EventSource.SYSTEM, refId: inverter.id, refName: inverter.name } }
+            : { reason: isSkippedByUser ? StopReason.SKIPPED_BY_USER : StopReason.COMPLETED };
+        return { runId: this._runOf(cycleId)?.runId, cycleId, stop };
     }
 
     // lance une sequence (coupe les modules de previousSeq, allume ceux de currentSeq) et attend sa fin :
@@ -1372,10 +1399,60 @@ export class ProcessService {
         return !(await this._getSequenceConditionCauses(sequenceId));
     }
 
-    private _getSequenceConditionCauses(sequenceId: string): Promise<ConditionReport | null> {
+    // conditions de securite de la sequence, puis variateurs pilotes par la sequence en manuel (sequence sautee)
+    private async _getSequenceConditionCauses(sequenceId: string): Promise<ConditionReport | null> {
         const sequence = this.configurationService.sequences.find(x => x._id === sequenceId);
-        return this._getConditionCauses(sequence?.securityConfig?.conditions,
+        const conditionCauses = await this._getConditionCauses(sequence?.securityConfig?.conditions,
             (detail) => this.logger.warn({ sequenceId, ...detail }, 'sequence conditions not verified'));
+        const inverterCauses = this._getInverterManualCauses(sequence);
+        if (inverterCauses.length) {
+            this.logger.warn({ sequenceId, inverterIds: inverterCauses.map((x) => x.id) }, 'sequence inverter in manual mode');
+        }
+        const causes = [...(conditionCauses ?? []), ...inverterCauses];
+        return causes.length ? causes : null;
+    }
+
+    // une cause par variateur en manuel pilote par la sequence : ses directives ne peuvent pas s'appliquer
+    private _getInverterManualCauses(sequence: SequenceModel | undefined): ConditionReport {
+        return (sequence?.inverterDirectives ?? [])
+            .filter((directive) => this.inverterControlService.isManual(directive.inverterId))
+            .map((directive) => {
+                const condition: ConditionCauseModel = {
+                    elementId: directive.inverterId, elementType: ElementType.INVERTER,
+                    elementName: this.inverterControlService.get(directive.inverterId)?.name,
+                    operator: '=', expected: 'AUTO', current: 'MANUAL'
+                };
+                return { id: directive.inverterId, type: 'CONDITION' as const, cause: this._describeCondition(condition), condition };
+            });
+    }
+
+    // directives des variateurs de la sequence : ON = la sequence prend la main, OFF = rend la main (mode par defaut)
+    private _driveSequenceInverters(sequence: SequenceModel, action: ExecutableAction): void {
+        for (const directive of sequence.inverterDirectives ?? []) {
+            if (action === ExecutableAction.ON) {
+                const { inverterId, ...inverterDirective } = directive;
+                this.inverterControlService.request(inverterId, inverterDirective, sequence._id, sequence.name)
+                    .catch((error) => this.logger.warn({ error, inverterId, sequenceId: sequence._id }, 'inverter directive failed'));
+            } else {
+                this.inverterControlService.release(directive.inverterId, sequence._id);
+            }
+        }
+    }
+
+    // journal des variateurs ; manuel engage : la sequence qui le pilote est sautee (ses directives ne s'appliquent plus)
+    private async _onInverterEvent({ kind, inverter, detail }: InverterControlEvent): Promise<void> {
+        if (kind === ProcessEventKind.INVERTER_MANUAL_ENGAGED && detail.sequenceId
+            && this.queuedSequences.some((x) => x.sequenceId === detail.sequenceId)) {
+            this.logger.log({ inverterId: inverter._id, sequenceId: detail.sequenceId }, 'inverter switched to manual, skipping its sequence');
+            this._skipSequence(detail.sequenceId, { id: inverter._id, name: inverter.name });
+        }
+        const status = this.inverterControlService.getStatus(inverter._id);
+        await this._publishStatusEvent({
+            elementId: inverter._id,
+            date: new Date(),
+            elementType: ElementType.INVERTER,
+            additionalData: { type: ProcessMode.SYSTEM, kind, name: inverter.name, inverter: detail }
+        }, { type: ElementType.INVERTER, id: inverter._id, ...status, ...detail, mode: detail.mode ?? status?.mode });
     }
 
     private async _switchProcess(previousData: { id: string; names: string[]; duration: number },
@@ -1454,6 +1531,7 @@ export class ProcessService {
                 this.deviceCommandService.execute(customStack.commandId, customStack.deviceId, action === ExecutableAction.ON ? customStack.params : customStack.defaultParams)
                     .catch((error) => this.logger.warn({ error, commandId: customStack.commandId, deviceId: customStack.deviceId }, 'sequence custom stack failed'));
             }
+            this._driveSequenceInverters(seqFound, action);
 
             seqFound.status = status;
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
@@ -1507,18 +1585,7 @@ export class ProcessService {
      * opération 'set', persist = écriture EEPROM). Paramètre inconnu ou valeur hors plage : ignoré.
      */
     public async applyInverterConfig(inverterId: string, params: InverterConfigParam[]): Promise<void> {
-        for (const { param, value, persist: isPersistent } of params) {
-            try {
-                const outcome = await this.deviceCommandService.executeOnDevice(inverterId, {
-                    blockId: param.toUpperCase(), operationId: 'set', value, isPersistent, isConfirmed: true
-                });
-                if (outcome.isOk) {
-                    this.logger.log({ inverterId, param, value, persist: !!isPersistent }, 'inverter param written');
-                }
-            } catch (err) {
-                this.logger.warn({ inverterId, param, err: err.message }, 'inverter param skipped');
-            }
-        }
+        return this.inverterControlService.writeParameters(inverterId, params);
     }
 
     private _needConfirmation(processModel: ProcessModel, causes: { type: CauseType; cause: string }[],

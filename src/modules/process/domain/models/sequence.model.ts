@@ -1,6 +1,7 @@
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
 import { DeviceCommandOverride } from './device-command.model';
+import { SequenceInverterDirective } from './inverter.model';
 
 export interface ModuleTimingConfig {
     waitBeforeExec: number;
@@ -43,6 +44,9 @@ export class SequenceModel {
     public securityConfig: SecurityConfig = { maxDuration: undefined };
     // references vers des modules partages entre plusieurs sequences (moduleId + timings propres a cet usage)
     public moduleConfigs: SequenceModuleRef[] = [];
+    // directives données aux variateurs pendant la séquence (mode PID / RS485 et consigne) ; restituées au mode par
+    // défaut du variateur à la fin de la séquence
+    public inverterDirectives?: SequenceInverterDirective[];
 
     public createdAt?: Date;
     public updatedAt?: Date;
@@ -50,5 +54,9 @@ export class SequenceModel {
 
     public getActuatorIds(): string[] {
         return this.moduleConfigs.map((ref) => ref.moduleId);
+    }
+
+    public getInverterIds(): string[] {
+        return (this.inverterDirectives ?? []).map((directive) => directive.inverterId);
     }
 }

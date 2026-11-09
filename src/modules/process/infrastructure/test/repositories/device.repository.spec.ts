@@ -22,6 +22,7 @@ describe('DeviceRepository', () => {
             mongooseRepository as never as DeviceMongooseRepository,
             actuatorRepository as never as ActuatorRepository,
             sensorRepository as never as SensorRepository,
+            { deleteForDevice: jest.fn() } as never,
             modbusService as never,
             { warn: jest.fn(), error: jest.fn() } as never
         );

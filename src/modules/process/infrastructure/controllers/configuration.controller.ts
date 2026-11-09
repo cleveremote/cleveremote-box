@@ -18,7 +18,7 @@ import { EventPurgeResultModel } from '@process/domain/models/event-purge.model'
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO, ControlLoopSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO, ControlLoopSynchronizeDTO, InverterSynchronizeDTO } from '../dto/synchronize.dto';
 import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
@@ -34,6 +34,8 @@ import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.u
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { ControlLoopSynchronizeUC } from '@process/use-cases/control-loop-synchronize.uc';
 import { ControlLoopModel } from '@process/domain/models/control-loop.model';
+import { InverterSynchronizeUC } from '@process/use-cases/inverter-synchronize.uc';
+import { InverterModel } from '@process/domain/models/inverter.model';
 import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
 import { DeviceService } from '@process/domain/services/device.service';
 import { CheckDeviceDTO, DiscoverDeviceDTO } from '../dto/discover.dto';
@@ -162,6 +164,12 @@ export class ConfigurationController {
         const uc = new ControlLoopSynchronizeUC(this._synchronizeService);
         const input = ControlLoopSynchronizeDTO.mapToControlLoopModel(controlLoopSynchronizeDTO);
         return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/inverter'])
+    public async synchroniseInverter(@Payload() inverterSynchronizeDTO: InverterSynchronizeDTO): Promise<InverterModel> {
+        const uc = new InverterSynchronizeUC(this._synchronizeService);
+        return uc.execute(InverterSynchronizeDTO.mapToInverterModel(inverterSynchronizeDTO));
     }
 
     @MessagePattern(['box/synchronize/actuator'])

@@ -9,6 +9,7 @@ import { ModbusDeviceService } from '@process/domain/services/modbus-device.serv
 import { DeviceMongooseRepository } from './device-mongoose.repository';
 import { ActuatorRepository } from './actuator.repository';
 import { SensorRepository } from './sensor.repository';
+import { InverterRepository } from './inverter.repository';
 
 type DeviceCascade = (deviceId: string) => Promise<void>;
 type BeforeDeleteHook = () => Promise<void>;
@@ -28,6 +29,7 @@ export class DeviceRepository {
         private deviceMongooseRepository: DeviceMongooseRepository,
         private actuatorRepository: ActuatorRepository,
         private sensorRepository: SensorRepository,
+        private inverterRepository: InverterRepository,
         @Inject(forwardRef(() => ModbusDeviceService)) private modbusDeviceService: ModbusDeviceService,
         private readonly logger: Logger
     ) { }
@@ -37,6 +39,11 @@ export class DeviceRepository {
     // DeviceKind doit etre declare ici. Device sans kind (master, slave generique) : actionneurs rattaches.
     private readonly _defaultCascade: DeviceCascade = (deviceId) => this.actuatorRepository.deleteForDevice(deviceId);
     private readonly _sensorCascade: DeviceCascade = (deviceId) => this.sensorRepository.deleteForDevice(deviceId);
+    // variateur : élément INVERTER + sensors du monitoring
+    private readonly _inverterCascade: DeviceCascade = async (deviceId) => {
+        await this.inverterRepository.deleteForDevice(deviceId);
+        await this.sensorRepository.deleteForDevice(deviceId);
+    };
     private readonly _cascadeByKind: Record<DeviceKind, DeviceCascade> = {
         [DeviceKind.DIGITAL_IO_8_CH]: this._defaultCascade,
         [DeviceKind.FLOWMETER_V1]: this._sensorCascade,
@@ -46,8 +53,8 @@ export class DeviceRepository {
         [DeviceKind.TEMPERATURE_MOISTURE_V1]: this._sensorCascade,
         // sensors ANALOG racines (un par voie, config.deviceId = slave)
         [DeviceKind.ANALOG_INPUT_8_CH]: this._sensorCascade,
-        // TODO: a adapter quand l'auto-creation variateur / analog output sera implementee
-        [DeviceKind.INVERTER_VEICHI_SI23_V1]: this._defaultCascade,
+        [DeviceKind.INVERTER_VEICHI_SI23_V1]: this._inverterCascade,
+        // TODO: a adapter quand l'auto-creation analog output sera implementee
         [DeviceKind.ANALOG_OUTPUT_8_CH]: this._defaultCascade,
         [DeviceKind.ANALOG_OUTPUT_8_CH_MA]: this._defaultCascade,
         [DeviceKind.MODBUS_SLAVE]: this._defaultCascade,

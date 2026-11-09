@@ -4,6 +4,7 @@ import { DeviceModel } from './device.model';
 import { DeviceCommandModel } from './device-command.model';
 import { ActuatorModel } from './actuator.model';
 import { ControlLoopModel } from './control-loop.model';
+import { InverterMode } from './inverter.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
@@ -51,5 +52,17 @@ export class SynchronizeActuatorModel extends ActuatorModel {
 }
 
 export class SynchronizeControlLoopModel extends ControlLoopModel {
+    public delete?: boolean = false;
+}
+
+// édition d'un élément variateur (créé uniquement par l'auto-création) : seuls les réglages modifiables sont repris
+export class SynchronizeInverterModel {
+    public _id: string;
+    public name?: string;
+    public description?: string;
+    public defaultMode?: InverterMode;
+    public releaseGraceMs?: number;
+    // valeur imposée par paramètre (null : plus imposée) ; paramètres inconnus ignorés
+    public parameters?: { blockId: string; value?: number | null; isPersistent?: boolean }[];
     public delete?: boolean = false;
 }

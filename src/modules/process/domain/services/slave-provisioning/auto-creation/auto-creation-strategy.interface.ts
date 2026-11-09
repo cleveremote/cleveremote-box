@@ -1,12 +1,16 @@
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { DeviceKind, DeviceModel, SlaveTemplate } from '@process/domain/models/device.model';
+import { InverterModel } from '@process/domain/models/inverter.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 
 export const AUTO_CREATION_STRATEGIES = 'AUTO_CREATION_STRATEGIES';
 
 // Slave construit à partir d'un template, avec les éléments qui lui sont rattachés
-export type SlaveBundle = { device: DeviceModel; actuators: ActuatorModel[]; cycles: CycleModel[]; sensors: SensorModel[] };
+// inverters : élément variateur (kinds variateur uniquement)
+export type SlaveBundle = {
+    device: DeviceModel; actuators: ActuatorModel[]; cycles: CycleModel[]; sensors: SensorModel[]; inverters?: InverterModel[];
+};
 
 // Éléments rattachés produits par une stratégie (le device est construit par AutoCreationService)
 export type AutoCreatedElements = Omit<SlaveBundle, 'device'>;

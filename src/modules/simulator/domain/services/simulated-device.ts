@@ -62,6 +62,15 @@ export class SimulatedDevice {
         this._tables[table].set(address, value);
     }
 
+    public delete(table: ModbusTable, address: number): void {
+        this._tables[table].delete(address);
+    }
+
+    /** Adresses écrites d'une table (ordre d'insertion) */
+    public addresses(table: ModbusTable): number[] {
+        return [...this._tables[table].keys()];
+    }
+
     public setIfAbsent(table: ModbusTable, address: number, value: number): void {
         if (!this.has(table, address)) {
             this.set(table, address, value);

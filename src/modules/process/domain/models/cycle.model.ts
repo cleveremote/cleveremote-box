@@ -50,6 +50,11 @@ export class CycleModel implements IExecutable {
         return this.sequences.flatMap((sequence) => sequence.getActuatorIds());
     }
 
+    // variateurs pilotés par au moins une séquence du cycle
+    public getInverterIds(): string[] {
+        return [...new Set(this.sequences.flatMap((sequence) => sequence.getInverterIds?.() ?? []))];
+    }
+
     public getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[] {
         let modules: IActuatorModule[] = [];
         this.sequences.forEach((sequence) => {

@@ -35,7 +35,8 @@ const STOP_LABELS: Record<StopReason, (stop: EventStopModel) => string> = {
     [StopReason.CONFIRMATION_REFUSED]: (stop) => 'رُفض التأكيد' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_WAITING]: (stop) => 'أُوقف أثناء انتظار التأكيد' + ByUser(stop.by),
     [StopReason.CANCELLED_WHILE_QUEUED]: (stop) => 'أُوقف أثناء الانتظار في الطابور' + ByUser(stop.by),
-    [StopReason.SKIPPED_BY_USER]: () => 'تم تخطيه يدويًا'
+    [StopReason.SKIPPED_BY_USER]: () => 'تم تخطيه يدويًا',
+    [StopReason.INVERTER_MANUAL]: (stop) => `أُوقف: المحول ${Quote(stop.by?.refName)} في الوضع اليدوي`
 };
 
 const Origin = (origin: EventOriginModel | undefined): string => {
@@ -118,6 +119,14 @@ export const AR_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_STARTED]: (data, name) => `بدأ التسلسل ${name}` +
             (data.plannedDuration ? ` (المدة المقررة ${FormatDuration(data.plannedDuration)})` : '') + (data.isForced ? ' — مفروض' : ''),
         [ProcessEventKind.SEQUENCE_ENDED]: DescribeSequenceEnd,
-        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `تم تخطي التسلسل ${name}: الشروط غير مستوفاة${ConditionList(data)}`
+        [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `تم تخطي التسلسل ${name}: الشروط غير مستوفاة${ConditionList(data)}`,
+        [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `المحول ${name} في وضع ${data.inverter?.mode ?? ''}` +
+            (data.inverter?.frequency !== undefined ? ` بتردد ${data.inverter.frequency} هرتز` : '') +
+            (data.inverter?.pidSetpoint !== undefined ? `، القيمة المرجعية ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.sequenceName ? ` (التسلسل ${Quote(data.inverter.sequenceName)})` : ' (الوضع الافتراضي)'),
+        [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `المحول ${name} في الوضع اليدوي: تم تجاهل توجيهات التسلسلات`,
+        [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `عاد المحول ${name} إلى الوضع التلقائي`,
+        [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `تم تجاهل توجيه التسلسل ${Quote(data.inverter?.sequenceName ?? '')}` +
+            `: المحول ${name} في الوضع اليدوي`
     }
 };

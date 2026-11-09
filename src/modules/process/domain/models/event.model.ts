@@ -4,7 +4,8 @@ import { ConfirmationRequestModel } from './confirmation-request.model';
 export enum ElementType {
     CYCLE = 'CYCLE',
     SEQUENCE = 'SEQUENCE',
-    SENSOR = 'SENSOR'
+    SENSOR = 'SENSOR',
+    INVERTER = 'INVERTER'
 }
 
 // etape du journal d'execution d'un cycle (cf. RunContextModel : tous les events d'un run partagent son runId)
@@ -17,7 +18,21 @@ export enum ProcessEventKind {
     CYCLE_ENDED = 'CYCLE_ENDED',
     SEQUENCE_STARTED = 'SEQUENCE_STARTED',
     SEQUENCE_ENDED = 'SEQUENCE_ENDED',
-    SEQUENCE_SKIPPED = 'SEQUENCE_SKIPPED' // conditions de la sequence fausses
+    SEQUENCE_SKIPPED = 'SEQUENCE_SKIPPED', // conditions de la sequence fausses
+    // variateur (name = variateur, inverter = detail)
+    INVERTER_MODE_CHANGED = 'INVERTER_MODE_CHANGED', // directive appliquee (mode, consigne)
+    INVERTER_MANUAL_ENGAGED = 'INVERTER_MANUAL_ENGAGED', // switchs S1..S3 fermes : directives des sequences ignorees
+    INVERTER_MANUAL_RELEASED = 'INVERTER_MANUAL_RELEASED', // switchs rouverts : retour au mode auto
+    INVERTER_DIRECTIVE_IGNORED = 'INVERTER_DIRECTIVE_IGNORED' // directive d'une sequence (forcee) non ecrite : variateur en manuel
+}
+
+// detail d'un event variateur
+export class InverterEventDetail {
+    public mode?: string;
+    public frequency?: number;
+    public pidSetpoint?: number;
+    public sequenceId?: string;
+    public sequenceName?: string;
 }
 
 // qui a emis l'ordre (plus precis que ProcessMode, qui ne sert qu'a l'arbitrage des rangs)
@@ -46,7 +61,8 @@ export enum StopReason {
     CONFIRMATION_REFUSED = 'CONFIRMATION_REFUSED',
     CANCELLED_WHILE_WAITING = 'CANCELLED_WHILE_WAITING',
     CANCELLED_WHILE_QUEUED = 'CANCELLED_WHILE_QUEUED',
-    SKIPPED_BY_USER = 'SKIPPED_BY_USER' // sequence : commande SKIP du front
+    SKIPPED_BY_USER = 'SKIPPED_BY_USER', // sequence : commande SKIP du front
+    INVERTER_MANUAL = 'INVERTER_MANUAL' // sequence : variateur pilote passe en manuel (by = variateur)
 }
 
 export enum ConfirmationAnswer {
@@ -128,6 +144,7 @@ export class ProcessEventData {
     public realDuration?: number;
     public plannedDuration?: number;
     public sequences?: EventSequencesSummary;
+    public inverter?: InverterEventDetail; // events INVERTER_*
     public message?: string;
 }
 

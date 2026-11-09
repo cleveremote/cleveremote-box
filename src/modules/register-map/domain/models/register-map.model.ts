@@ -52,6 +52,12 @@ export interface CompositeField {
     default?: number;
 }
 
+// Usage d'un champ autoCreate à la création du slave : sensor (mesure lue sur cron) ou paramètre embarqué par l'élément variateur
+export enum AutoCreateType {
+    SENSOR = 'sensor',
+    INVERTER = 'inverter'
+}
+
 // Types de données Modbus décodables sur un ou plusieurs mots de 16 bits
 export type RegisterFieldType = 'int16' | 'uint16' | 'int32' | 'uint32' | 'float' | 'bits' | 'bcd' | 'bcdDateTime' | 'ascii' | 'hex';
 
@@ -75,8 +81,10 @@ export interface RegisterField {
     // Valeur attendue (registres de test)
     expected?: number;
     description?: string;
-    // Champ de mesure transformé en sensor (enfant du sensor de sa lecture) à la création du slave
+    // Champ repris à la création du slave (cf. autoCreateType)
     autoCreate?: boolean;
+    // Usage du champ autoCreate : sensor (défaut, enfant du sensor de sa lecture) ou paramètre du variateur
+    autoCreateType?: AutoCreateType;
 }
 
 export type OperationInput =
@@ -199,6 +207,7 @@ export interface ResultFieldParam {
     unit?: string;
     description?: string;
     autoCreate?: boolean;
+    autoCreateType?: AutoCreateType;
 }
 
 // Résultat résolu d'une lecture : champs décrits pour 'fields', type seul sinon

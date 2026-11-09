@@ -45,6 +45,6 @@ import { DeviceOnlyAutoCreationStrategy } from './auto-creation/strategies/devic
             ]
         }
     ],
-    exports: [SlaveScanService, AutoCreationService]
+    exports: [SlaveScanService, AutoCreationService, SlaveBundlePersister]
 })
 export class SlaveProvisioningModule { }

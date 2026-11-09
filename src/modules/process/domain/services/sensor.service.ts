@@ -14,6 +14,7 @@ import { ReadResult, SENSOR_STRATEGIES, SensorStrategy } from './sensor-strategi
 import { GlobalSettingsService } from './global-settings.service';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel } from '../models/device.model';
+import { SlaveBundlePersister } from './slave-provisioning/auto-creation/slave-bundle.persister';
 
 @Injectable()
 export class SensorService {
@@ -29,13 +30,24 @@ export class SensorService {
         @Inject(SENSOR_STRATEGIES) strategies: SensorStrategy[],
         private globalSettingsService: GlobalSettingsService,
         private deviceRepository: DeviceRepository,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        slaveBundlePersister: SlaveBundlePersister
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.type, strategy]));
         // patterns a recalculer dans le nouveau fuseau (et meteo relue a la nouvelle position)
         this.globalSettingsService.onLocationChanged.subscribe(() => {
             this.restartAllScheduledSensors().catch((error) => this.logger.error({ error }, 'failed to restart sensors after location change'));
         });
+        // sensors créés par un scan (ou le rattrapage d'un slave) : lus sans attendre le prochain redémarrage
+        slaveBundlePersister.sensorsCreated$.subscribe((sensors) => this._scheduleCreatedSensors(sensors));
+    }
+
+    private _scheduleCreatedSensors(sensors: SensorModel[]): void {
+        for (const sensor of sensors) {
+            this.initScheduledSensor(sensor, false)
+                .catch((error) => this.logger.warn({ error, sensorId: sensor._id }, 'failed to schedule auto-created sensor'));
+        }
+        this.logger.log({ count: sensors.length }, 'auto-created sensors scheduled');
     }
 
     public async initialize(): Promise<void> {

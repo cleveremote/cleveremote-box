@@ -65,6 +65,18 @@ export class AutoCreationService {
         return { ...device, deviceCommands };
     }
 
+    /**
+     * Rattrapage : crée les éléments rattachés d'un slave déjà persisté (ex: slave créé avant l'implémentation de la
+     * stratégie de son kind), sans toucher au device. L'appelant vérifie que ces éléments n'existent pas déjà.
+     */
+    public async completeSlave(device: DeviceModel, template: SlaveTemplate): Promise<SlaveBundle> {
+        const elements = await this.resolver.resolve(template.kind).build({ device, template });
+        const saved = await this.persister.saveElements(device, elements);
+        this.logger.log({ deviceId: device._id, kind: template.kind, sensors: saved.sensors.length, inverters: saved.inverters?.length ?? 0 },
+            'slave elements completed');
+        return saved;
+    }
+
     // Ajoute un suffixe incrémental (" 1", " 2", ...) si un device du même type porte déjà ce nom
     private _uniqueDeviceName(baseName: string, type: DeviceType, devices: DeviceModel[]): string {
         const existing = new Set(

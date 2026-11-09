@@ -6,6 +6,7 @@ import { DeviceRepository } from '@process/infrastructure/repositories/device.re
 import { SlaveTemplateRepository } from '@process/infrastructure/repositories/slave-template.repository';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
+import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
 import { AuthenticationRepository } from '@process/infrastructure/repositories/authentication.repository';
 import { ToAccountModel } from '../models/authentication.model';
 import { CycleModel } from '../models/cycle.model';
@@ -24,7 +25,9 @@ import { BuildCycleRuns } from '../utils/cycle-history.util';
 import { TranslateEventMessages } from '../utils/process-event-message.util';
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
-import { DeviceWithCommands, SlaveTemplate } from '../models/device.model';
+import { DeviceKind, DeviceModel, DeviceType, DeviceWithCommands, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
+import { InverterModel } from '../models/inverter.model';
+import { ResolveInverterProfile } from './inverter/profiles/inverter-profile.resolver';
 import { DeviceCommandModel } from '../models/device-command.model';
 import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
 import { SensorType } from '../interfaces/sensor.interface';
@@ -54,6 +57,7 @@ export class StructureService {
         private slaveScanService: SlaveScanService,
         private autoCreationService: AutoCreationService,
         private controlLoopRepository: ControlLoopRepository,
+        private inverterRepository: InverterRepository,
         private globalSettingsService: GlobalSettingsService,
         private authenticationRepository: AuthenticationRepository
     ) {
@@ -71,6 +75,7 @@ export class StructureService {
         this._attachSensorCommands(structureModel.sensors, structureModel.models);
         structureModel.actuators = await this.actuatorRepository.get() as StructureModel['actuators'];
         structureModel.controlLoops = await this.controlLoopRepository.get() as StructureModel['controlLoops'];
+        structureModel.inverters = await this.inverterRepository.get() as InverterModel[];
         structureModel.globalSettings = await this.globalSettingsService.get();
         const authentication = await this.authenticationRepository.get();
         structureModel.account = authentication?.id ? ToAccountModel(authentication) : null;
@@ -282,6 +287,36 @@ export class StructureService {
         for await (const scanned of this.slaveScanService.scan(masterDeviceId, templates)) {
             created.push(await this.autoCreationService.createSlave(scanned, masterDeviceId, { existingDevices: this.structure.devices, templates }));
         }
+        await this.refreshInverters();
         return created;
+    }
+
+    /**
+     * Rattrapage des slaves variateur créés sans leur élément INVERTER (avant l'implémentation de son auto-création) :
+     * crée l'élément et les sensors du monitoring depuis le template du slave. Renvoie les variateurs créés.
+     */
+    public async completeInverterSlaves(): Promise<InverterModel[]> {
+        const devices = await this.deviceRepository.get() as DeviceModel[];
+        const inverterSlaves = devices.filter((device) => device.type === DeviceType.SLAVE && !device.deletedAt
+            && ResolveInverterProfile((device.config as SlaveConfigModel)?.kind as DeviceKind));
+        if (!inverterSlaves.length) return [];
+        const templates = await this.slaveTemplateRepository.get();
+        const created: InverterModel[] = [];
+        for (const device of inverterSlaves) {
+            if ((await this.inverterRepository.getByDeviceId(device._id)).length) continue;
+            const template = templates.find((t) => t._id === (device.config as SlaveConfigModel).modelId);
+            if (!template) continue;
+            const bundle = await this.autoCreationService.completeSlave(device, template);
+            created.push(...(bundle.inverters ?? []));
+        }
+        await this.refreshInverters();
+        return created;
+    }
+
+    // éléments variateur de la structure relus (créés par un scan ou un rattrapage)
+    public async refreshInverters(): Promise<void> {
+        if (this.structure) {
+            this.structure.inverters = await this.inverterRepository.get() as InverterModel[];
+        }
     }
 }

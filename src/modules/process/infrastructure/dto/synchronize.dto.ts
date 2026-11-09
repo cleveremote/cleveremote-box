@@ -16,6 +16,7 @@ import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel
 import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { InverterMode } from '@process/domain/models/inverter.model';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
@@ -23,6 +24,7 @@ import {
     SynchronizeDeviceCommandModel,
     SynchronizeActuatorModel,
     SynchronizeControlLoopModel,
+    SynchronizeInverterModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
     SynchronizeSequenceModel,
@@ -111,6 +113,21 @@ export class SecurityConfigSync {
     public customStacks?: CustomStackSync[];
 }
 
+// directive donnée à un variateur pendant la séquence : RS485 (frequency, Hz) ou PID (pidSetpoint optionnel)
+export class SequenceInverterDirectiveSync {
+    @IsString()
+    @IsNotEmpty()
+    public inverterId: string;
+    @IsEnum(InverterMode)
+    public mode: InverterMode;
+    @ValidateIf((o) => o.mode === InverterMode.RS485)
+    @IsNumber()
+    public frequency?: number;
+    @IsOptional()
+    @IsNumber()
+    public pidSetpoint?: number;
+}
+
 export class SequenceSync {
     @IsOptional()
     @IsString()
@@ -129,6 +146,11 @@ export class SequenceSync {
     @ValidateNested({ each: true })
     @Type(() => moduleConfigsSync)
     public moduleConfigs: moduleConfigsSync[];
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SequenceInverterDirectiveSync)
+    public inverterDirectives?: SequenceInverterDirectiveSync[];
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
@@ -293,6 +315,14 @@ export class CycleSynchronizeDTO {
                     configTiming: moduleDto.configTiming || { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 },
                     ...(moduleDto.customValue !== undefined && { customValue: moduleDto.customValue })
                 }));
+            if (sequenceSync.inverterDirectives !== undefined) {
+                sequence.inverterDirectives = sequenceSync.inverterDirectives.map((directiveSync) => ({
+                    inverterId: directiveSync.inverterId,
+                    mode: directiveSync.mode,
+                    ...(directiveSync.mode === InverterMode.RS485 && { frequency: directiveSync.frequency }),
+                    ...(directiveSync.mode === InverterMode.PID && directiveSync.pidSetpoint !== undefined && { pidSetpoint: directiveSync.pidSetpoint })
+                }));
+            }
             sequence.delete = sequenceSync.delete ?? false;
             return sequence;
         });
@@ -780,6 +810,59 @@ export class ValveSynchronizeDTO {
         valveModel.config = config;
         valveModel.delete = valveSynchronizeDTO.delete ?? false;
         return valveModel;
+    }
+}
+
+export class InverterParameterSyncDTO {
+    @IsString()
+    @IsNotEmpty()
+    public blockId: string;
+    // null : valeur plus imposée
+    @IsOptional()
+    @ValidateIf((_o, value) => value !== null)
+    @IsNumber()
+    public value?: number | null;
+    @IsOptional()
+    @IsBoolean()
+    public isPersistent?: boolean;
+}
+
+// réglages d'un élément variateur existant (créé par l'auto-création du slave)
+export class InverterSynchronizeDTO {
+    @IsString()
+    @IsNotEmpty()
+    public _id: string;
+    @IsOptional()
+    @IsString()
+    public name?: string;
+    @IsOptional()
+    @IsString()
+    public description?: string;
+    @IsOptional()
+    @IsEnum(InverterMode)
+    public defaultMode?: InverterMode;
+    @IsOptional()
+    @IsNumber()
+    public releaseGraceMs?: number;
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => InverterParameterSyncDTO)
+    public parameters?: InverterParameterSyncDTO[];
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToInverterModel(dto: InverterSynchronizeDTO): SynchronizeInverterModel {
+        const model = new SynchronizeInverterModel();
+        model._id = dto._id;
+        model.name = dto.name;
+        model.description = dto.description;
+        model.defaultMode = dto.defaultMode;
+        model.releaseGraceMs = dto.releaseGraceMs;
+        model.parameters = dto.parameters?.map(({ blockId, value, isPersistent }) => ({ blockId, value, isPersistent }));
+        model.delete = dto.delete ?? false;
+        return model;
     }
 }
 
