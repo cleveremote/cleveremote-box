@@ -8,7 +8,6 @@ import { SensorService } from './sensor.service';
 import { AuthenticationService } from './authentication.service';
 import { Gpio } from 'onoff';
 import { getGPIO } from 'src/common/tools/find_gipio';
-import { BleService } from './ble.service';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
@@ -54,7 +53,6 @@ export class InitService {
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private bleService: BleService,
         private modbusBus: ModbusBusService,
         private actuatorRepository: ActuatorRepository,
         private ctrlActuatorStrategy: CtrlActuatorStrategy,
@@ -120,7 +118,6 @@ export class InitService {
             // après le scan : variateurs créés sans leur élément INVERTER rattrapés, puis pilotés (baseline, mode par défaut)
             .then(() => wrap('InverterControlService.load', () => this._initInverters()))
             .then(() => wrap('WaveshareDiscoveryService.discover', () => this.waveshareDiscoveryService.discover()))
-            .then(() => wrap('BleService.initialize', () => this.bleService.initialize()))
             .then(() => wrap('AuthenticationService.initAuthentication', () => this.authenticationService.initAuthentication()))
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
             .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose

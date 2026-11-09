@@ -19,10 +19,10 @@ function run(cmd) {
 console.log(`Building for ${platformTag} with Node ${process.version}`);
 console.log(`(this executable will only run on ${platformTag} machines — see scripts/BUILD-SEA.md to build for another platform)\n`);
 
-// Native addons (epoll, bcrypt, i2c-bus, pi-spi, hci-socket, @serialport/bindings-cpp) are
+// Native addons (epoll, bcrypt, @serialport/bindings-cpp) are
 // compiled for whatever Node/platform is currently active. Catch a stale/mismatched build
 // here instead of shipping a binary that silently fails to load them.
-const nativeProbes = ["epoll", "bcrypt", "i2c-bus", "pi-spi", "hci-socket", "@serialport/bindings-cpp"];
+const nativeProbes = ["epoll", "bcrypt", "@serialport/bindings-cpp"];
 function probeNativeModules() {
   const script = nativeProbes
     .map((m) => `try { require(${JSON.stringify(m)}); } catch (e) { console.log(${JSON.stringify(m)} + ": " + e.message); process.exitCode = 1; }`)
@@ -129,12 +129,3 @@ fs.rmSync(path.join(releaseDir, "bundle.js"), { force: true });
 
 console.log(`\nDone. Release folder: ${releaseDir}`);
 console.log(`Run with: cd release/${platformTag} && ./${exeName}`);
-
-if (process.platform === "linux") {
-  const exePath = path.join(releaseDir, exeName);
-  console.log(
-    `\nPour le Bluetooth (BleService), la capability cap_net_admin est effacée à chaque rebuild — la réappliquer :\n` +
-      `  sudo setcap cap_net_admin=ep ${exePath}\n` +
-      `(à refaire aussi sur chaque machine cible après y avoir copié le dossier)`,
-  );
-}

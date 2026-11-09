@@ -54,15 +54,12 @@ USER node
 # PRODUCTION
 ###################
 
-# need to be on node and not node:aline because we can't install needed packages for bluetooth on it
+# Debian (glibc) image for the runtime
 FROM node:25.9.0@sha256:607af5266b6726c0c727359a9757053137a803ca419f83fac3144e6a454a6823 AS production
 
-# install needed packages for bluetooth to work + build tools to recompile native modules for glibc
+# build tools to recompile native modules for glibc
 RUN apt-get update && apt-get install -y \
-    bluez \
-    dbus \
     musl-dev \
-    network-manager \
     python3 \
     python3-pip \
     python3-gpiozero \

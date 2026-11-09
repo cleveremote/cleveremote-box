@@ -3,8 +3,8 @@ import { SunState, TimeDirection } from '../interfaces/schedule.interface';
 import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 import { LocalCoordinatesModel } from '../models/global-settings.model';
 
-// coordonnees par defaut utilisees tant qu'aucune position n'a ete configuree via l'app mobile
-// (BLE, cf. BleService.buildContenteConfigFile) ou pas encore chargee en cache au demarrage
+// coordonnees par defaut utilisees tant qu'aucune position n'a ete recue (synchro global settings)
+// ou pas encore chargee en cache au demarrage
 // (cf. GlobalSettingsService.localCoordinates)
 export const DEFAULT_COORD = { lat: 34.100780850096896, long: -6.4666017095313935 };
 

@@ -7,7 +7,6 @@ import { ProcessService } from '@process/domain/services/execution.service';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { BleService } from '@process/domain/services/ble.service';
 import { ModbusBusService } from '@register-map/domain/services/modbus-bus.service';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from '@process/domain/services/actuator.service';
@@ -52,7 +51,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let scheduleService: { restartAllSchedules: jest.Mock };
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
-    let bleService: { initialize: jest.Mock };
     let modbusBus: { runExclusive: jest.Mock };
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
     let actuatorService: { execute: jest.Mock };
@@ -91,7 +89,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             initialize: jest.fn().mockResolvedValue(undefined),
             restartAllScheduledSensors: jest.fn().mockResolvedValue(undefined)
         };
-        bleService = { initialize: jest.fn().mockResolvedValue(undefined) };
         modbusBus = { runExclusive: jest.fn((run: () => Promise<unknown>) => run()) };
         ctrlActuatorStrategy = {
             testSetDeviceAddress: jest.fn().mockResolvedValue(undefined),
@@ -112,7 +109,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             scheduleService as unknown as ScheduleService,
             triggerService as unknown as TriggerService,
             sensorService as unknown as SensorService,
-            bleService as unknown as BleService,
             modbusBus as unknown as ModbusBusService,
             actuatorRepository,
             ctrlActuatorStrategy as unknown as CtrlActuatorStrategy,
@@ -141,7 +137,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
 
             expect(globalSettingsService.get).toHaveBeenCalledTimes(1);
             expect(authenticationService.initAuthentication).toHaveBeenCalledTimes(1);
-            expect(bleService.initialize).toHaveBeenCalledTimes(1);
             expect(triggerService.initilize).toHaveBeenCalledTimes(1);
             expect(sensorService.initialize).toHaveBeenCalledTimes(1);
             expect(processService.resetAllModules).toHaveBeenCalledTimes(1);

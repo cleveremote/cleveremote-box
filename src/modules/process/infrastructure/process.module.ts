@@ -30,7 +30,6 @@ import { GlobalSettingsController } from './controllers/global-settings.controll
 import { EventRepository } from './repositories/event.repository';
 import { EventMongooseRepository } from './repositories/event-mongoose.repository';
 import { HttpModule } from '@nestjs/axios';
-import { BleService } from '@process/domain/services/ble.service';
 import { PingController } from './controllers/ping.controller';
 import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
 import { SlaveTemplateController } from './controllers/slave-template.controller';
@@ -118,7 +117,6 @@ import { InverterControlService } from '@process/domain/services/inverter/invert
             useFactory: (forcast: ForcastSensorStrategy, com: ComSensorStrategy, analog: AnalogSensorStrategy): SensorStrategy[] => [forcast, com, analog],
             inject: [ForcastSensorStrategy, ComSensorStrategy, AnalogSensorStrategy]
         },
-        BleService,
         CycleGroupService,
         DeviceConnectivityService,
         DigitalIoMonitorService,
