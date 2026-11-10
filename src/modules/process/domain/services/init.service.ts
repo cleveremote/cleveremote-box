@@ -6,7 +6,7 @@ import { ScheduleService } from './schedule.service';
 import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
 import { AuthenticationService } from './authentication.service';
-import { Gpio } from 'onoff';
+import { isGpioAvailable, loadGpio } from '../utils/gpio.util';
 import { getGPIO } from 'src/common/tools/find_gipio';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
@@ -169,20 +169,21 @@ export class InitService {
     }
 
 
+    // led "ready" (GPIO 21) : Raspberry Pi uniquement
     private async sendReadySignal(): Promise<void> {
-        if (Gpio.accessible) {
-            if (Gpio.accessible) {
-                const gpio = await getGPIO(21);
-                const led = new Gpio(gpio, 'out', 'both', { reconfigureDirection: true, activeLow: false });
-                led.writeSync(1);
-                await new Promise(r => setTimeout(r, 10));
-                led.writeSync(0);
-                await new Promise(r => setTimeout(r, 200));
-                led.writeSync(1);
-                await new Promise(r => setTimeout(r, 10));
-                led.writeSync(0);
-            }
+        if (!isGpioAvailable()) {
+            return;
         }
+        const Gpio = loadGpio();
+        const gpio = await getGPIO(21);
+        const led = new Gpio(gpio, 'out', 'both', { reconfigureDirection: true, activeLow: false });
+        led.writeSync(1);
+        await new Promise(r => setTimeout(r, 10));
+        led.writeSync(0);
+        await new Promise(r => setTimeout(r, 200));
+        led.writeSync(1);
+        await new Promise(r => setTimeout(r, 10));
+        led.writeSync(0);
     }
 
 

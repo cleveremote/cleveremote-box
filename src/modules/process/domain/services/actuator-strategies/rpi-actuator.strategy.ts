@@ -1,12 +1,12 @@
 import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { BinaryValue, Gpio } from 'onoff';
 import { NotSwitchError } from '../../errors/not-switch.error';
 import { GPIODirection, ModuleStatus } from '../../interfaces/structure.interface';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { FakeGpio, ActuatorModel, RpiActuatorConfigModel } from '../../models/actuator.model';
 import { ActuatorStrategy } from './actuator-strategy.interface';
+import { GpioBinaryValue, isGpioAvailable, loadGpio } from '../../utils/gpio.util';
 
 const GPIO_ROOT_PATH = '/sys/class/gpio/';
 
@@ -40,7 +40,8 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
             config.instance.unexport();
         }
         /* istanbul ignore next */
-        if (Gpio.accessible) {
+        if (isGpioAvailable()) {
+            const Gpio = loadGpio();
             const gpioOptions = {
                 debounceTimeout: config.debounceTimeout,
                 activeLow: config.activeLow,
@@ -64,7 +65,7 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
         }
         const config = actuator.config as RpiActuatorConfigModel;
         if (config.instance.direction() === GPIODirection.OUT) {
-            config.instance.writeSync(action as BinaryValue);
+            config.instance.writeSync(action as GpioBinaryValue);
             actuator.status = action === 1 ? ModuleStatus.ON : ModuleStatus.OFF;
         }
         else {

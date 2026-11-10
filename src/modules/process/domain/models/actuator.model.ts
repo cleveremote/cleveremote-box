@@ -1,4 +1,4 @@
-import { Gpio } from 'onoff';
+import { GpioInstance } from '../utils/gpio.util';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '../interfaces/structure.interface';
 import { IActuatorModule, ActuatorType } from '../interfaces/actuator-module.interface';
 
@@ -7,7 +7,7 @@ export { ActuatorType };
 export type FakeGpio = { writeSync: (_value: number) => void; direction: () => GPIODirection; unexport: () => void; readSync: () => number };
 
 export class RpiActuatorConfigModel {
-    public instance?: Gpio | FakeGpio;
+    public instance?: GpioInstance | FakeGpio;
     public rpiPin: number;
     public direction: GPIODirection;
     public edge: GPIOEdge;

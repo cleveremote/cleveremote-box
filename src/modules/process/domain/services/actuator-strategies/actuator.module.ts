@@ -51,6 +51,7 @@ import { RegulationService } from '../regulation.service';
 import { ComSensorStrategy } from '../sensor-strategies/com-sensor.strategy';
 import { AnalogSensorStrategy } from '../sensor-strategies/analog-sensor.strategy';
 import { RpiActuatorStrategy } from './rpi-actuator.strategy';
+import { isRaspberryPi } from '../../utils/platform.util';
 import { ComActuatorStrategy } from './com-actuator.strategy';
 import { CtrlActuatorStrategy } from './ctrl-actuator.strategy';
 import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.interface';
@@ -123,7 +124,10 @@ import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategy.inter
         CtrlActuatorStrategy,
         {
             provide: ACTUATOR_STRATEGIES,
-            useFactory: (rpi: RpiActuatorStrategy, com: ComActuatorStrategy, ctrl: CtrlActuatorStrategy): ActuatorStrategy[] => [rpi, com, ctrl],
+            // actionneurs GPIO (RPI) : Raspberry Pi uniquement ; ailleurs le type RPI n'a pas de strategie
+            // (ActuatorService -> NotImplementedError) et `onoff` n'est jamais charge
+            useFactory: (rpi: RpiActuatorStrategy, com: ComActuatorStrategy, ctrl: CtrlActuatorStrategy): ActuatorStrategy[] =>
+                isRaspberryPi() ? [rpi, com, ctrl] : [com, ctrl],
             inject: [RpiActuatorStrategy, ComActuatorStrategy, CtrlActuatorStrategy]
         }
     ],

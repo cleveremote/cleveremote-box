@@ -10,19 +10,23 @@ const platformTag = `${process.platform}-${process.arch}`;
 const releaseDir = path.join(root, "release", platformTag);
 const entry = path.join(root, "dist/src/main.js");
 const exeName = process.platform === "win32" ? "cleveremote-box.exe" : "cleveremote-box";
+// GPIO (onoff -> addon natif epoll) : Raspberry Pi uniquement, donc cible linux arm/arm64.
+// Ailleurs, onoff (dependance optionnelle) n'est ni verifie ni embarque dans la release.
+const gpioTarget = process.platform === "linux" && (process.arch === "arm" || process.arch === "arm64");
+const GPIO_PACKAGES = ["onoff", "epoll"];
 
 function run(cmd) {
   console.log(`$ ${cmd}`);
   execSync(cmd, { stdio: "inherit", cwd: root });
 }
 
-console.log(`Building for ${platformTag} with Node ${process.version}`);
+console.log(`Building for ${platformTag} with Node ${process.version} (GPIO ${gpioTarget ? "enabled" : "excluded"})`);
 console.log(`(this executable will only run on ${platformTag} machines — see scripts/BUILD-SEA.md to build for another platform)\n`);
 
-// Native addons (epoll, bcrypt, @serialport/bindings-cpp) are
+// Native addons (bcrypt, @serialport/bindings-cpp, + epoll sur cible GPIO) are
 // compiled for whatever Node/platform is currently active. Catch a stale/mismatched build
 // here instead of shipping a binary that silently fails to load them.
-const nativeProbes = ["epoll", "bcrypt", "@serialport/bindings-cpp"];
+const nativeProbes = [...(gpioTarget ? ["epoll"] : []), "bcrypt", "@serialport/bindings-cpp"];
 function probeNativeModules() {
   const script = nativeProbes
     .map((m) => `try { require(${JSON.stringify(m)}); } catch (e) { console.log(${JSON.stringify(m)} + ": " + e.message); process.exitCode = 1; }`)
@@ -112,6 +116,7 @@ const pkgDirs = lsOutput
 for (const srcDir of pkgDirs) {
   const rel = path.relative(root, srcDir);
   if (!rel.startsWith("node_modules")) continue;
+  if (!gpioTarget && GPIO_PACKAGES.includes(path.basename(srcDir))) continue;
   const destDir = path.join(releaseDir, rel);
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
   fs.cpSync(srcDir, destDir, { recursive: true });

@@ -32,7 +32,11 @@ jest.mock('onoff', () => {
         public readSync = jest.fn(() => 0);
     }
     return { Gpio: MockGpio };
-});
+}, { virtual: true });
+// `onoff` n'est charge que sur Raspberry Pi (cf. gpio.util) : on force la detection pour exercer
+// le chemin GPIO (mocke) quelle que soit la machine qui execute les tests.
+jest.mock('@process/domain/utils/platform.util', () => ({ isRaspberryPi: () => true }));
+
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Gpio } = require('onoff');

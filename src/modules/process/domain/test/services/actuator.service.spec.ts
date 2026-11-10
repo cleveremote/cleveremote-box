@@ -11,7 +11,6 @@ import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { GPIODirection, ModuleStatus } from '@process/domain/interfaces/structure.interface';
 import { NotSwitchError } from '@process/domain/errors/not-switch.error';
 import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
-import { Gpio } from 'onoff';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateActuatorRpiModel, CreateActuatorComModel, CreateActuatorMongooseModels } from './actuator.spec-mock';
 
@@ -32,7 +31,14 @@ jest.mock('onoff', () => {
         }
     }
     return { Gpio: MockGpio };
-});
+}, { virtual: true });
+// `onoff` n'est charge que sur Raspberry Pi (cf. gpio.util) : on force la detection pour exercer
+// le chemin GPIO (mocke) quelle que soit la machine qui execute les tests.
+jest.mock('@process/domain/utils/platform.util', () => ({ isRaspberryPi: () => true }));
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { Gpio } = require('onoff');
+
 
 function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };

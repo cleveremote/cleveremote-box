@@ -34,7 +34,7 @@ de Node.js requise sur la machine cible) dans `release/<platform>-<arch>/`.
 5. Résultat dans `release/<platform>-<arch>/` :
    - `cleveremote-box` (ou `.exe` sous Windows) — l'exécutable
    - `node_modules/` — dépendances de production (y compris les binaires
-     natifs : epoll, bcrypt, serialport)
+     natifs : bcrypt, serialport, et epoll sur cible GPIO)
    - `.env` — copié depuis la racine du projet
 
 ## Déploiement
@@ -48,6 +48,22 @@ cd cleveremote-box-linux-arm64   # ou le nom que vous avez donné au dossier cop
 ```
 
 Rien d'autre n'est nécessaire — pas de Node.js à installer sur la cible.
+
+## GPIO : Raspberry Pi uniquement
+
+Le pilotage GPIO (actionneurs de type `RPI`, led « ready ») repose sur `onoff`
+et son addon natif `epoll`, déclarés en **dépendance optionnelle** :
+
+- **Build** : `onoff`/`epoll` ne sont vérifiés et copiés dans la release que
+  pour une cible `linux-arm` / `linux-arm64`. Sur les autres plateformes, ils
+  sont exclus (et un échec de compilation d'`epoll` à l'`npm install` est
+  toléré par npm puisque la dépendance est optionnelle).
+- **Exécution** : `onoff` n'est chargé que si `/proc/device-tree/model`
+  indique un Raspberry Pi (`src/modules/process/domain/utils/gpio.util.ts`).
+  Ailleurs, la stratégie d'actionneur `RPI` n'est pas enregistrée : un
+  actionneur `RPI` lève `NotImplementedError` au lieu d'être simulé.
+- Pour ne pas installer `onoff` du tout sur une machine non-Pi (déploiement
+  prod) : `npm ci --omit=dev --omit=optional`.
 
 ## Limite : pas de cross-compilation
 
