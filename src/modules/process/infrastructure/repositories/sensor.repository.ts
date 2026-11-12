@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SensorModel } from '@process/domain/models/sensor.model';
+import { forcastDataName, SensorModel } from '@process/domain/models/sensor.model';
 import { SynchronizeSensorModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -42,6 +42,11 @@ export class SensorRepository {
             return this.sensorMongooseRepository.findAll();
         }
         return this.sensorMongooseRepository.findById(id);
+    }
+
+    // donnees FORCAST deja seedees (ou creees a la main), soft-supprimees comprises
+    public async getSeededForcastData(): Promise<forcastDataName[]> {
+        return this.sensorMongooseRepository.findForcastData();
     }
 
     // relation auto-referencee : acces au sensor parent et a la liste de ses enfants

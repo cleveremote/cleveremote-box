@@ -45,9 +45,15 @@ export class AnalogSensorConfigModel extends ComSensorConfigModel {
 }
 
 export enum forcastDataName {
+  // température actuelle (open-meteo `current`)
+  TEMPERATURE_2M = 'temperature_2m',
+  // prévisions journalières du lendemain (open-meteo `daily`, index 1)
   TEMPERATURE_2M_MAX = 'temperature_2m_max',
   TEMPERATURE_2M_MIN = 'temperature_2m_min'
 }
+
+// donnée FORCAST lue sur l'instant (open-meteo `current`) plutôt qu'en prévision J+1
+export const IsCurrentForcastData = (data: forcastDataName): boolean => data === forcastDataName.TEMPERATURE_2M;
 
 
 export class ForcastSensorConfigModel {

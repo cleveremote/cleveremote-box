@@ -6,7 +6,9 @@ import { StructureService } from './configuration.service';
 import { TriggerService } from './trigger.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
-import { ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '../models/sensor.model';
+import { randomUUID } from 'node:crypto';
+import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName, IsCurrentForcastData, SensorModel } from '../models/sensor.model';
+import { GENERATED_TEXTS } from 'src/common/framework/i18n/generated-texts';
 import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { NotImplementedError } from '../errors/not-implemented.error';
@@ -15,6 +17,14 @@ import { GlobalSettingsService } from './global-settings.service';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel } from '../models/device.model';
 import { SlaveBundlePersister } from './slave-provisioning/auto-creation/slave-bundle.persister';
+
+// sensors meteo crees automatiquement au demarrage : min/max (prevision J+1) relus toutes les heures,
+// valeur actuelle tous les 1/4 d'heure (pas de mise a jour d'open-meteo `current`)
+const DEFAULT_FORCAST_SENSORS: { forcastData: forcastDataName; cronPattern: string; text: 'current' | 'min' | 'max' }[] = [
+    { forcastData: forcastDataName.TEMPERATURE_2M, cronPattern: '0 */15 * * * *', text: 'current' },
+    { forcastData: forcastDataName.TEMPERATURE_2M_MIN, cronPattern: '0 0 * * * *', text: 'min' },
+    { forcastData: forcastDataName.TEMPERATURE_2M_MAX, cronPattern: '0 0 * * * *', text: 'max' }
+];
 
 @Injectable()
 export class SensorService {
@@ -54,13 +64,40 @@ export class SensorService {
         return;
     }
 
+    /**
+     * Crée les sensors FORCAST par défaut (température actuelle, min et max) absents. Un sensor FORCAST
+     * existant pour la même donnée (créé à la main, ou supprimé par l'utilisateur) n'est ni dupliqué ni recréé.
+     * Appelé avant le chargement de la structure : leur lecture est planifiée par restartAllScheduledSensors().
+     */
+    public async seedForcastSensors(): Promise<void> {
+        const existing = new Set(await this.sensorRepository.getSeededForcastData());
+        const texts = GENERATED_TEXTS[this.globalSettingsService.language];
+        const created: SensorModel[] = [];
+        for (const { forcastData, cronPattern, text } of DEFAULT_FORCAST_SENSORS.filter((d) => !existing.has(d.forcastData))) {
+            const config = Object.assign(new ForcastSensorConfigModel(), { forcastData, cronPattern });
+            const name = texts.forcastSensor[text];
+            created.push(await this.sensorRepository.save(Object.assign(new SensorModel(), {
+                _id: randomUUID(),
+                name,
+                description: name,
+                type: SensorType.FORCAST,
+                style: { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'sensor', base: '#000000' } },
+                config
+            })));
+        }
+        if (created.length) {
+            this.logger.log({ sensors: created.map((s) => ({ _id: s._id, forcastData: (s.config as ForcastSensorConfigModel).forcastData })) }, 'forcast sensors seeded');
+        }
+    }
+
     //function used to emit value when a sensor read (real or scheduled) produces a new reading.
     public emitReceivedData(sensor: SensorModel, value: number): void {
         const sensorValue = new SensorValueModel();
         sensorValue.id = sensor._id;
         sensorValue.value = value;
         sensorValue.type = 'SENSOR';
-        if (sensor.type === SensorType.FORCAST) {
+        // prevision journaliere : valeur du lendemain ; donnee actuelle : date courante
+        if (sensor.type === SensorType.FORCAST && !IsCurrentForcastData((sensor.config as ForcastSensorConfigModel)?.forcastData)) {
             const now = new Date();
             const tomorrow = new Date(now);
             tomorrow.setDate(now.getDate() + 1);

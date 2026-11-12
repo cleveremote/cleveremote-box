@@ -401,6 +401,7 @@ export class CronSync {
 
 export class TriggerSync {
     @IsNumber()
+    @IsOptional()
     public timeAfter: number; //imemdiat if 0
     @IsOptional()
     @ValidateNested()
