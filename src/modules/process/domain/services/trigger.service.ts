@@ -210,6 +210,7 @@ export class TriggerService {
         scheduleModel.cron = { date: new Date(executionDate) };
         scheduleModel.shouldConfirmation = trigger.shouldConfirmation;
         scheduleModel.duration = trigger.duration;
+        scheduleModel.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(undefined, trigger.duration);
         const scheduleSaved = await this.scheduleRepository.save(scheduleModel);
 
         const process = this.scheduleService.preapreScheduleProcess(scheduleSaved, ProcessMode.TRIGGER, trigger.action,

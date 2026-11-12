@@ -12,6 +12,7 @@ import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interface
 import { AnalogScalingModel, AnalogSensorConfigModel, AnalogSignalType, ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
 import { OutOfRangePolicy } from '@process/domain/utils/linear-scale.util';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
 import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
@@ -32,7 +33,7 @@ import {
 } from '@process/domain/models/synchronize.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
 import { RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
@@ -362,6 +363,7 @@ export class CycleSynchronizeDTO {
             scheduleModel.isPaused = scheduleSync.isPaused;
             scheduleModel.shouldConfirmation = scheduleSync.shouldConfirmation;
             scheduleModel.duration = scheduleSync.duration;
+            scheduleModel.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(scheduleSync.isInheritedDuration, scheduleSync.duration);
             scheduleModel.delete = scheduleSync.delete ?? false;
             return scheduleModel;
         });
@@ -426,9 +428,14 @@ export class ScheduleSynchronizeDTO {
     public isPaused: boolean
     @IsBoolean()
     public shouldConfirmation: boolean
-    @IsOptional()
+    // duree en ms ; obligatoire (> 0) quand isInheritedDuration=false
+    @ValidateIf((o: ScheduleSynchronizeDTO) => o.isInheritedDuration === false || o.duration != null)
     @IsNumber()
+    @Min(1)
     public duration?: number;
+    @IsOptional()
+    @IsBoolean()
+    public isInheritedDuration?: boolean;
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
@@ -454,6 +461,7 @@ export class ScheduleSynchronizeDTO {
         scheduleModel.isPaused = scheduleSynchronizeDTO.isPaused;
         scheduleModel.shouldConfirmation = scheduleSynchronizeDTO.shouldConfirmation;
         scheduleModel.duration = scheduleSynchronizeDTO.duration;
+        scheduleModel.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(scheduleSynchronizeDTO.isInheritedDuration, scheduleSynchronizeDTO.duration);
         return scheduleModel;
     }
 }

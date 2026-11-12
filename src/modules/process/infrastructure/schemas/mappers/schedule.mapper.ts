@@ -13,6 +13,7 @@ export class ScheduleMapper {
         model.isPaused = schedule.isPaused;
         model.shouldConfirmation = schedule.shouldConfirmation;
         model.duration = schedule.duration;
+        model.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(schedule.isInheritedDuration, schedule.duration);
         model.createdAt = (schedule as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (schedule as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = schedule.deletedAt ?? null;
@@ -28,6 +29,7 @@ export class ScheduleMapper {
         schedule.isPaused = model.isPaused;
         schedule.shouldConfirmation = model.shouldConfirmation;
         schedule.duration = model.duration;
+        schedule.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(model.isInheritedDuration, model.duration);
         return schedule;
     }
 

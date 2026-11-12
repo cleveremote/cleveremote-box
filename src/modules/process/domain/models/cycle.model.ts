@@ -93,8 +93,9 @@ export class CycleModel implements IExecutable {
             const moduleIds = sequence.getActuatorIds()
                 .map((moduleId) => actuatorRegistry.get(moduleId)?._id)
                 .filter((id): id is string => id !== undefined);
-            sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
-            const securityConfig = sequence.securityConfig;
+            // copie : ne pas ecrire la surcharge dans la structure partagee, sinon elle
+            // persisterait pour les executions suivantes (duree heritee)
+            const securityConfig = { ...sequence.securityConfig, maxDuration: overrideDuration || sequence.securityConfig.maxDuration };
 
             executionLst.push({ sequenceId, moduleIds, securityConfig });
         });

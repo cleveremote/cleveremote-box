@@ -261,7 +261,7 @@ export class ScheduleService {
         process.policy = StartPolicy.ARBITRATE;
         process.mode = mode;
         process.schedule = schedule;
-        process.duration = schedule.duration;
+        process.duration = ScheduleModel.effectiveDuration(schedule);
         return process;
     }
 
@@ -281,7 +281,7 @@ export class ScheduleService {
                 process.action = ExecutableAction.ON;
                 process.policy = StartPolicy.ARBITRATE;
                 process.mode = ProcessMode.SCHEDULE;
-                process.duration = schedule.duration;
+                process.duration = ScheduleModel.effectiveDuration(schedule);
                 process.schedule = schedule;
                 process.origin = ScheduleService._scheduleOrigin(schedule);
                 this.createSchedule(schedule, this._buildExecutionMethode(schedule, process));
