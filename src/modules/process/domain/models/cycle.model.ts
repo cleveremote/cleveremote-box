@@ -31,6 +31,9 @@ export class CycleModel implements IExecutable {
     public style: { bgColor: string; fontColor: string; iconColor: { icon: string; base: string } };
     public description: string;
     public display?: boolean = true;
+    // cree automatiquement par la box (provisioning d'un slave) et non par l'utilisateur ;
+    // fixe a la creation, jamais modifie par une synchronisation du front
+    public autoCreated?: boolean = false;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public progression?: { startedAt: Date; duration: number };
     public sequences?: SequenceModel[] = [];

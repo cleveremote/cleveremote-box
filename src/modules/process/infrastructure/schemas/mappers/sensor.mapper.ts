@@ -14,6 +14,7 @@ export class SensorMapper {
         model.parentId = sensor.parentId ?? null;
         model.isEnabled =  sensor.display; //sensor.isEnabled;
         model.display = sensor.display;
+        model.autoCreated = sensor.autoCreated ?? false;
         model.config = SensorMapper._mapConfigToModel(sensor);
         model.createdAt = (sensor as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (sensor as unknown as { updatedAt?: Date }).updatedAt;
@@ -66,6 +67,10 @@ export class SensorMapper {
         sensor.parentId = model.parentId ?? null;
         sensor.isEnabled = model.isEnabled ?? true;
         sensor.display = model.display ?? true;
+        // positionne seulement a la creation automatique : une synchro du front (autoCreated absent) ne l'efface pas
+        if (model.autoCreated) {
+            sensor.autoCreated = true;
+        }
         if (model.type === SensorType.FORCAST) {
             const config = model.config as ForcastSensorConfigModel;
             sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData };

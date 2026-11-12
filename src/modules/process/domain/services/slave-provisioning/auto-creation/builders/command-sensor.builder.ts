@@ -54,5 +54,6 @@ const BuildSensor = (name: string, config: ComSensorConfigModel, overrides: Part
         type: SensorType.COM,
         style: { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'sensor', base: '#000000' } },
         config,
+        autoCreated: true,
         ...overrides
     });

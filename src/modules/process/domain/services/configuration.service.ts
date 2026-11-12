@@ -20,7 +20,7 @@ import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
-import { CycleRunModel } from '../models/cycle-history.model';
+import { CycleRunModel, RunOutcome } from '../models/cycle-history.model';
 import { BuildCycleRuns } from '../utils/cycle-history.util';
 import { TranslateEventMessages } from '../utils/process-event-message.util';
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
@@ -171,21 +171,26 @@ export class StructureService {
     }
 
     // cycle ou deviceId absent (tous cycles) : runs (events du cycle et de ses sequences) ; capteur / sequence : events bruts
-    // startDate + endDate : filtre de periode ; sinon les LAST_EVENTS_LIMIT derniers runs / events
+    // startDate + endDate : filtre de periode ; outcomes : filtre d'etat des runs (absent / vide = tous)
+    // limit : nombre max de runs / events (defaut : LAST_EVENTS_LIMIT sans periode, aucune limite avec une periode)
     // messages du journal recalcules dans query.lang (historique compris)
-    public async getEvents(query: { deviceId?: string; startDate?: string; endDate?: string; lang?: string }): Promise<EventModel[] | CycleRunModel[]> {
+    public async getEvents(query: {
+        deviceId?: string; startDate?: string; endDate?: string; outcomes?: RunOutcome[]; limit?: number; lang?: string;
+    }): Promise<EventModel[] | CycleRunModel[]> {
         const range = query.startDate && query.endDate
             ? { startDate: new Date(query.startDate), endDate: new Date(query.endDate) }
             : undefined;
+        const limit = query.limit ?? (range ? undefined : LAST_EVENTS_LIMIT);
         const cycle = query.deviceId ? this.structure?.cycles?.find((cyc) => cyc._id === query.deviceId) : undefined;
         if (query.deviceId && !cycle) {
             const events = range
                 ? await this.eventRepository.getByDeviceAndDateRange(query.deviceId, range.startDate, range.endDate)
-                : await this.eventRepository.getLatestByDevice(query.deviceId, LAST_EVENTS_LIMIT);
-            return TranslateEventMessages(events, query.lang);
+                : await this.eventRepository.getLatestByDevice(query.deviceId, limit);
+            return TranslateEventMessages(range && limit ? events.slice(-limit) : events, query.lang);
         }
         const elementIds = cycle ? [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)] : undefined;
-        const runIds = await this.eventRepository.getRunIds({ elementIds, ...range, limit: range ? undefined : LAST_EVENTS_LIMIT });
+        const outcomes = query.outcomes?.length ? query.outcomes : undefined;
+        const runIds = await this.eventRepository.getRunIds({ elementIds, ...range, outcomes, limit });
         return this._getRuns(runIds, query.lang);
     }
 

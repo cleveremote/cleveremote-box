@@ -92,6 +92,10 @@ export class Sensor {
     @Prop({ type: String, default: null, index: true })
     public parentId: string | null;
 
+    // fixe a la creation (cf. SensorMapper.mapToSchema) : absent des mises a jour, donc conserve
+    @Prop({ type: Boolean, default: false })
+    public autoCreated: boolean;
+
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;
 }

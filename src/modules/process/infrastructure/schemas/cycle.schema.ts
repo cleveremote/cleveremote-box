@@ -27,6 +27,10 @@ export class Cycle {
     @Prop({ type: Boolean, default: true })
     public display: boolean;
 
+    // fixe a la creation (cf. CycleMapper.mapToSchema) : absent des mises a jour, donc conserve
+    @Prop({ type: Boolean, default: false })
+    public autoCreated: boolean;
+
     @Prop({ required: true, enum: ExecutableStatus, default: ExecutableStatus.STOPPED })
     public status: ExecutableStatus;
 

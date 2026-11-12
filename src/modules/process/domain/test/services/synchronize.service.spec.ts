@@ -219,7 +219,10 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             {} as never,
             { stopFollow: jest.fn() } as never,
             { get: jest.fn(), save: jest.fn(), delete: jest.fn() } as never,
-            { applyControlValues: jest.fn().mockResolvedValue(undefined) } as never
+            {
+                applyControlValues: jest.fn().mockResolvedValue(undefined),
+                resetControlLoopExecution: jest.fn().mockResolvedValue(undefined)
+            } as never
         );
     });
 

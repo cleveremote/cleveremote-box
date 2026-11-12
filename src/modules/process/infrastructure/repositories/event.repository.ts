@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EventModel } from '@process/domain/models/event.model';
 import { EventPurgeFilterModel } from '@process/domain/models/event-purge.model';
+import { RunIdsFilter } from '@process/domain/models/cycle-history.model';
 import { EventMongooseRepository } from './event-mongoose.repository';
 
 @Injectable()
@@ -30,8 +31,8 @@ export class EventRepository {
         return this.eventMongooseRepository.findLastByDevice(elementId);
     }
 
-    // elementIds absent : tous les cycles ; startDate / endDate absentes : pas de filtre de date
-    public async getRunIds(filter: { elementIds?: string[]; startDate?: Date; endDate?: Date; limit?: number }): Promise<string[]> {
+    // elementIds absent : tous les cycles ; startDate / endDate absentes : pas de filtre de date ; outcomes absent : tous les etats
+    public async getRunIds(filter: RunIdsFilter): Promise<string[]> {
         return this.eventMongooseRepository.findRunIds(filter);
     }
 

@@ -16,6 +16,7 @@ export function BuildModuleCycle(device: DeviceModel, actuator: ActuatorModel, t
     cycle.name = `${device.name} ${actuator.name}`;
     cycle.description = `${device.name} ${actuator.name}`;
     cycle.type = type;
+    cycle.autoCreated = true;
     cycle.style = { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'module', base: '#000000' } };
 
     const sequence = new SequenceModel();

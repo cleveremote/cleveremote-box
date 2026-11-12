@@ -151,19 +151,27 @@ export class SynchronizeService {
         await this.configurationService.getStructure();
     }
 
-    // un suivi (FOLLOW) en cours s'arrête si la boucle est supprimée, désactivée, change de mode ou
-    // d'actionneur ; les autres modifications (bornes, deadband...) s'appliquent au prochain ON.
+    // un suivi (FOLLOW) en cours s'arrête si la boucle est supprimée, désactivée, change de mode ou d'actionneur ;
+    // puis l'exécution des actionneurs concernés (ancien et nouveau) est réinitialisée dans les séquences en cours,
+    // pour que la boucle à jour (bornes, deadband, consigne, mode...) s'applique tout de suite et non au prochain ON.
     public async synchronizeControlLoop(controlLoopModel: SynchronizeControlLoopModel): Promise<ControlLoopModel> {
         const previous = controlLoopModel._id ? await this.controlLoopRepository.get(controlLoopModel._id) as ControlLoopModel : null;
         if (controlLoopModel.delete) {
             await this.controlLoopRepository.delete(controlLoopModel._id);
-            if (previous) this.regulationService.stopFollow(previous.actuatorId);
+            if (previous) {
+                this.regulationService.stopFollow(previous.actuatorId);
+                await this.processService.resetControlLoopExecution(previous.actuatorId);
+            }
             return { ...controlLoopModel, deletedAt: new Date() } as ControlLoopModel;
         }
         const controlLoop = await this.controlLoopRepository.save(controlLoopModel);
         const isFollowing = controlLoop.mode === ControlLoopMode.FOLLOW && controlLoop.isEnabled !== false;
         if (previous && (!isFollowing || previous.actuatorId !== controlLoop.actuatorId)) {
             this.regulationService.stopFollow(previous.actuatorId);
+        }
+        const actuatorIds = new Set([previous?.actuatorId, controlLoop.actuatorId].filter(Boolean));
+        for (const actuatorId of actuatorIds) {
+            await this.processService.resetControlLoopExecution(actuatorId);
         }
         return controlLoop;
     }

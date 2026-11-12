@@ -16,6 +16,7 @@ export class CycleMapper {
         model.type = cycle.type;
         model.description = cycle.description;
         model.display = cycle.display;
+        model.autoCreated = cycle.autoCreated ?? false;
         model.status = cycle.status;
         model.style = cycle.style;
         model.executionMode = cycle.executionMode;
@@ -37,6 +38,10 @@ export class CycleMapper {
         cycle.type = model.type;
         cycle.description = model.description;
         cycle.display = model.display ?? true;
+        // positionne seulement a la creation automatique : une synchro du front (autoCreated absent) ne l'efface pas
+        if (model.autoCreated) {
+            cycle.autoCreated = true;
+        }
         cycle.status = model.status;
         cycle.style = model.style as Cycle['style'];
         cycle.executionMode = model.executionMode;

@@ -1,7 +1,9 @@
 import { CycleRunModel, RunOutcome } from '@process/domain/models/cycle-history.model';
 import { ElementType, EventModel, ProcessEventData, ProcessEventKind } from '@process/domain/models/event.model';
 
-const OUTCOME_BY_KIND: Partial<Record<ProcessEventKind, RunOutcome>> = {
+// etat d'un run = kind du dernier event du cycle present dans cette table (aucun : RUNNING) ;
+// partage avec le filtre outcomes de la requete Mongo des runs
+export const RUN_OUTCOME_BY_KIND: Partial<Record<ProcessEventKind, RunOutcome>> = {
     [ProcessEventKind.START_REFUSED]: RunOutcome.REFUSED,
     [ProcessEventKind.CONFIRMATION_REQUESTED]: RunOutcome.WAITING_CONFIRMATION,
     [ProcessEventKind.CYCLE_QUEUED]: RunOutcome.QUEUED,
@@ -19,7 +21,7 @@ function ApplyRunHeader(run: CycleRunModel, data: ProcessEventData): void {
     run.parentRunId = data.origin?.refRunId ?? run.parentRunId;
     run.confirmation = data.confirmation ?? run.confirmation;
     run.message = data.message ?? run.message;
-    run.outcome = OUTCOME_BY_KIND[data.kind] ?? run.outcome;
+    run.outcome = RUN_OUTCOME_BY_KIND[data.kind] ?? run.outcome;
 }
 
 // event du cycle lui-meme : met a jour le resume du run
@@ -65,5 +67,6 @@ export function BuildCycleRuns(events: EventModel[]): CycleRunModel[] {
             ApplyCycleEvent(run, event, data);
         }
     }
-    return [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+   const t = [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+   return t;
 }

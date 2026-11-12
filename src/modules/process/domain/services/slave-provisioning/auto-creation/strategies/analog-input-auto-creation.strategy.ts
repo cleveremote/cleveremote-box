@@ -95,7 +95,8 @@ export class AnalogInputAutoCreationStrategy implements AutoCreationStrategy {
             description: `${device.name} ${name}`,
             type: SensorType.ANALOG,
             style: { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'sensor', base: '#000000' } },
-            config
+            config,
+            autoCreated: true
         });
     }
 

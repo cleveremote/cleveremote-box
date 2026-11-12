@@ -79,6 +79,10 @@ export class SensorModel {
     // field sur ComSensorConfigModel plutot que cronPattern/commandId.
     public parentId?: string | null = null;
 
+    // cree automatiquement par la box (provisioning d'un slave, sensors meteo par defaut) et non par l'utilisateur ;
+    // fixe a la creation, jamais modifie par une synchronisation du front
+    public autoCreated?: boolean = false;
+
     public value?: number;
     public date?: Date;
 

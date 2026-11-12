@@ -1581,27 +1581,49 @@ export class ProcessService {
      * sinon une modification n'est prise en compte qu'au prochain ON. Filtre : cycle ou actuator synchronisé (aucun = tous).
      */
     public async applyControlValues(filter: { cycleId?: string; actuatorId?: string } = {}): Promise<void> {
+        for (const { sequenceId, actuator } of await this._runningCtrlActuators(filter)) {
+            const controlValue = this._controlValueOf(sequenceId, actuator._id);
+            if (controlValue === undefined) { continue; }
+            try {
+                await this._executeActuator(actuator, controlValue, sequenceId);
+                this.logger.log({ sequenceId, actuatorId: actuator._id, controlValue }, 'control value applied');
+            } catch (error) {
+                this.logger.warn({ error, sequenceId, actuatorId: actuator._id }, 'control value apply error');
+            }
+        }
+    }
+
+    /**
+     * ControlLoop synchronisée : réexécute le ON de l'actuator CTRL dans les séquences en cours, avec la boucle à jour
+     * (suivi relancé avec ses nouveaux paramètres, régulation relancée, ou positionnement direct si la boucle a été
+     * supprimée / désactivée / déplacée sur un autre actuator). Contrairement à applyControlValues, un actuator sans
+     * customValue est aussi réexécuté (valeur ON par défaut) : c'est le cas courant d'un pilotage par la boucle.
+     */
+    public async resetControlLoopExecution(actuatorId: string): Promise<void> {
+        for (const { sequenceId, actuator } of await this._runningCtrlActuators({ actuatorId })) {
+            const value = this._actionValueOf(actuator, 1, sequenceId);
+            try {
+                await this._executeActuator(actuator, value, sequenceId);
+                this.logger.log({ sequenceId, actuatorId, value }, 'control loop execution reset');
+            } catch (error) {
+                this.logger.warn({ error, sequenceId, actuatorId }, 'control loop execution reset error');
+            }
+        }
+    }
+
+    // actuators CTRL des séquences en cours (structure à jour) ; filtre : cycle ou actuator (aucun = tous)
+    private async _runningCtrlActuators(filter: { cycleId?: string; actuatorId?: string }):
+        Promise<{ sequenceId: string; actuator: IActuatorModule }[]> {
         const runningSequenceIds = this.processList
             .filter((proc) => proc.cycle.status === ExecutableStatus.IN_PROCCESS && (!filter.cycleId || proc.cycle._id === filter.cycleId))
             .flatMap((proc) => (proc.cycle.sequences ?? []).map((seq) => seq._id))
             .filter((sequenceId) => this.queuedSequences.some((x) => x.sequenceId === sequenceId));
-        if (!runningSequenceIds.length) { return; }
+        if (!runningSequenceIds.length) { return []; }
         const actuators = await this._resolveActuators();
-        for (const sequenceId of runningSequenceIds) {
-            const ctrlActuators = (this._currentSequence(sequenceId)?.getActuatorIds() ?? [])
-                .map((moduleId) => actuators.get(moduleId))
-                .filter((actuator) => actuator?.type === ActuatorType.CTRL && (!filter.actuatorId || actuator._id === filter.actuatorId));
-            for (const actuator of ctrlActuators) {
-                const controlValue = this._controlValueOf(sequenceId, actuator._id);
-                if (controlValue === undefined) { continue; }
-                try {
-                    await this._executeActuator(actuator, controlValue, sequenceId);
-                    this.logger.log({ sequenceId, actuatorId: actuator._id, controlValue }, 'control value applied');
-                } catch (error) {
-                    this.logger.warn({ error, sequenceId, actuatorId: actuator._id }, 'control value apply error');
-                }
-            }
-        }
+        return runningSequenceIds.flatMap((sequenceId) => (this._currentSequence(sequenceId)?.getActuatorIds() ?? [])
+            .map((moduleId) => actuators.get(moduleId))
+            .filter((actuator) => actuator?.type === ActuatorType.CTRL && (!filter.actuatorId || actuator._id === filter.actuatorId))
+            .map((actuator) => ({ sequenceId, actuator })));
     }
 
     // séquence à jour (structure rechargée à chaque synchronisation), pas la copie lue au démarrage du cycle

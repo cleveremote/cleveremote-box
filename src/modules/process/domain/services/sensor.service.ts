@@ -82,7 +82,8 @@ export class SensorService {
                 description: name,
                 type: SensorType.FORCAST,
                 style: { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'sensor', base: '#000000' } },
-                config
+                config,
+                autoCreated: true
             })));
         }
         if (created.length) {

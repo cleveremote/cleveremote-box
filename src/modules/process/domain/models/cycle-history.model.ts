@@ -13,6 +13,9 @@ export enum RunOutcome {
     REFUSED = 'REFUSED'
 }
 
+// selection des runs (box/fetch/events) ; elementIds absent : tous les cycles ; outcomes absent : tous les etats
+export type RunIdsFilter = { elementIds?: string[]; startDate?: Date; endDate?: Date; outcomes?: RunOutcome[]; limit?: number };
+
 export class RunTimelineEntryModel {
     public date: Date;
     public elementId: string;
