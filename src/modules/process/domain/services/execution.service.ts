@@ -25,6 +25,7 @@ import { ModuleTimingConfig, SequenceModel } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
 import { ActuatorService } from './actuator.service';
+import { ActuatorSetOptions } from './actuator-strategies/actuator-strategy.interface';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
 import { ChildCycleRef, CycleModel } from '../models/cycle.model';
@@ -95,6 +96,9 @@ export class ProcessService {
     // cycle id -> process en attente de la reponse du front (statut WAITTING_CONFIRMATION) apres un
     // arbitrage perdu ou un schedule.shouldConfirmation ; la reponse (FORCE / QUEUE / OFF) le retire.
     private pendingConfirmations = new Map<string, ProcessModel>();
+    // cycles PROPORTIONAL arretes par un ordre OFF explicite (front, schedule, trigger) : ils ne sont pas
+    // redemarres automatiquement (cf. startIdleProportionalCycles) avant leur prochain ON ; vide au boot.
+    private pausedProportionalCycles = new Set<string>();
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
         private configurationService: StructureService,
@@ -112,6 +116,11 @@ export class ProcessService {
     ) {
         this.inverterControlService.events$.subscribe((event) => {
             this._onInverterEvent(event).catch((error) => this.logger.warn({ error, kind: event.kind }, 'inverter event handling failed'));
+        });
+        // nouveau slave créé par un scan : ses cycles PROPORTIONAL (vannes CTRL) démarrent tout de suite
+        this.configurationService.slavesCreated$.subscribe(() => {
+            this.startIdleProportionalCycles()
+                .catch((err) => this.logger.warn({ err }, 'proportional cycles start after slave creation failed'));
         });
     }
 
@@ -309,6 +318,8 @@ export class ProcessService {
             await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
             // en dernier : les actuators de ce cycle sont deja coupes, le cycle en file peut les reprendre
             await this._startQueuedCycles();
+            // puis les cycles PROPORTIONAL que plus aucun cycle ne concurrence (ex: celui que ce cycle avait stoppe)
+            await this.startIdleProportionalCycles(this._isRestartable(process, stopInfo) ? undefined : process.cycle._id);
         }
         // unref() : ce rappel differe est "fire and forget", il ne doit pas a lui seul empecher
         // le processus de s'arreter (ex: extinction propre, ou fuite de ce timer dans les tests).
@@ -501,6 +512,7 @@ export class ProcessService {
         if (process.policy !== StartPolicy.FORCE) {
             throw new ProcessInvalidTypeError();
         }
+        this._trackProportionalPause(process);
         if (process.action === ExecutableAction.OFF && this._isAwaitingConfirmation(process.cycle)) {
             await this._cancelPendingConfirmation(process);
             return;
@@ -630,16 +642,23 @@ export class ProcessService {
             report.push({ id: process.id, type: CauseType.CONFIRMATION, cause: 'schedule triggered : ' + process.cycle.name });
         }
         const rank = this.globalSettingsService.rankOf(process.mode);
+        const actuators = await this._resolveActuators();
         // tous les conflits sont listes : un seul perdu impose la confirmation, et une confirmation
         // FORCE les stoppe tous (_resetConflictedProcesses)
         for (const proc of await this._getConflictedExecutables(process)) {
-            const isWinning = rank < this.globalSettingsService.rankOf(proc.mode);
-            confirmation.conflicts.push({ cycleId: proc.cycle._id, name: proc.cycle.name, mode: proc.mode, isWinning });
-            isConfirmationNeeded = isConfirmationNeeded || !isWinning;
+            // regle PROPORTIONAL : la consigne explicite (customValue) est prioritaire quel que soit le rang, mais
+            // la confirmation reste demandee ; le cycle PROPORTIONAL stoppe redemarre a la fin de ce cycle
+            const isProportionalOverride = ProcessService._isProportionalOverride(process.cycle, proc.cycle, actuators);
+            const isWinning = isProportionalOverride || rank < this.globalSettingsService.rankOf(proc.mode);
+            confirmation.conflicts.push({
+                cycleId: proc.cycle._id, name: proc.cycle.name, mode: proc.mode, isWinning,
+                ...(isProportionalOverride && { isProportionalOverride })
+            });
+            isConfirmationNeeded = isConfirmationNeeded || !isWinning || isProportionalOverride;
             report.push({
                 id: proc.id,
                 type: isConfirmationNeeded ? CauseType.CONFIRMATION : CauseType.FORCE,
-                cause: 'conflicted with cycle : ' + proc.cycle.name
+                cause: (isProportionalOverride ? 'proportional cycle override : ' : 'conflicted with cycle : ') + proc.cycle.name
             });
         }
 
@@ -653,6 +672,77 @@ export class ProcessService {
         }
         process.policy = StartPolicy.FORCE;
         this._manageProcessType(process).catch((err) => this.logger.error({ err }, 'arbitrated start error'));
+    }
+
+    // regle PROPORTIONAL : `cycle` porte une consigne explicite (customValue) sur une vanne CTRL pilotee par le
+    // cycle PROPORTIONAL `other` : il est prioritaire sur lui (apres confirmation, cf. _arbitrate).
+    private static _isProportionalOverride(cycle: CycleModel, other: CycleModel, actuators: Map<string, IActuatorModule>): boolean {
+        if (other.type !== CycleType.PROPORTIONAL) {
+            return false;
+        }
+        return (cycle.sequences ?? []).some((sequence) => (sequence.moduleConfigs ?? []).some((ref) => {
+            const actuator = actuators.get(ref.moduleId);
+            return Number.isFinite(ref.customValue) && actuator?.type === ActuatorType.CTRL && other.exists(actuator, actuators);
+        }));
+    }
+
+    // un ordre explicite (non pilote par un autre cycle) sur un cycle PROPORTIONAL : OFF le met en pause
+    // (plus de redemarrage automatique), ON leve la pause.
+    private _trackProportionalPause(process: ProcessModel): void {
+        if (process.cycle.type !== CycleType.PROPORTIONAL || process.sourceCycleId) {
+            return;
+        }
+        if (process.action === ExecutableAction.OFF) {
+            this.pausedProportionalCycles.add(process.cycle._id);
+        } else {
+            this.pausedProportionalCycles.delete(process.cycle._id);
+        }
+    }
+
+    // un cycle qui vient de s'arreter peut-il etre redemarre aussitot par startIdleProportionalCycles ? Non apres une
+    // erreur ou une duree nulle : il rebouclerait sans fin (arret -> redemarrage -> arret).
+    private _isRestartable(process: ProcessModel, stop: EventStopModel): boolean {
+        if (stop.reason === StopReason.ERROR) {
+            return false;
+        }
+        return stop.reason !== StopReason.COMPLETED || process.cycle.getPlannedDuration(process.duration) > 0;
+    }
+
+    /**
+     * Regle PROPORTIONAL : hors conflit, tous les cycles PROPORTIONAL tournent. Demarre (FORCE, origine SYSTEM) chaque
+     * cycle PROPORTIONAL arrete dont la vanne n'est pilotee par aucun cycle en cours. Appele au boot et a chaque arret
+     * d'un cycle : le cycle prioritaire qui l'avait stoppe est termine, ou sa propre duree est ecoulee.
+     * Exclus : arret explicite (pausedProportionalCycles), enfant de Group (pilote par son Group), cycle en attente de
+     * confirmation ou en file, et excludeCycleId (cycle qui ne doit pas reboucler, cf. _isRestartable).
+     */
+    public async startIdleProportionalCycles(excludeCycleId?: string): Promise<void> {
+        const isIdle = (cycle: CycleModel): boolean =>
+            cycle.type === CycleType.PROPORTIONAL && cycle.status === ExecutableStatus.STOPPED && !cycle.parentCycleId
+            && cycle._id !== excludeCycleId && !this.pausedProportionalCycles.has(cycle._id)
+            && !this.pendingConfirmations.has(cycle._id) && !this.queuedCycles.has(cycle._id);
+        const idleCycles = this.configurationService.structure.cycles.filter(isIdle);
+        if (!idleCycles.length) {
+            return;
+        }
+        const actuators = await this._resolveActuators();
+        for (const cycle of idleCycles) {
+            // relu apres chaque await : un autre demarrage a pu s'intercaler
+            if (!isIdle(cycle) || this._getRunningConflicts(cycle, actuators).length) {
+                continue;
+            }
+            const process = new ProcessModel();
+            process.cycle = cycle;
+            process.action = ExecutableAction.ON;
+            process.policy = StartPolicy.FORCE;
+            process.mode = ProcessMode.SYSTEM;
+            process.origin = { source: EventSource.SYSTEM };
+            try {
+                await this.execute(process);
+                this.logger.log({ cycleId: cycle._id, name: cycle.name }, 'proportional cycle started (no conflict)');
+            } catch (err) {
+                this.logger.warn({ err, cycleId: cycle._id }, 'proportional cycle start error');
+            }
+        }
     }
 
     // demarrage arbitre : refuse si le cycle tourne deja (regle 3, no-op silencieux sans repasser en
@@ -1356,7 +1446,7 @@ export class ProcessService {
         if (isCancelled() || !lastRun) { return null; }
         for (const previousId of lastRun.moduleIds) {
             const mod = modules.find(x => x._id === previousId);
-            await this.actuatorService.execute(mod, 0);
+            await this._executeActuator(mod, 0, lastRun.sequenceId);
             try {
                 await this._triggerOwningModuleCycle(mod, 0, sourceCycleId, process.mode);
             } catch (error) {
@@ -1469,7 +1559,7 @@ export class ProcessService {
         mode: ProcessMode, sourceCycleId?: string, cycleId?: string, isForced = false): Promise<boolean> {
 
         if (previousData.id) {
-            await this._switchModule(previousData.moduleIds, modules, timings, 0, sourceCycleId, mode);
+            await this._switchModule(previousData.moduleIds, modules, timings, 0, sourceCycleId, mode, previousData.id);
             await this._processProgress(previousData.id, ExecutableAction.OFF, mode, undefined, undefined,
                 this._sequenceEndJournal(previousData.id, cycleId)).then(() => true);
         }
@@ -1505,7 +1595,7 @@ export class ProcessService {
                 const controlValue = this._controlValueOf(sequenceId, actuator._id);
                 if (controlValue === undefined) { continue; }
                 try {
-                    await this.actuatorService.execute(actuator, controlValue);
+                    await this._executeActuator(actuator, controlValue, sequenceId);
                     this.logger.log({ sequenceId, actuatorId: actuator._id, controlValue }, 'control value applied');
                 } catch (error) {
                     this.logger.warn({ error, sequenceId, actuatorId: actuator._id }, 'control value apply error');
@@ -1538,7 +1628,23 @@ export class ProcessService {
         return controlValue;
     }
 
-    // sequenceId (ON) : séquence dont le moduleConfig porte le pourcentage d'ouverture des actuators CTRL
+    // regle PROPORTIONAL : hors de son cycle PROPORTIONAL, une vanne CTRL est positionnee directement par la consigne
+    // explicite de la séquence (customValue) ou par son OFF, sans passer par sa ControlLoop (suivi / régulation), qui
+    // reste le pilotage du cycle PROPORTIONAL ; sans customValue, le ON garde le pilotage par la boucle.
+    private _setOptionsOf(mod: IActuatorModule | undefined, value: number, sequenceId?: string): ActuatorSetOptions | undefined {
+        if (mod?.type !== ActuatorType.CTRL || !sequenceId) { return undefined; }
+        const cycle = this.configurationService.structure.cycles.find((cyc) => cyc.sequences?.some((seq) => seq._id === sequenceId));
+        if (!cycle || cycle.type === CycleType.PROPORTIONAL) { return undefined; }
+        return value === 0 || this._controlValueOf(sequenceId, mod._id) !== undefined ? { isDirect: true } : undefined;
+    }
+
+    // commande d'un actuator par une séquence ; les options ne sont transmises que lorsqu'elles s'appliquent
+    private _executeActuator(mod: IActuatorModule | undefined, value: number, sequenceId?: string): Promise<void> {
+        const options = this._setOptionsOf(mod, value, sequenceId);
+        return options ? this.actuatorService.execute(mod, value, options) : this.actuatorService.execute(mod, value);
+    }
+
+    // sequenceId : séquence commutée ; au ON, son moduleConfig porte le pourcentage d'ouverture des actuators CTRL
     private async _switchModule(
         moduleIds: string[], modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>, action: number,
         sourceCycleId?: string, mode?: ProcessMode, sequenceId?: string
@@ -1553,7 +1659,7 @@ export class ProcessService {
                 await new Promise(resolve => setTimeout(resolve, waitBefore));
             }
             try {
-                await this.actuatorService.execute(mod, this._actionValueOf(mod, action, sequenceId));
+                await this._executeActuator(mod, this._actionValueOf(mod, action, sequenceId), sequenceId);
             } catch (error) {
                 this.logger.warn({ error, moduleId, name: mod?.name }, 'execution module error');
             }

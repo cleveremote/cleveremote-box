@@ -1,7 +1,7 @@
 import {
     ConfirmationAnswer, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
 } from '@process/domain/models/event.model';
-import { ConditionTexts, EventTexts, FormatDuration, LostConflicts } from './event-texts';
+import { ConditionTexts, EventTexts, FormatDuration, LostConflicts, ProportionalOverrides } from './event-texts';
 
 // compteurs au format « libelle : nombre » : evite les 6 formes de pluriel de l'arabe
 const Quote = (name: string | undefined): string => `«${name ?? '?'}»`;
@@ -77,6 +77,10 @@ function DescribeConfirmationRequest(data: ProcessEventData): string {
     const lost = LostConflicts(data);
     if (lost.length) {
         reasons.push('خسر التعارض مع ' + lost.map((conflict) => `${Quote(conflict.name)} (${conflict.mode})`).join('، '));
+    }
+    const overrides = ProportionalOverrides(data);
+    if (overrides.length) {
+        reasons.push('أولوية على الدورة التناسبية ' + overrides.map((conflict) => Quote(conflict.name)).join('، '));
     }
     return reasons.length ? ` — ${reasons.join('، ')}` : '';
 }

@@ -32,3 +32,8 @@ export function ConditionTexts(data: ProcessEventData, texts: EventTexts): strin
 export function LostConflicts(data: ProcessEventData): ConfirmationConflictModel[] {
     return (data.confirmation?.conflicts ?? []).filter((conflict) => !conflict.isWinning);
 }
+
+// cycles PROPORTIONAL dont le demandeur reprend la vanne (consigne customValue) : confirmation demandee bien que prioritaire
+export function ProportionalOverrides(data: ProcessEventData): ConfirmationConflictModel[] {
+    return (data.confirmation?.conflicts ?? []).filter((conflict) => conflict.isProportionalOverride);
+}

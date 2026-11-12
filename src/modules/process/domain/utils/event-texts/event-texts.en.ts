@@ -1,7 +1,7 @@
 import {
     ConfirmationAnswer, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
 } from '@process/domain/models/event.model';
-import { ConditionTexts, EventTexts, FormatDuration, LostConflicts } from './event-texts';
+import { ConditionTexts, EventTexts, FormatDuration, LostConflicts, ProportionalOverrides } from './event-texts';
 
 const Quote = (name: string | undefined): string => `“${name ?? '?'}”`;
 
@@ -76,6 +76,10 @@ function DescribeConfirmationRequest(data: ProcessEventData): string {
     const lost = LostConflicts(data);
     if (lost.length) {
         reasons.push('conflict lost with ' + lost.map((conflict) => `${Quote(conflict.name)} (${conflict.mode})`).join(', '));
+    }
+    const overrides = ProportionalOverrides(data);
+    if (overrides.length) {
+        reasons.push('priority over the proportional cycle ' + overrides.map((conflict) => Quote(conflict.name)).join(', '));
     }
     return reasons.length ? ` — ${reasons.join(', ')}` : '';
 }

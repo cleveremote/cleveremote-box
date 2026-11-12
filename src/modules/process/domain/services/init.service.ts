@@ -123,6 +123,8 @@ export class InitService {
             .then(() => wrap('TriggerService.initilize', () => this.triggerService.initilize()))
             .then(() => wrap('SensorService.initialize', () => this.sensorService.initialize())) // temps for test purpose
             .then(() => wrap('ProcessService.resetAllModules', () => this._resetAllModules()))
+            // hors conflit, tous les cycles PROPORTIONAL (un par vanne CTRL) tournent : démarrés dès le boot
+            .then(() => wrap('ProcessService.startIdleProportionalCycles', () => this.processService.startIdleProportionalCycles()))
             .then(() => wrap('ScheduleService.restartAllSchedules', () => this.scheduleService.restartAllSchedules()))
             .then(() => wrap('SensorService.restartAllScheduledSensors', () => this.sensorService.restartAllScheduledSensors()))
             .then(() => wrap('DigitalIoMonitorService.watch', () => this._watchDigitalIo()))

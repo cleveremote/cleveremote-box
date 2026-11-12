@@ -5,7 +5,7 @@ import { DeviceRepository } from '@process/infrastructure/repositories/device.re
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { ActuatorModel, CtrlActuatorConfigModel, CtrlOpeningBounds } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
-import { ActuatorStrategy } from './actuator-strategy.interface';
+import { ActuatorSetOptions, ActuatorStrategy } from './actuator-strategy.interface';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
@@ -64,8 +64,14 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
      * - FOLLOW : l'ouverture suit la mesure du sensor de la boucle (ex: potentiomètre), quelle que soit `action`
      *   (0 compris) : le suivi reste actif à 0% et repart dès que la mesure remonte ; seul reset() l'arrête.
      * Sinon `action` est l'ouverture cible en % (positionnement direct) ; 0 ne lance pas de régulation.
+     * options.isDirect (consigne explicite d'un cycle prioritaire sur le cycle PROPORTIONAL de la vanne) :
+     * positionnement direct même sous ControlLoop, un suivi en cours est arrêté.
      */
-    public async set(actuator: ActuatorModel, action: number): Promise<void> {
+    public async set(actuator: ActuatorModel, action: number, options?: ActuatorSetOptions): Promise<void> {
+        if (options?.isDirect) {
+            this.regulationService.stopFollow(actuator._id);
+            return this.position(actuator, action);
+        }
         const loop = await this.regulationService.findLoop(actuator);
         const port = {
             write: (openingPercent: number) => this.position(actuator, openingPercent),

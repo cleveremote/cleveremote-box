@@ -51,7 +51,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let actuatorRepository: ActuatorRepository;
     let configurationService: { getStructure: jest.Mock; structure: { actuators: ActuatorModel[] } };
     let authenticationService: { initAuthentication: jest.Mock };
-    let processService: { resetAllModules: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
+    let processService: { resetAllModules: jest.Mock; startIdleProportionalCycles: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
     let scheduleService: { restartAllSchedules: jest.Mock };
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
@@ -84,6 +84,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         authenticationService = { initAuthentication: jest.fn().mockResolvedValue(true) };
         processService = {
             resetAllModules: jest.fn().mockResolvedValue(undefined),
+            startIdleProportionalCycles: jest.fn().mockResolvedValue(undefined),
             applyInverterConfig: jest.fn().mockResolvedValue(undefined),
             executeModuleCycleForDigitalOutput: jest.fn().mockResolvedValue(undefined)
         };

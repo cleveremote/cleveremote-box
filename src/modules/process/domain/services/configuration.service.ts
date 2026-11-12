@@ -14,7 +14,7 @@ import { SequenceModel } from '../models/sequence.model';
 import { StructureModel } from '../models/structure.model';
 import { ScheduleModel } from '../models/schedule.model';
 import { TriggerModel } from '../models/trigger.model';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
 import { ExecutableType, ValueModel } from '../models/value.model';
@@ -45,6 +45,10 @@ export class StructureService {
     public schedules: ScheduleModel[];
     public triggers: TriggerModel[];
     public deviceListeners: { subject: BehaviorSubject<SensorValueModel | ProcessValueModel>; deviceId }[] = [];
+    private readonly _slavesCreated = new Subject<DeviceWithCommands[]>();
+    // slaves créés par un scan terminé, structure déjà rechargée (leurs actuators / cycles y figurent) :
+    // ProcessService démarre leurs cycles PROPORTIONAL
+    public readonly slavesCreated$: Observable<DeviceWithCommands[]> = this._slavesCreated.asObservable();
 
     public constructor(
         private cycleRepository: CycleRepository,
@@ -288,6 +292,11 @@ export class StructureService {
             created.push(await this.autoCreationService.createSlave(scanned, masterDeviceId, { existingDevices: this.structure.devices, templates }));
         }
         await this.refreshInverters();
+        if (created.length) {
+            // scan terminé (bus libre) : les éléments auto-créés deviennent visibles du moteur d'exécution
+            await this.getStructure();
+            this._slavesCreated.next(created);
+        }
         return created;
     }
 
