@@ -189,6 +189,11 @@ export class ProcessService {
     // un nouveau run - sinon le sien, sinon un nouveau. answer : reponse a la confirmation en attente.
     private _adoptRun(process: ProcessModel, waiting?: ProcessModel, answer?: ConfirmationAnswer): RunContextModel {
         const run = (waiting && waiting !== process ? waiting.run : undefined) ?? process.run ?? RunContextModel.create(this._originOf(process));
+        if (waiting && waiting !== process) {
+            // la reponse du front (FORCE/QUEUED) est un nouveau process sans duree : on conserve la
+            // surcharge du schedule en attente ; une duree envoyee explicitement par le front reste prioritaire
+            process.duration ??= waiting.duration;
+        }
         if (answer && run.confirmation && !run.confirmation.answer) {
             const answeredAt = new Date();
             run.confirmation.answer = answer;
@@ -660,14 +665,14 @@ export class ProcessService {
         const cycleCauses = await this._getCycleConditionCauses(process);
         if (cycleCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
-            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses);
+            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, cycleCauses, process.duration);
             this._journalStartRefused(process, cycleCauses);
             return false;
         }
         const sequenceCauses = await this._getUnverifiedSequencesCauses(process);
         if (sequenceCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'no sequence verified, cycle not started');
-            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses);
+            this._notifyConditionsNotVerified(ExecutableType.CYCLE, process.cycle._id, process.mode, sequenceCauses, process.duration);
             this._journalStartRefused(process, sequenceCauses);
             return false;
         }
@@ -757,13 +762,16 @@ export class ProcessService {
 
     // pas d'event persiste : la notification ne doit pas devenir le dernier statut rehydrate au boot
     // (cf. StructureService._rehydrateProcessStatus) ; le statut envoye reste le statut reel de l'element.
-    private _notifyConditionsNotVerified(type: ExecutableType, id: string, mode: ProcessMode, causes: ConditionReport): void {
+    // requestedDuration : surcharge de duree de l'ordre refuse (absente = duree heritee du cycle), a renvoyer
+    // telle quelle par le front dans un FORCE ulterieur (le process refuse n'est pas conserve cote back)
+    private _notifyConditionsNotVerified(type: ExecutableType, id: string, mode: ProcessMode, causes: ConditionReport,
+        requestedDuration?: number): void {
         const element = type === ExecutableType.CYCLE
             ? this.configurationService.structure?.cycles?.find((cyc) => cyc._id === id)
             : this.configurationService.sequences?.find((seq) => seq._id === id);
         this._sendStatusSync({
             type, id, mode, status: element?.status ?? ExecutableStatus.STOPPED,
-            notification: ProcessNotification.CONDITIONS_NOT_VERIFIED, causes
+            notification: ProcessNotification.CONDITIONS_NOT_VERIFIED, causes, requestedDuration
         });
     }
 
@@ -790,7 +798,7 @@ export class ProcessService {
     private _journalCycleStarted(process: ProcessModel, report: ProcessReport): Promise<string> {
         const run = process.run ?? this._adoptRun(process);
         run.startedAt = new Date();
-        return this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, report, undefined, {
+        return this._processProgress(process.cycle._id, ExecutableAction.ON, process.mode, report, process.cycle.getPlannedDuration(process.duration), {
             ...ProcessService._runJournal(run),
             kind: ProcessEventKind.CYCLE_STARTED,
             preempted: [...run.preempted]
@@ -1537,8 +1545,11 @@ export class ProcessService {
             seqFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration } : null;
         } else {
             cycFound.status = status;
-            let cycleDuration = 0;
-            cycFound.sequences.forEach((x) => cycleDuration = cycleDuration + Number(x.securityConfig.maxDuration))
+            // duree surchargee transmise au demarrage ; a l'arret, celle du run en cours (lue avant la remise
+            // a zero de progression) pour que plannedDuration de CYCLE_ENDED reflete la surcharge
+            const cycleDuration = duration
+                ?? (status === ExecutableStatus.STOPPED ? cycFound.progression?.duration : undefined)
+                ?? cycFound.getPlannedDuration();
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
             data = { type, id, status, startedAt, duration: cycleDuration };
             this.triggerService.onElementValueChanged.next(data);
@@ -1596,7 +1607,8 @@ export class ProcessService {
     // statut pose de facon synchrone (avant toute attente) : un demarrage qui suit ne doit pas etre ecrase
     private _publishWaitingStatus(processModel: ProcessModel, status: ExecutableStatus.WAITTING_CONFIRMATION | ExecutableStatus.QUEUED,
         causes: { type: CauseType; cause: string }[], confirmation?: ConfirmationRequestModel, waitingFor?: string[]): Promise<string> {
-        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes, confirmation };
+        // requestedDuration : surcharge de duree en attente (absente = heritee), reutilisable par le front
+        const data = { type: ExecutableType.CYCLE, id: processModel.cycle._id, status, causes, confirmation, requestedDuration: processModel.duration };
         const cycFound = this.configurationService.structure.cycles.find((cyc) => cyc._id === data.id);
         if (cycFound) {
             cycFound.status = status;

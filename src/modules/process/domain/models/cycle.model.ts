@@ -85,6 +85,12 @@ export class CycleModel implements IExecutable {
         return timings;
     }
 
+    // duree prevue du cycle : somme des durees de sequence, surcharge comprise (meme regle que getExecutionStructure)
+    public getPlannedDuration(overrideDuration?: number): number {
+        return (this.sequences ?? []).reduce((total, sequence) =>
+            total + Number(overrideDuration || sequence.securityConfig.maxDuration), 0);
+    }
+
     public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[] {
         const executionLst: SequenceExecutionEntry[] = [];
         const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
