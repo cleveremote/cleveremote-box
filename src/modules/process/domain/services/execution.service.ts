@@ -1464,7 +1464,8 @@ export class ProcessService {
     }
 
     private async _switchProcess(previousData: { id: string; moduleIds: string[]; duration: number },
-        currentData: { id: string; moduleIds: string[]; duration: number }, modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>,
+        currentData: { id: string; moduleIds: string[]; duration: number }, modules: IActuatorModule[],
+        timings: Map<string, ModuleTimingConfig>,
         mode: ProcessMode, sourceCycleId?: string, cycleId?: string, isForced = false): Promise<boolean> {
 
         if (previousData.id) {
@@ -1473,7 +1474,7 @@ export class ProcessService {
                 this._sequenceEndJournal(previousData.id, cycleId)).then(() => true);
         }
 
-        await this._switchModule(currentData.moduleIds, modules, timings, 1, sourceCycleId, mode);
+        await this._switchModule(currentData.moduleIds, modules, timings, 1, sourceCycleId, mode, currentData.id);
         const run = this._runOf(cycleId);
         const name = this._sequenceName(currentData.id);
         if (run) {
@@ -1484,9 +1485,63 @@ export class ProcessService {
             { runId: run?.runId, cycleId, isForced: isForced || undefined }).then(() => true);
     }
 
+    /**
+     * Cycles en cours : réapplique à leurs actuators CTRL le pourcentage d'ouverture (customValue) de la séquence en cours,
+     * avec la structure et la config de vanne à jour (min/max d'ouverture et de sortie). Appelé après une synchronisation,
+     * sinon une modification n'est prise en compte qu'au prochain ON. Filtre : cycle ou actuator synchronisé (aucun = tous).
+     */
+    public async applyControlValues(filter: { cycleId?: string; actuatorId?: string } = {}): Promise<void> {
+        const runningSequenceIds = this.processList
+            .filter((proc) => proc.cycle.status === ExecutableStatus.IN_PROCCESS && (!filter.cycleId || proc.cycle._id === filter.cycleId))
+            .flatMap((proc) => (proc.cycle.sequences ?? []).map((seq) => seq._id))
+            .filter((sequenceId) => this.queuedSequences.some((x) => x.sequenceId === sequenceId));
+        if (!runningSequenceIds.length) { return; }
+        const actuators = await this._resolveActuators();
+        for (const sequenceId of runningSequenceIds) {
+            const ctrlActuators = (this._currentSequence(sequenceId)?.getActuatorIds() ?? [])
+                .map((moduleId) => actuators.get(moduleId))
+                .filter((actuator) => actuator?.type === ActuatorType.CTRL && (!filter.actuatorId || actuator._id === filter.actuatorId));
+            for (const actuator of ctrlActuators) {
+                const controlValue = this._controlValueOf(sequenceId, actuator._id);
+                if (controlValue === undefined) { continue; }
+                try {
+                    await this.actuatorService.execute(actuator, controlValue);
+                    this.logger.log({ sequenceId, actuatorId: actuator._id, controlValue }, 'control value applied');
+                } catch (error) {
+                    this.logger.warn({ error, sequenceId, actuatorId: actuator._id }, 'control value apply error');
+                }
+            }
+        }
+    }
+
+    // séquence à jour (structure rechargée à chaque synchronisation), pas la copie lue au démarrage du cycle
+    private _currentSequence(sequenceId: string): SequenceModel | undefined {
+        return this.configurationService.structure.cycles
+            .flatMap((cycle) => cycle.sequences ?? [])
+            .find((sequence) => sequence._id === sequenceId);
+    }
+
+    // pourcentage d'ouverture d'un actuator CTRL dans une séquence : customValue de son moduleConfig, relu à chaque appel
+    private _controlValueOf(sequenceId: string, moduleId: string): number | undefined {
+        const value = this._currentSequence(sequenceId)?.moduleConfigs?.find((ref) => ref.moduleId === moduleId)?.customValue;
+        return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    }
+
+    // valeur envoyée à l'actuator : au ON d'un CTRL, son pourcentage d'ouverture (à défaut la valeur ON par défaut)
+    private _actionValueOf(mod: IActuatorModule | undefined, action: number, sequenceId?: string): number {
+        if (action !== 1 || mod?.type !== ActuatorType.CTRL || !sequenceId) { return action; }
+        const controlValue = this._controlValueOf(sequenceId, mod._id);
+        if (controlValue === undefined) {
+            this.logger.warn({ sequenceId, actuatorId: mod._id, name: mod.name }, 'CTRL actuator without customValue, default ON value used');
+            return action;
+        }
+        return controlValue;
+    }
+
+    // sequenceId (ON) : séquence dont le moduleConfig porte le pourcentage d'ouverture des actuators CTRL
     private async _switchModule(
         moduleIds: string[], modules: IActuatorModule[], timings: Map<string, ModuleTimingConfig>, action: number,
-        sourceCycleId?: string, mode?: ProcessMode
+        sourceCycleId?: string, mode?: ProcessMode, sequenceId?: string
     ): Promise<void> {
 
         await Promise.all(moduleIds.map(async (moduleId) => {
@@ -1498,7 +1553,7 @@ export class ProcessService {
                 await new Promise(resolve => setTimeout(resolve, waitBefore));
             }
             try {
-                await this.actuatorService.execute(mod, action);
+                await this.actuatorService.execute(mod, this._actionValueOf(mod, action, sequenceId));
             } catch (error) {
                 this.logger.warn({ error, moduleId, name: mod?.name }, 'execution module error');
             }

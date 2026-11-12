@@ -793,7 +793,7 @@ export class ValveConfigDTO {
 export class ValveSynchronizeDTO {
     @IsOptional()
     @IsNotEmpty()
-    public id: string;
+    public _id: string;
     @IsString()
     public name: string;
     @IsString()
@@ -809,7 +809,7 @@ export class ValveSynchronizeDTO {
 
     public static mapToValveModel(valveSynchronizeDTO: ValveSynchronizeDTO): SynchronizeActuatorModel {
         const valveModel = new SynchronizeActuatorModel();
-        valveModel._id = valveSynchronizeDTO.id;
+        valveModel._id = valveSynchronizeDTO._id;
         valveModel.name = valveSynchronizeDTO.name;
         valveModel.description = valveSynchronizeDTO.description;
         valveModel.type = ActuatorType.CTRL;

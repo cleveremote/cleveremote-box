@@ -40,6 +40,9 @@ import { RegulationService } from './regulation.service';
 import { InverterModel } from '../models/inverter.model';
 import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
 import { ElementNotFoundExeception } from '../errors/db-errors';
+import { AUTO_CREATED_ONLY_CYCLE_TYPES } from '../interfaces/executable.interface';
+import { BoxError, BoxErrorCode } from '@framework/errors/box-error';
+import { ProcessService } from './execution.service';
 
 @Injectable()
 export class SynchronizeService {
@@ -60,7 +63,8 @@ export class SynchronizeService {
         private deviceCommandService: DeviceCommandService,
         private controlLoopRepository: ControlLoopRepository,
         private regulationService: RegulationService,
-        private inverterRepository: InverterRepository
+        private inverterRepository: InverterRepository,
+        private processService: ProcessService
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -73,6 +77,9 @@ export class SynchronizeService {
             cycles: structureModel.cycles as SynchronizeCycleModel[],
             sensors: structureModel.sensors
         };
+        for (const cycle of incoming.cycles) {
+            if (!cycle.delete) await this._guardAutoCreatedOnlyType(cycle);
+        }
         structureModel.cycles = [];
         structureModel.sensors = [];
         const data = new StructureModel();
@@ -81,6 +88,7 @@ export class SynchronizeService {
         // les commandes se synchronisent par device (box/synchronize/device, box/synchronize/device-command)
         data.models = await this.deviceCommandService.modelsWithParams();
         this.configurationService.structure = data;
+        await this.processService.applyControlValues();
 
         return data;
     }
@@ -90,6 +98,7 @@ export class SynchronizeService {
             await this._deleteCycle(cycleModel._id);
             return { ...cycleModel, deletedAt: new Date() } as CycleModel;
         }
+        await this._guardAutoCreatedOnlyType(cycleModel);
         const cycle = await this.cycleRepository.save(cycleModel);
         cycle.sequences = await this.sequenceRepository.replaceForCycle(cycle._id, cycleModel.sequences ?? []);
         cycle.schedules = await this.scheduleRepository.replaceForCycle(cycle._id, cycleModel.schedules ?? []);
@@ -98,7 +107,24 @@ export class SynchronizeService {
         for (const schedule of cycle.schedules) {
             await this.scheduleService.initSchedule(schedule, false);
         }
+        // cycle en cours : le nouveau pourcentage d'ouverture (customValue) de ses actuators CTRL s'applique tout de suite
+        await this.processService.applyControlValues({ cycleId: cycle._id });
         return cycle;
+    }
+
+    // un type auto-créé uniquement (PROPORTIONAL) ne vient que de l'auto-création d'un slave : la synchronisation
+    // ne peut ni créer un tel cycle ni y convertir un cycle existant ; un cycle déjà de ce type garde son type
+    // (le DTO met CYCLE par défaut quand le front omet `type`).
+    private async _guardAutoCreatedOnlyType(cycleModel: SynchronizeCycleModel): Promise<void> {
+        const existing = cycleModel._id ? await this.cycleRepository.get(cycleModel._id) as CycleModel | null : null;
+        if (existing && AUTO_CREATED_ONLY_CYCLE_TYPES.includes(existing.type)) {
+            cycleModel.type = existing.type;
+            return;
+        }
+        if (AUTO_CREATED_ONLY_CYCLE_TYPES.includes(cycleModel.type)) {
+            throw new BoxError(`cycle type ${cycleModel.type} is auto-created only`, BoxErrorCode.CYCLE_AUTO_CREATED_ONLY,
+                { type: cycleModel.type });
+        }
     }
 
     // cascade deja geree par cycleRepository.delete() (soft-delete des sequences/schedules/triggers
@@ -115,6 +141,8 @@ export class SynchronizeService {
         }
         const valve = await this.actuatorRepository.save(valveModel);
         await this.configurationService.getStructure();
+        // vanne pilotée par un cycle en cours : bornes min/max (ouverture, sortie) appliquées tout de suite
+        await this.processService.applyControlValues({ actuatorId: valve._id });
         return valve;
     }
 

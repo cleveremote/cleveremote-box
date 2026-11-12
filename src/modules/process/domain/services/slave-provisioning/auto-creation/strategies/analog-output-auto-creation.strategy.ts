@@ -5,11 +5,14 @@ import { ActuatorModel, ActuatorType, CtrlActuatorConfigModel } from '@process/d
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { DeviceKind, DeviceModel, SlaveConfigModel, SlaveTemplate } from '@process/domain/models/device.model';
 import { ModuleStatus } from '@process/domain/interfaces/structure.interface';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 import { hasCommandType } from '@process/domain/utils/device-command.util';
 import { DeviceCommandService } from '../../../device-command.service';
+import { BuildModuleCycle } from '../builders/module-cycle.builder';
 import { AutoCreatedElements, AutoCreationContext, AutoCreationStrategy } from '../auto-creation-strategy.interface';
 
-// Module analog output : un actuator CTRL (vanne) par sortie ; cycles et boucles de régulation non auto-créés
+// Module analog output : un actuator CTRL (vanne) par sortie, chacun piloté par son cycle PROPORTIONAL ;
+// boucles de régulation non auto-créées
 @Injectable()
 export class AnalogOutputAutoCreationStrategy implements AutoCreationStrategy {
     public readonly kinds = [DeviceKind.ANALOG_OUTPUT_8_CH, DeviceKind.ANALOG_OUTPUT_8_CH_MA];
@@ -21,7 +24,8 @@ export class AnalogOutputAutoCreationStrategy implements AutoCreationStrategy {
 
     public async build({ device, template }: AutoCreationContext): Promise<AutoCreatedElements> {
         const actuators = this._buildAnalogOutputActuators(device, template.kind, template.deviceCommands);
-        return { actuators, cycles: [], sensors: [] };
+        const cycles = actuators.map((actuator) => BuildModuleCycle(device, actuator, CycleType.PROPORTIONAL));
+        return { actuators, cycles, sensors: [] };
     }
 
     // Un actuator CTRL par port de sortie (portNumStart -> portNumStart + portCount - 1), piloté sur sa voie
@@ -45,6 +49,7 @@ export class AnalogOutputAutoCreationStrategy implements AutoCreationStrategy {
                 _id: randomUUID(),
                 status: ModuleStatus.OFF,
                 name: `AO${portNumber}`,
+                description: `Analog output channel ${portNumber}`,
                 type: ActuatorType.CTRL,
                 config,
                 deletedAt: null

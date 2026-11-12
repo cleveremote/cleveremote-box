@@ -8,13 +8,14 @@ import { CycleType } from '@process/domain/interfaces/executable.interface';
 // borne d'un ON manuel sur un cycle MODULE auto-créé (1 h)
 export const MODULE_SEQUENCE_MAX_DURATION = 3_600_000;
 
-// Un cycle MODULE par actuator, d'une seule séquence qui le référence : il pilote l'actuator seul
-export function BuildModuleCycle(device: DeviceModel, actuator: ActuatorModel): CycleModel {
+// Un cycle par actuator (MODULE par défaut, PROPORTIONAL pour une vanne CTRL), d'une seule séquence qui le
+// référence : il pilote l'actuator seul
+export function BuildModuleCycle(device: DeviceModel, actuator: ActuatorModel, type: CycleType = CycleType.MODULE): CycleModel {
     const cycle = new CycleModel();
     cycle._id = randomUUID();
     cycle.name = `${device.name} ${actuator.name}`;
     cycle.description = `${device.name} ${actuator.name}`;
-    cycle.type = CycleType.MODULE;
+    cycle.type = type;
     cycle.style = { bgColor: '#ffffff', fontColor: '#000000', iconColor: { icon: 'module', base: '#000000' } };
 
     const sequence = new SequenceModel();

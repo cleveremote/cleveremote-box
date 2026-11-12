@@ -28,7 +28,7 @@ export class ActuatorRepository {
         return this.actuatorMongooseRepository.create(model);
     }
 
-    // cascade : retire l'actionneur des moduleConfigs des sequences, supprime les cycles MODULE
+    // cascade : retire l'actionneur des moduleConfigs des sequences, supprime les cycles MODULE/PROPORTIONAL
     // devenus sans module (CycleRepository.delete emporte leurs sequences/schedules/triggers), puis le soft-supprime.
     public async delete(id: string): Promise<boolean> {
         const cycleIds = await this.sequenceMongooseRepository.findCycleIdsByModuleId(id);
@@ -37,11 +37,11 @@ export class ActuatorRepository {
         return this.actuatorMongooseRepository.delete(id);
     }
 
-    // un cycle MODULE qui reference encore un autre actionneur est conserve ; CYCLE/GROUP ne sont jamais touches
+    // un cycle MODULE/PROPORTIONAL qui reference encore un autre actionneur est conserve ; CYCLE/GROUP ne sont jamais touches
     private async _deleteEmptyModuleCycles(cycleIds: string[]): Promise<void> {
         for (const cycleId of cycleIds) {
             const cycle = await this.cycleRepository.get(cycleId) as CycleModel | null;
-            if (cycle?.type === CycleType.MODULE && cycle.sequences.every((sequence) => !sequence.moduleConfigs?.length)) {
+            if ([CycleType.MODULE, CycleType.PROPORTIONAL].includes(cycle?.type) && cycle.sequences.every((sequence) => !sequence.moduleConfigs?.length)) {
                 await this.cycleRepository.delete(cycleId);
             }
         }

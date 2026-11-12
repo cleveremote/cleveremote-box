@@ -37,7 +37,12 @@ export enum CycleType {
     GROUP = 'GROUP',
     CYCLE = 'CYCLE',
     MODULE = 'MODULE',
+    // un cycle par actuator CTRL (vanne proportionnelle) ; auto-créé uniquement, jamais via synchronize
+    PROPORTIONAL = 'PROPORTIONAL',
 }
+
+// types de cycle créés uniquement par l'auto-création d'un slave (un cycle par actuator)
+export const AUTO_CREATED_ONLY_CYCLE_TYPES: readonly CycleType[] = [CycleType.PROPORTIONAL];
 
 export enum ExecutionMode {
     SEQUENTIAL = 'SEQUENTIAL',

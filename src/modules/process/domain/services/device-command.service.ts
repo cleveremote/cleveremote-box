@@ -91,6 +91,15 @@ export class DeviceCommandService {
         return this.registerMapI18n.translateOutcome(template, await this.registerMapService.execute(template, connection, operation), lang);
     }
 
+    /**
+     * Exécute une opération de la register map sur un slave fourni (éventuellement non encore persisté, ex: auto-création
+     * après scan) : seul son master doit être enregistré
+     */
+    public async executeOnSlave(slave: DeviceModel, operation: RegisterOperationCommand): Promise<RegisterOperationOutcome> {
+        const { template, connection } = await this._resolveSlave(slave);
+        return this.registerMapService.execute(template, connection, operation);
+    }
+
 
     /**
      * Exécute dans l'ordre les commandes init du modèle du slave non encore appliquées sur ce slave, et les
@@ -351,12 +360,15 @@ export class DeviceCommandService {
     }
 
     private async _resolveDevice(deviceId: string): Promise<ResolvedDevice> {
-        const slave = await this._getSlave(deviceId);
+        return this._resolveSlave(await this._getSlave(deviceId));
+    }
+
+    private async _resolveSlave(slave: DeviceModel): Promise<ResolvedDevice> {
         const slaveConfig = slave.config as SlaveConfigModel;
         const master = await this.deviceRepository.get(slaveConfig.masterDeviceId) as DeviceModel;
         if (!master) {
-            throw new RegisterMapNotFoundError(`Master ${slaveConfig.masterDeviceId} du slave ${deviceId} introuvable`, BoxErrorCode.MASTER_NOT_FOUND,
-                { deviceId, masterDeviceId: slaveConfig.masterDeviceId });
+            throw new RegisterMapNotFoundError(`Master ${slaveConfig.masterDeviceId} du slave ${slave._id} introuvable`, BoxErrorCode.MASTER_NOT_FOUND,
+                { deviceId: slave._id, masterDeviceId: slaveConfig.masterDeviceId });
         }
         const connection = this.modbusDeviceService.toConnection(master.config as MasterConfigModel, slaveConfig.slaveId);
         return { slave, template: this.getTemplate(slaveConfig.kind), connection };

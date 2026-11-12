@@ -50,6 +50,17 @@ export class CtrlActuatorConfigModel extends ComActuatorConfigModel {
 
 }
 
+// bornes d'ouverture ordonnées (lo <= hi) d'une vanne. minOpening > maxOpening = sens inversé : la commande reste
+// bornée à [lo, hi] mais la vanne va dans l'autre sens (commande lo -> minOpening, commande hi -> maxOpening),
+// ex: min 100 / max 0 -> OFF (0) ouverte, ON 100 fermée.
+export function CtrlOpeningBounds(config: Pick<CtrlActuatorConfigModel, 'minOpening' | 'maxOpening'>): { lo: number; hi: number; isInverted: boolean } {
+    return {
+        lo: Math.min(config.minOpening, config.maxOpening),
+        hi: Math.max(config.minOpening, config.maxOpening),
+        isInverted: config.minOpening > config.maxOpening
+    };
+}
+
 export class ActuatorModel implements IActuatorModule {
     public _id: string;
     public status: ModuleStatus;

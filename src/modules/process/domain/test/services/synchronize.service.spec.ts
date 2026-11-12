@@ -218,7 +218,8 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             deviceCommandService as never,
             {} as never,
             { stopFollow: jest.fn() } as never,
-            { get: jest.fn(), save: jest.fn(), delete: jest.fn() } as never
+            { get: jest.fn(), save: jest.fn(), delete: jest.fn() } as never,
+            { applyControlValues: jest.fn().mockResolvedValue(undefined) } as never
         );
     });
 

@@ -3,7 +3,7 @@ import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorModel, CtrlActuatorConfigModel, CtrlOpeningBounds } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { ActuatorStrategy } from './actuator-strategy.interface';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
@@ -45,12 +45,13 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.INIT);
     }
 
-    // commandes reset de la vanne ; à défaut, ouverture minimale (set 0 -> 4mA)
+    // commandes reset de la vanne ; à défaut, position de repos : fermée (set 0 -> 4mA), ouverte en sens inversé
     public async reset(actuator: ActuatorModel): Promise<void> {
         this.regulationService.stopFollow(actuator._id);
         const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
         if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
-            await this._writeOpening(actuator.config as CtrlActuatorConfigModel, 0);
+            const { isInverted } = CtrlOpeningBounds(actuator.config as CtrlActuatorConfigModel);
+            await this._writeOpening(actuator.config as CtrlActuatorConfigModel, isInverted ? 100 : 0);
             (actuator.config as CtrlActuatorConfigModel).openingPercent = 0;
             return;
         }
@@ -60,35 +61,35 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     /**
      * ON sous ControlLoop active, la vanne étant pilotée via position() :
      * - REGULATION : régulation sur la consigne de la boucle (RegulationService / module control) ;
-     * - FOLLOW : l'ouverture suit la mesure du sensor de la boucle (ex: potentiomètre) jusqu'au OFF/reset.
-     * Sinon `action` est l'ouverture cible en % (positionnement direct). OFF arrête un suivi en cours.
+     * - FOLLOW : l'ouverture suit la mesure du sensor de la boucle (ex: potentiomètre), quelle que soit `action`
+     *   (0 compris) : le suivi reste actif à 0% et repart dès que la mesure remonte ; seul reset() l'arrête.
+     * Sinon `action` est l'ouverture cible en % (positionnement direct) ; 0 ne lance pas de régulation.
      */
     public async set(actuator: ActuatorModel, action: number): Promise<void> {
-        if (action === 0) {
-            this.regulationService.stopFollow(actuator._id);
-            return this.position(actuator, action);
-        }
         const loop = await this.regulationService.findLoop(actuator);
-        if (!loop) {
-            return this.position(actuator, action);
-        }
         const port = {
             write: (openingPercent: number) => this.position(actuator, openingPercent),
             settleMs: (delta: number) => this.positioningDelayMs(actuator, delta)
         };
-        if (loop.mode === ControlLoopMode.FOLLOW) {
+        if (loop?.mode === ControlLoopMode.FOLLOW) {
             return this.regulationService.follow(actuator, loop, port);
+        }
+        if (!loop || action === 0) {
+            return this.position(actuator, action);
         }
         await this.regulationService.regulate(actuator, loop, port);
     }
 
-    // positionnement direct, borné à [minOpening, maxOpening]
+    // positionnement direct, commande bornée à [minOpening, maxOpening] ; sens inversé (minOpening > maxOpening) :
+    // ouverture en miroir dans ces bornes (cf. CtrlOpeningBounds). openingPercent garde la commande (régulation).
     public async position(actuator: ActuatorModel, openingPercent: number): Promise<void> {
         const config = (actuator as ValveActuatorModel).config;
-        const clamped = Math.min(config.maxOpening, Math.max(config.minOpening, openingPercent));
-        const outputValue = await this._writeOpening(config, clamped);
+        const { lo, hi, isInverted } = CtrlOpeningBounds(config);
+        const clamped = Math.min(hi, Math.max(lo, openingPercent));
+        const physicalOpening = isInverted ? lo + hi - clamped : clamped;
+        const outputValue = await this._writeOpening(config, physicalOpening);
         config.openingPercent = clamped;
-        this.logger.debug({ valveId: actuator._id, openingPercent: clamped, outputValue }, 'valve opening written');
+        this.logger.debug({ valveId: actuator._id, openingPercent: clamped, physicalOpening, outputValue }, 'valve opening written');
     }
 
     public async read(actuator: ActuatorModel): Promise<number> {
@@ -100,7 +101,8 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     // deplacement partiel.
     public positioningDelayMs(actuator: ActuatorModel, openingDeltaPercent: number): number {
         const config = (actuator as ValveActuatorModel).config;
-        const fullRange = config.maxOpening - config.minOpening;
+        const { lo, hi } = CtrlOpeningBounds(config);
+        const fullRange = hi - lo;
         if (fullRange <= 0) return 0;
         return (Math.abs(openingDeltaPercent) / fullRange) * config.fullStrokeMs;
     }
@@ -115,7 +117,8 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
     }
 
     // DeviceCommand set (register map) : l'ouverture est projetee sur [minOutputValue, maxOutputValue]
-    // (0% -> minOutputValue, 100% -> maxOutputValue), à défaut sur la plage de saisie du template
+    // (0% -> minOutputValue, 100% -> maxOutputValue ; minOutputValue > maxOutputValue inverse aussi le sens de la
+    // sortie), à défaut sur la plage de saisie du template
     // (ex: AO8CH B outputs.set 0-10000 mV), puis bornée à cette plage. Passe par la file de
     // ModbusBusService (bus RS485 partagé). Renvoie la valeur écrite.
     private async _writeOpening(config: CtrlActuatorConfigModel, openingPercent: number): Promise<number> {

@@ -5,7 +5,7 @@ import { ControlPlant, ControlResult } from '@control/domain/models/control.mode
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { ActuatorType, IActuatorModule } from '../interfaces/actuator-module.interface';
-import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
+import { ActuatorModel, CtrlActuatorConfigModel, CtrlOpeningBounds } from '../models/actuator.model';
 import { ControlLoopModel } from '../models/control-loop.model';
 import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
 import { SensorType } from '../interfaces/sensor.interface';
@@ -97,9 +97,11 @@ export class RegulationService {
 
     private _plant(actuator: ActuatorModel, sensor: SensorModel, port: ActuatorPort): ControlPlant {
         const config = actuator.config as CtrlActuatorConfigModel;
+        // bornes ordonnées : en sens inversé, position() fait le miroir, la régulation reste dans l'espace commande
+        const { lo, hi } = CtrlOpeningBounds(config);
         return {
-            min: config.minOpening,
-            max: config.maxOpening,
+            min: lo,
+            max: hi,
             read: async () => (await this._sensorStrategy(sensor).read(sensor))[0]?.value,
             write: port.write,
             current: () => config.openingPercent,
