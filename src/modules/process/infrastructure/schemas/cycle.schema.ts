@@ -1,22 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { CycleType, ExecutableStatus, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType, ExecutableStatus, ExecutionMode } from '@process/domain/interfaces/executable.interface';
 import { Condition, ConditionSchema } from './condition.schema';
 import { ChildCycle, ChildCycleSchema } from './child-cycle.schema';
 import { CycleStyle, CycleStyleSchema } from './style.schema';
 
 export { CycleType, ExecutionMode };
-
-@Schema()
-export class ModePriority {
-    @Prop({ required: true, enum: ProcessMode })
-    public mode: ProcessMode;
-
-    @Prop({ required: true })
-    public priority: number;
-}
-export const ModePrioritySchema = SchemaFactory.createForClass(ModePriority);
 
 export type CycleDocument = Cycle & Document;
 
@@ -37,6 +27,10 @@ export class Cycle {
     @Prop({ type: Boolean, default: true })
     public display: boolean;
 
+    // fixe a la creation (cf. CycleMapper.mapToSchema) : absent des mises a jour, donc conserve
+    @Prop({ type: Boolean, default: false })
+    public autoCreated: boolean;
+
     @Prop({ required: true, enum: ExecutableStatus, default: ExecutableStatus.STOPPED })
     public status: ExecutableStatus;
 
@@ -48,9 +42,6 @@ export class Cycle {
 
     @Prop({ type: [ConditionSchema], default: [] })
     public conditions: Condition[];
-
-    @Prop({ type: [ModePrioritySchema], default: [] })
-    public modePriority: ModePriority[];
 
     @Prop({ type: String, ref: 'Cycle', default: null })
     public parentCycleId: string | null;

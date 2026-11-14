@@ -13,7 +13,7 @@ function CreateSensorModel(overrides: Partial<SensorModel> = {}): SensorModel {
     sensor.type = SensorType.COM;
     const config = new ComSensorConfigModel();
     config.cronPattern = '* * * * *';
-    config.comRequestId = 'com-request-1';
+    config.commandId = 'command-1';
     sensor.config = config;
     return Object.assign(sensor, overrides);
 }

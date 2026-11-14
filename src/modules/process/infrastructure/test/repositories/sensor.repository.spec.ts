@@ -6,13 +6,13 @@ import { InvalidIdException } from '@process/domain/errors/db-errors';
 
 describe('SensorRepository', () => {
     let mongooseRepository: {
-        create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByParentId: jest.Mock;
+        create: jest.Mock; upsert: jest.Mock; delete: jest.Mock; findAll: jest.Mock; findById: jest.Mock; findByParentId: jest.Mock; findByDeviceId: jest.Mock;
     };
     let repository: SensorRepository;
 
     beforeEach(() => {
         mongooseRepository = {
-            create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByParentId: jest.fn()
+            create: jest.fn(), upsert: jest.fn(), delete: jest.fn(), findAll: jest.fn(), findById: jest.fn(), findByParentId: jest.fn(), findByDeviceId: jest.fn()
         };
         repository = new SensorRepository(mongooseRepository as never as SensorMongooseRepository);
     });
@@ -53,6 +53,27 @@ describe('SensorRepository', () => {
 
             expect(mongooseRepository.delete).toHaveBeenCalledWith('id-1');
             expect(result).toEqual(true);
+        });
+    });
+
+    describe('deleteForDevice', () => {
+        it('should soft delete the children then the parent sensors read on the device', async () => {
+            mongooseRepository.findByDeviceId.mockResolvedValue([{ _id: 'parent-1' }]);
+            mongooseRepository.findByParentId.mockResolvedValue([{ _id: 'child-1' }, { _id: 'child-2' }]);
+
+            await repository.deleteForDevice('device-1');
+
+            expect(mongooseRepository.findByDeviceId).toHaveBeenCalledWith('device-1');
+            expect(mongooseRepository.findByParentId).toHaveBeenCalledWith('parent-1');
+            expect(mongooseRepository.delete.mock.calls).toEqual([['child-1'], ['child-2'], ['parent-1']]);
+        });
+
+        it('should delete nothing when no sensor is read on the device', async () => {
+            mongooseRepository.findByDeviceId.mockResolvedValue([]);
+
+            await repository.deleteForDevice('device-1');
+
+            expect(mongooseRepository.delete).not.toHaveBeenCalled();
         });
     });
 

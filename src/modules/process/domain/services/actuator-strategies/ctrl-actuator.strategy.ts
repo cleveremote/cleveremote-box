@@ -3,14 +3,15 @@ import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ActuatorActionConfig, ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorModel, CtrlActuatorConfigModel, CtrlOpeningBounds } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
-import { ActuatorStrategy } from './actuator-strategy.interface';
-import { ModbusService } from '../modbus.service';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ComRequestConfigModel, ComRequestModel } from '@process/domain/models/com-request.model';
-import { buildOverrideParams } from '@process/domain/utils/build-override-params.util';
+import { ActuatorSetOptions, ActuatorStrategy } from './actuator-strategy.interface';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
+import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { DeviceCommandService } from '../device-command.service';
+import { RegulationService } from '../regulation.service';
+import { ControlLoopMode } from '../../models/control-loop.model';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -26,106 +27,94 @@ const MAX_OUTPUT_MA = 20;
 const MIN_OUTPUT_UA = MIN_OUTPUT_MA * 1000;
 const MAX_OUTPUT_UA = MAX_OUTPUT_MA * 1000;
 
-export interface ValveAdjustmentResult {
-    targetFlowRate: number;
-    measuredFlowRate: number;
-    openingPercent: number;
-    outputCurrentMa: number;
-    isStabilized: boolean;
-    iterations: number;
-}
-
 @Injectable()
 export class CtrlActuatorStrategy implements ActuatorStrategy {
     public readonly type = ActuatorType.CTRL;
 
     public constructor(
         private deviceRepository: DeviceRepository,
-        private comRequestRepository: ComRequestRepository,
-        private modbusService: ModbusService,
-        private readonly logger: Logger
+        private waveshareDiscoveryService: WaveshareDiscoveryService,
+        private readonly logger: Logger,
+        private deviceCommandService: DeviceCommandService,
+        private regulationService: RegulationService
     ) { }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public async configure(actuator: ActuatorModel): Promise<void> {
-        // rien a configurer cote box : les connexions Modbus sont ouvertes/fermees a chaque
-        // ecriture (cf. _connectClient / _writeChannelOutput), pas de handle a preparer en amont.
+    // commandes init de la vanne (ex: plage de sortie du module AO)
+    public async init(actuator: ActuatorModel): Promise<void> {
+        const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
+        await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.INIT);
+    }
+
+    // commandes reset de la vanne ; à défaut, position de repos : fermée (set 0 -> 4mA), ouverte en sens inversé
+    public async reset(actuator: ActuatorModel): Promise<void> {
+        this.regulationService.stopFollow(actuator._id);
+        const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
+        if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
+            const { isInverted } = CtrlOpeningBounds(actuator.config as CtrlActuatorConfigModel);
+            await this._writeOpening(actuator.config as CtrlActuatorConfigModel, isInverted ? 100 : 0);
+            (actuator.config as CtrlActuatorConfigModel).openingPercent = 0;
+            return;
+        }
+        await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.RESET);
     }
 
     /**
-     * Point d'entree ActuatorStrategy : `action` est la valeur de débit cible à atteindre
-     * (pas un simple 0/1 comme pour RPI/COM). Délègue à setFlowRate() et ignore le résultat
-     * détaillé (ValveAdjustmentResult), déjà loggé par setFlowRate.
+     * ON sous ControlLoop active, la vanne étant pilotée via position() :
+     * - REGULATION : régulation sur la consigne de la boucle (RegulationService / module control) ;
+     * - FOLLOW : l'ouverture suit la mesure du sensor de la boucle (ex: potentiomètre), quelle que soit `action`
+     *   (0 compris) : le suivi reste actif à 0% et repart dès que la mesure remonte ; seul reset() l'arrête.
+     * Sinon `action` est l'ouverture cible en % (positionnement direct) ; 0 ne lance pas de régulation.
+     * options.isDirect (consigne explicite d'un cycle prioritaire sur le cycle PROPORTIONAL de la vanne) :
+     * positionnement direct même sous ControlLoop, un suivi en cours est arrêté.
      */
-    public async execute(actuator: ActuatorModel, action: number): Promise<void> {
-        await this.setFlowRate(actuator as ValveActuatorModel, action);
+    public async set(actuator: ActuatorModel, action: number, options?: ActuatorSetOptions): Promise<void> {
+        if (options?.isDirect) {
+            this.regulationService.stopFollow(actuator._id);
+            return this.position(actuator, action);
+        }
+        const loop = await this.regulationService.findLoop(actuator);
+        const port = {
+            write: (openingPercent: number) => this.position(actuator, openingPercent),
+            settleMs: (delta: number) => this.positioningDelayMs(actuator, delta)
+        };
+        if (loop?.mode === ControlLoopMode.FOLLOW) {
+            return this.regulationService.follow(actuator, loop, port);
+        }
+        if (!loop || action === 0) {
+            return this.position(actuator, action);
+        }
+        await this.regulationService.regulate(actuator, loop, port);
     }
 
-    public read(actuator: ActuatorModel): number {
+    // positionnement direct, commande bornée à [minOpening, maxOpening] ; sens inversé (minOpening > maxOpening) :
+    // ouverture en miroir dans ces bornes (cf. CtrlOpeningBounds). openingPercent garde la commande (régulation).
+    public async position(actuator: ActuatorModel, openingPercent: number): Promise<void> {
+        const config = (actuator as ValveActuatorModel).config;
+        const { lo, hi, isInverted } = CtrlOpeningBounds(config);
+        const clamped = Math.min(hi, Math.max(lo, openingPercent));
+        const physicalOpening = isInverted ? lo + hi - clamped : clamped;
+        const outputValue = await this._writeOpening(config, physicalOpening);
+        config.openingPercent = clamped;
+        this.logger.debug({ valveId: actuator._id, openingPercent: clamped, physicalOpening, outputValue }, 'valve opening written');
+    }
+
+    public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as CtrlActuatorConfigModel).openingPercent;
-    }
-
-    /**
-     * Régule l'ouverture de la vanne proportionnelle jusqu'à atteindre le débit souhaité.
-     * Itère : lit le débit mesuré (capteur RS485), corrige l'ouverture (commande proportionnelle)
-     * et pilote la vanne 4-20mA via le module Waveshare Modbus RTU Analog Output 8CH,
-     * jusqu'à ce que l'écart soit dans la tolérance ou que le nombre d'itérations max soit atteint.
-     */
-    public async setFlowRate(valve: ValveActuatorModel, targetFlowRate: number): Promise<ValveAdjustmentResult> {
-        let result: ValveAdjustmentResult;
-
-        for (let iteration = 1; iteration <= valve.config.maxIterations; iteration++) {
-            const openingBeforeAdjust = valve.config.openingPercent;
-            result = await this._adjustOnce(valve, targetFlowRate, iteration);
-            if (result.isStabilized) break;
-            // en plus du delai de boucle, on attend le temps que met physiquement la vanne a
-            // atteindre sa nouvelle position (cf. _positioningDelayMs) avant de relire le debit.
-            const positioningDelayMs = this._positioningDelayMs(valve, valve.config.openingPercent - openingBeforeAdjust);
-            await this._delay(valve.config.iterationDelayMs + positioningDelayMs);
-        }
-
-        this.logger.log({ valveId: valve._id, ...result }, 'valve flow rate regulation finished');
-        return result;
-    }
-
-    private async _adjustOnce(valve: ValveActuatorModel, targetFlowRate: number, iteration: number): Promise<ValveAdjustmentResult> {
-        const measuredFlowRate = await this._readFlowMeterTest(valve, iteration);
-        const error = targetFlowRate - measuredFlowRate;
-        const isStabilized = Math.abs(error) <= valve.config.tolerance;
-
-        if (!isStabilized) {
-            valve.config.openingPercent = Math.min(
-                valve.config.maxOpening,
-                Math.max(valve.config.minOpening, valve.config.openingPercent + error * (valve.config.kP / 10))
-            );
-            await this._writeOpeningViaComRequest(valve.config.actions[0], this._openingToMilliAmps(valve.config.openingPercent));
-        }
-
-        const outputCurrentMa = this._openingToMilliAmps(valve.config.openingPercent);
-        this.logger.debug(
-            { valveId: valve._id, iteration, targetFlowRate, measuredFlowRate, openingPercent: valve.config.openingPercent, isStabilized },
-            'valve flow rate adjustment step'
-        );
-
-        return { targetFlowRate, measuredFlowRate, openingPercent: valve.config.openingPercent, outputCurrentMa, isStabilized, iterations: iteration };
-    }
-
-    private _delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     // temps physique estime pour que la vanne rejoigne sa nouvelle position : course complete
     // (minOpening <-> maxOpening) en config.fullStrokeMs, proportionnellement moins pour un
     // deplacement partiel.
-    private _positioningDelayMs(valve: ValveActuatorModel, openingDeltaPercent: number): number {
-        const fullRange = valve.config.maxOpening - valve.config.minOpening;
+    public positioningDelayMs(actuator: ActuatorModel, openingDeltaPercent: number): number {
+        const config = (actuator as ValveActuatorModel).config;
+        const { lo, hi } = CtrlOpeningBounds(config);
+        const fullRange = hi - lo;
         if (fullRange <= 0) return 0;
-        return (Math.abs(openingDeltaPercent) / fullRange) * valve.config.fullStrokeMs;
+        return (Math.abs(openingDeltaPercent) / fullRange) * config.fullStrokeMs;
     }
 
-    // 0% -> 4mA, 100% -> 20mA (live zero, jamais en dessous de MIN_OUTPUT_MA)
-    private _openingToMilliAmps(openingPercent: number): number {
-        return MIN_OUTPUT_MA + (openingPercent / 100) * (MAX_OUTPUT_MA - MIN_OUTPUT_MA);
+    private _delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     private _toClampedMicroAmps(milliAmps: number): number {
@@ -133,40 +122,26 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         return Math.min(Math.max(Math.round(clampedMa * 1000), MIN_OUTPUT_UA), MAX_OUTPUT_UA);
     }
 
-    // route l'ecriture via ModbusTaskService (meme chemin que ComActuatorStrategy.execute) plutot
-    // que via une connexion modbus-serial geree a la main : beneficie de la file d'attente
-    // partagee (_enqueue) qui serialise les acces au bus RS485, et de la gestion
-    // connexion/erreurs deja centralisee dans ModbusTaskService._runComRequest.
-    private async _writeOpeningViaComRequest(action: ActuatorActionConfig, milliAmps: number): Promise<void> {
-        const microAmps = this._toClampedMicroAmps(milliAmps);
-        const comRequest: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
-
-
-        const comRequestData: ComRequestModel = await this.comRequestRepository.get(action.comRequestId) as ComRequestModel;
-        const overrideParams: ComRequestConfigModel = { address: action.portNumber, params: { value: microAmps } }
-        this.modbusService.execute(comRequestData, buildOverrideParams(comRequestData.config, overrideParams));
-    }
-
-    /**
-     * FAKE - en attendant la documentation officielle du débitmètre RS485.
-     * Simule la lecture Modbus du capteur : le débit suit l'ouverture de la vanne avec un peu de
-     * bruit de mesure. Lue seulement après que setFlowRate ait attendu _positioningDelayMs, donc
-     * openingPercent reflete deja la position physique reelle de la vanne a cet instant.
-     */
-    private async _readFlowMeter(valve: ValveActuatorModel): Promise<number> {
-        const theoreticalFlowRate = (valve.config.openingPercent / 100) * valve.config.maxFlowRate;
-        const measurementNoise = (Math.random() - 0.5) * 2;
-        const measuredFlowRate = Math.max(0, theoreticalFlowRate + measurementNoise);
-
-        this.logger.debug({ flowMeterId: valve.config.flowMeterId, measuredFlowRate }, 'flow meter read (fake)');
-        return measuredFlowRate;
-    }
-
-    private async _readFlowMeterTest(valve: ValveActuatorModel, iteration: number): Promise<number> {
-
-        return iteration * 10;
-
-
+    // DeviceCommand set (register map) : l'ouverture est projetee sur [minOutputValue, maxOutputValue]
+    // (0% -> minOutputValue, 100% -> maxOutputValue ; minOutputValue > maxOutputValue inverse aussi le sens de la
+    // sortie), à défaut sur la plage de saisie du template
+    // (ex: AO8CH B outputs.set 0-10000 mV), puis bornée à cette plage. Passe par la file de
+    // ModbusBusService (bus RS485 partagé). Renvoie la valeur écrite.
+    private async _writeOpening(config: CtrlActuatorConfigModel, openingPercent: number): Promise<number> {
+        const { deviceId, actions } = config;
+        const [set] = await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.SET);
+        if (!set) {
+            throw new Error('CtrlActuatorStrategy: vanne sans commande set');
+        }
+        const range = await this.deviceCommandService.numberRange(set.command._id, deviceId);
+        if (!range) {
+            throw new Error(`CtrlActuatorStrategy: DeviceCommand ${set.command._id} sans saisie numérique`);
+        }
+        const min = config.minOutputValue ?? range.min;
+        const max = config.maxOutputValue ?? range.max;
+        const value = Math.min(range.max, Math.max(range.min, Math.round(min + (openingPercent / 100) * (max - min))));
+        await this.deviceCommandService.execute(set.command, deviceId, { channel: set.action.channel, value });
+        return value;
     }
 
     private async _connectClient(deviceId: string, unitIdOverride?: number): Promise<ModbusRTU> {
@@ -183,7 +158,15 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
         const client = new ModbusRTU();
         if (masterConfig.protocol === MasterProtocol.TCP) {
-            await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            try {
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            } catch (err) {
+                // IP obsolète (master en DHCP) : on la retrouve par son deviceId puis on retente une fois
+                if (!UNREACHABLE_NETWORK_CODES.includes(err.code) || !await this.waveshareDiscoveryService.refreshMasterAddress(masterConfig)) {
+                    throw err;
+                }
+                await client.connectTCP(masterConfig.ipAddress, { port: masterConfig.port });
+            }
         } else if (masterConfig.protocol === MasterProtocol.RTU) {
             await client.connectRTUBuffered(masterConfig.path, { baudRate: masterConfig.baudRate || 9600 });
         } else {
@@ -235,7 +218,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
 
             this.logger.log({ deviceId, channel, milliAmps, microAmps }, 'waveshare AO8CH channel output written');
         } catch (err) {
-            this.logger.error({ deviceId, channel, err: err.message }, 'valve output write error');
+            this.logger.error({ deviceId, channel, err: err instanceof Error ? err.message : String(err) }, 'valve output write error');
             const networkCodes = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH', 'ECONNRESET'];
             if (err.modbusCode !== undefined) return;
             if (!networkCodes.includes(err.code)) throw err;

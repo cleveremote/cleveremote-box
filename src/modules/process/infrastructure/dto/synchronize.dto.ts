@@ -1,24 +1,31 @@
 /* eslint-disable max-lines-per-function */
 /* eslint-disable max-lines */
 import { ApiProperty } from '@nestjs/swagger';
-import { CycleType, ExecutableAction, ExecutionMode, ProcessMode } from '@process/domain/interfaces/executable.interface';
+import { CycleType, ExecutableAction, ExecutionMode } from '@process/domain/interfaces/executable.interface';
 import { ChildCycleRef } from '@process/domain/models/cycle.model';
-import { ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
+import { ConditionConnector, ConditionOperator, ConditionParentType, ConditionSymbolEnd, ConditionSymbolStart } from '@process/domain/models/condition.model';
+import { ElementType as ConditionElementType } from '@process/domain/models/event.model';
+import { validateConditionStructure } from '@process/domain/utils/evaluate-conditions.util';
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { GPIODirection, GPIOEdge, ModuleStatus } from '@process/domain/interfaces/structure.interface';
-import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
+import { AnalogScalingModel, AnalogSensorConfigModel, AnalogSignalType, ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName } from '@process/domain/models/sensor.model';
+import { OutOfRangePolicy } from '@process/domain/utils/linear-scale.util';
 import { StructureModel } from '@process/domain/models/structure.model';
+import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ModbusFunctionName, ModbusValueType } from '@process/domain/models/com-request.model';
-import { ComRequestType } from '@process/domain/interfaces/com-request.interface';
+import { DeviceCommandType } from '@process/domain/models/device-command.model';
+import { InverterMode } from '@process/domain/models/inverter.model';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
     SynchronizeDeviceModel,
-    SynchronizeComRequestModel,
+    SynchronizeDeviceCommandModel,
     SynchronizeActuatorModel,
+    SynchronizeControlLoopModel,
+    SynchronizeInverterModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
     SynchronizeSequenceModel,
@@ -26,110 +33,69 @@ import {
 } from '@process/domain/models/synchronize.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDate, IsDefined, isEmpty, IsEnum, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { isValidUuid } from '@process/domain/utils/id.util';
 import { ElementType } from '@process/domain/models/event.model';
+import { RegisterOperationParams, RegisterOperationValue } from '@register-map/domain/models/register-map.model';
 
-export class PersistenceDTO {
-    @IsBoolean()
-    @ApiProperty({ description: 'Si vrai, écriture persistante (EEPROM) plutôt que volatile' })
-    public persist: boolean;
-
-    @IsNumber()
-    @ApiProperty({ description: 'Adresse cible pour l\'écriture persistante' })
-    public address: number;
-}
-
-@ValidatorConstraint({ name: 'number-or-number-array', async: false })
-export class IsNumberOrNumberArray implements ValidatorConstraintInterface {
-    public validate(value: any, args: ValidationArguments) {
-        return typeof value === 'number' || (Array.isArray(value) && value.every(item => typeof item === 'number'));
+@ValidatorConstraint({ name: 'condition-value', async: false })
+export class IsConditionValue implements ValidatorConstraintInterface {
+    public validate(value: unknown, args: ValidationArguments) {
+        const condition = args.object as ConditionSync;
+        if (condition.elementType === ConditionElementType.SENSOR) {
+            return (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && !Number.isNaN(Number(value));
+        }
+        return value === ExecutableAction.ON || value === ExecutableAction.OFF;
     }
 
     public defaultMessage(args: ValidationArguments) {
-        return '($value) must be a number or an array of numbers';
+        return '($value) must be numeric for a SENSOR condition, ON or OFF for a CYCLE/SEQUENCE condition';
     }
 }
 
-export class ModbusTaskParams {
-    @IsNotEmpty()
-    @IsNumber()
-    @ApiProperty({ description: 'Longueur (nombre de registres à lire ou écrire)' })
-    public length: number;
+@ValidatorConstraint({ name: 'condition-expression', async: false })
+export class IsValidConditionExpression implements ValidatorConstraintInterface {
+    private error: string | null = null;
 
-    @IsOptional()
-    @IsNumber()
-    @ApiProperty({ description: 'Facteur d’échelle appliqué à la valeur brute' })
-    public scale: number;
+    public validate(conditions: ConditionSync[] | undefined) {
+        this.error = Array.isArray(conditions) ? validateConditionStructure(conditions) : null;
+        return this.error === null;
+    }
 
-    @IsOptional()
-    @IsString()
-    @ApiProperty({ description: 'Unité de mesure (ex: °C, L/h, bar...)' })
-    public unit: string;
-
-    @IsOptional()
-    @Validate(IsNumberOrNumberArray)
-    @ApiProperty({ description: 'Valeur à écrire (registre/coil unique) ou tableau de valeurs (écriture multiple)', required: false })
-    public value?: number | number[];
-
-    @IsOptional()
-    @ValidateIf((o, value) => value !== null)
-    @IsString()
-    @ApiProperty({ description: 'Formule mathjs de transformation de la valeur lue (ex: "raw")', required: false, nullable: true })
-    public formula?: string | null;
-
-    @IsOptional()
-    @ValidateNested()
-    @Type(() => PersistenceDTO)
-    @ApiProperty({ description: 'Configuration de persistance (EEPROM) du paramètre, si applicable' })
-    public persistence?: PersistenceDTO;
+    public defaultMessage() {
+        return `invalid conditions expression: ${this.error}`;
+    }
 }
 
-export class ComRequestConfigDTO {
-    @IsArray()
-    @ArrayNotEmpty()
-    @IsEnum(ModbusFunctionName, { each: true })
-    @ApiProperty({ description: 'Fonction(s) Modbus à exécuter', enum: ModbusFunctionName, isArray: true })
-    public function: ModbusFunctionName[];
-
-    @IsNotEmpty()
+// surcharge voie / valeur d'une DeviceCommand (cf. DeviceCommandOverride)
+export class DeviceCommandOverrideDTO {
+    @IsOptional()
     @IsNumber()
-    @ApiProperty({ description: 'Adresse Modbus à interroger (ou écrire)' })
-    public address: number;
+    @ApiProperty({ description: 'Voie, 0-based (scope channel)', required: false })
+    public channel?: number;
 
+    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée à l'exécution par le template
     @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: 'Désactive la requête sans la supprimer', required: false })
-    public disabled?: boolean;
-
-    @IsOptional()
-    @IsBoolean()
-    @ApiProperty({ description: 'Indique si la requête a été traitée', required: false, default: false })
-    public done?: boolean;
-
-    @IsOptional()
-    @IsEnum(ModbusValueType)
-    @ApiProperty({ description: 'Type de valeur lue (défaut : int)', enum: ModbusValueType, required: false })
-    public type?: ModbusValueType;
-
-    @ValidateNested()
-    @Type(() => ModbusTaskParams)
-    @ApiProperty({ description: 'Paramètres de la requête (longueur, échelle, unité)' })
-    public params?: ModbusTaskParams;
+    @ApiProperty({ description: 'Valeur (selon operation.input)', required: false })
+    public value?: RegisterOperationValue;
 }
 
 export class CustomStackSync {
     @IsString()
     @IsNotEmpty()
-    public comRequestId: string;
+    public commandId: string;
+    // slave sur lequel la commande est exécutée (du modèle de la commande)
+    @IsString()
+    @IsNotEmpty()
+    public deviceId: string;
     @IsOptional()
     @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    public params?: ComRequestConfigDTO;
+    @Type(() => DeviceCommandOverrideDTO)
+    public params?: DeviceCommandOverrideDTO;
     @IsOptional()
     @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    public defaultParams?: ComRequestConfigDTO;
+    @Type(() => DeviceCommandOverrideDTO)
+    public defaultParams?: DeviceCommandOverrideDTO;
 }
 
 export class SecurityConfigSync {
@@ -139,12 +105,28 @@ export class SecurityConfigSync {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => CustomStackSync)
     public customStacks?: CustomStackSync[];
+}
+
+// directive donnée à un variateur pendant la séquence : RS485 (frequency, Hz) ou PID (pidSetpoint optionnel)
+export class SequenceInverterDirectiveSync {
+    @IsString()
+    @IsNotEmpty()
+    public inverterId: string;
+    @IsEnum(InverterMode)
+    public mode: InverterMode;
+    @ValidateIf((o) => o.mode === InverterMode.RS485)
+    @IsNumber()
+    public frequency?: number;
+    @IsOptional()
+    @IsNumber()
+    public pidSetpoint?: number;
 }
 
 export class SequenceSync {
@@ -165,6 +147,11 @@ export class SequenceSync {
     @ValidateNested({ each: true })
     @Type(() => moduleConfigsSync)
     public moduleConfigs: moduleConfigsSync[];
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SequenceInverterDirectiveSync)
+    public inverterDirectives?: SequenceInverterDirectiveSync[];
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
@@ -209,13 +196,6 @@ export class Style {
     public iconColor: IconColorSync;
 }
 
-export class ModePriority {
-    @IsEnum(ProcessMode)
-    public mode: ProcessMode;
-    @IsNumber()
-    public priority: number;
-}
-
 export class CycleSynchronizeDTO {
     @IsOptional()
     @IsString()
@@ -246,15 +226,6 @@ export class CycleSynchronizeDTO {
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
-    @Type(() => ModePriority)
-    public modePriority?: ModePriority[] = [
-            { mode: ProcessMode.MANUAL, priority: 0 },
-            { mode: ProcessMode.SCHEDULED, priority: 1 },
-            { mode: ProcessMode.TRIGGER, priority: 2 }
-        ];
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
     @Type(() => SequenceSync)
     public sequences?: SequenceSync[];
     @IsOptional()
@@ -276,6 +247,7 @@ export class CycleSynchronizeDTO {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsString()
@@ -313,18 +285,6 @@ export class CycleSynchronizeDTO {
             }
         }));
 
-        cycle.modePriority = [];
-        if (cycleSynchronizeDTO.modePriority) {
-            cycleSynchronizeDTO.modePriority?.forEach(priority => { //nya remove optional
-                const priorityModel = { mode: priority.mode, priority: priority.priority };
-                cycle.modePriority.push(priorityModel);
-            });
-        } else {
-            cycle.modePriority.push({ mode: ProcessMode.MANUAL, priority: 0 });
-            cycle.modePriority.push({ mode: ProcessMode.SCHEDULED, priority: 1 });
-            cycle.modePriority.push({ mode: ProcessMode.TRIGGER, priority: 2 });
-        }
-
         cycle.sequences = (cycleSynchronizeDTO.sequences ?? []).map(sequenceSync => {
             const sequence = new SynchronizeSequenceModel();
             sequence._id = sequenceSync._id;
@@ -335,27 +295,10 @@ export class CycleSynchronizeDTO {
                 maxDuration: sequenceSync.securityConfig.maxDuration,
                 ...(sequenceSync.securityConfig.customStacks !== undefined && {
                     customStacks: sequenceSync.securityConfig.customStacks.map(customStackSync => ({
-                        comRequestId: customStackSync.comRequestId,
-                        ...(customStackSync.params !== undefined && {
-                            params: {
-                                function: customStackSync.params.function,
-                                address: customStackSync.params.address,
-                                disabled: customStackSync.params.disabled,
-                                done: customStackSync.params.done ?? false,
-                                type: customStackSync.params.type,
-                                params: customStackSync.params.params || undefined
-                            }
-                        }),
-                        ...(customStackSync.defaultParams !== undefined && {
-                            defaultParams: {
-                                function: customStackSync.defaultParams.function,
-                                address: customStackSync.defaultParams.address,
-                                disabled: customStackSync.defaultParams.disabled,
-                                done: customStackSync.defaultParams.done ?? false,
-                                type: customStackSync.defaultParams.type,
-                                params: customStackSync.defaultParams.params || undefined
-                            }
-                        })
+                        commandId: customStackSync.commandId,
+                        deviceId: customStackSync.deviceId,
+                        ...(customStackSync.params !== undefined && { params: { ...customStackSync.params } }),
+                        ...(customStackSync.defaultParams !== undefined && { defaultParams: { ...customStackSync.defaultParams } })
                     }))
                 }),
                 ...(sequenceSync.securityConfig.conditions !== undefined && {
@@ -373,6 +316,14 @@ export class CycleSynchronizeDTO {
                     configTiming: moduleDto.configTiming || { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 },
                     ...(moduleDto.customValue !== undefined && { customValue: moduleDto.customValue })
                 }));
+            if (sequenceSync.inverterDirectives !== undefined) {
+                sequence.inverterDirectives = sequenceSync.inverterDirectives.map((directiveSync) => ({
+                    inverterId: directiveSync.inverterId,
+                    mode: directiveSync.mode,
+                    ...(directiveSync.mode === InverterMode.RS485 && { frequency: directiveSync.frequency }),
+                    ...(directiveSync.mode === InverterMode.PID && directiveSync.pidSetpoint !== undefined && { pidSetpoint: directiveSync.pidSetpoint })
+                }));
+            }
             sequence.delete = sequenceSync.delete ?? false;
             return sequence;
         });
@@ -412,6 +363,7 @@ export class CycleSynchronizeDTO {
             scheduleModel.isPaused = scheduleSync.isPaused;
             scheduleModel.shouldConfirmation = scheduleSync.shouldConfirmation;
             scheduleModel.duration = scheduleSync.duration;
+            scheduleModel.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(scheduleSync.isInheritedDuration, scheduleSync.duration);
             scheduleModel.delete = scheduleSync.delete ?? false;
             return scheduleModel;
         });
@@ -451,6 +403,7 @@ export class CronSync {
 
 export class TriggerSync {
     @IsNumber()
+    @IsOptional()
     public timeAfter: number; //imemdiat if 0
     @IsOptional()
     @ValidateNested()
@@ -475,9 +428,14 @@ export class ScheduleSynchronizeDTO {
     public isPaused: boolean
     @IsBoolean()
     public shouldConfirmation: boolean
-    @IsOptional()
+    // duree en ms ; obligatoire (> 0) quand isInheritedDuration=false
+    @ValidateIf((o: ScheduleSynchronizeDTO) => o.isInheritedDuration === false || o.duration != null)
     @IsNumber()
+    @Min(1)
     public duration?: number;
+    @IsOptional()
+    @IsBoolean()
+    public isInheritedDuration?: boolean;
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
@@ -503,6 +461,7 @@ export class ScheduleSynchronizeDTO {
         scheduleModel.isPaused = scheduleSynchronizeDTO.isPaused;
         scheduleModel.shouldConfirmation = scheduleSynchronizeDTO.shouldConfirmation;
         scheduleModel.duration = scheduleSynchronizeDTO.duration;
+        scheduleModel.isInheritedDuration = ScheduleModel.resolveIsInheritedDuration(scheduleSynchronizeDTO.isInheritedDuration, scheduleSynchronizeDTO.duration);
         return scheduleModel;
     }
 }
@@ -517,13 +476,11 @@ export class IsNumberOrString implements ValidatorConstraintInterface {
     }
 }
 export class ConditionSync {
-    @IsString()
-    public name: string;
     @IsDefined()
-    @Validate(IsNumberOrString)
-    public value: number | ExecutableAction;
-    @IsString()
-    public operator: string;
+    @Validate(IsConditionValue)
+    public value: number | string;
+    @IsEnum(ConditionOperator)
+    public operator: ConditionOperator;
     @IsString()
     public elementId: string;
     @IsEnum(ElementType)
@@ -531,22 +488,37 @@ export class ConditionSync {
     @IsNumber()
     public order: number;
     @IsOptional()
-    @IsEnum(ConditionSymbolStart)
+    @IsEnum(ConditionConnector)
+    public connector?: ConditionConnector;
+    @IsOptional()
+    @IsIn(Object.values(ConditionSymbolStart))
     public symbolStart?: ConditionSymbolStart;
     @IsOptional()
-    @IsEnum(ConditionSymbolEnd)
+    @IsIn(Object.values(ConditionSymbolEnd))
     public symbolEnd?: ConditionSymbolEnd;
+    @IsOptional()
+    @IsString()
+    public parentId?: string;
+    @IsOptional()
+    @IsEnum(ConditionParentType)
+    public parentType?: ConditionParentType;
+    // etat UI du builder, accepte mais non persiste
+    @IsOptional()
+    @IsBoolean()
+    public isModified?: boolean;
 
     public static toModel(conditionSync: ConditionSync): SynchronizeConditionModel {
         const condition = new SynchronizeConditionModel();
-        condition.name = conditionSync.name;
         condition.elementId = conditionSync.elementId;
         condition.elementType = conditionSync.elementType;
         condition.operator = conditionSync.operator;
         condition.value = conditionSync.value;
         condition.order = conditionSync.order;
-        condition.symbolStart = conditionSync.symbolStart;
-        condition.symbolEnd = conditionSync.symbolEnd;
+        condition.connector = conditionSync.connector;
+        condition.symbolStart = conditionSync.symbolStart ?? ConditionSymbolStart.NONE;
+        condition.symbolEnd = conditionSync.symbolEnd ?? ConditionSymbolEnd.NONE;
+        condition.parentId = conditionSync.parentId;
+        condition.parentType = conditionSync.parentType;
         return condition;
     }
 }
@@ -604,6 +576,7 @@ export class TriggerSynchronizeDTO {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ConditionSync)
+    @Validate(IsValidConditionExpression)
     public conditions?: ConditionSync[];
     @IsOptional()
     @IsBoolean()
@@ -636,9 +609,68 @@ export class TriggerSynchronizeDTO {
 
 }
 
+// plage d'entrée non dégénérée : inputMax !== inputMin (division par zéro de la mise à l'échelle)
+@ValidatorConstraint({ name: 'distinct-input-bounds', async: false })
+export class IsDistinctInputBounds implements ValidatorConstraintInterface {
+    public validate(value: unknown, args: ValidationArguments) {
+        return value !== (args.object as AnalogScalingDTO).inputMin;
+    }
+
+    public defaultMessage() {
+        return 'inputMax ($value) must differ from inputMin';
+    }
+}
+
+// mise à l'échelle requise pour un sensor ANALOG (validée sur le sensor : SensorConfigDTO ne connaît pas son type)
+@ValidatorConstraint({ name: 'analog-sensor-scaling', async: false })
+export class HasAnalogScaling implements ValidatorConstraintInterface {
+    public validate(config: SensorConfigDTO | undefined, args: ValidationArguments) {
+        return (args.object as SensorSynchronizeDTO).type !== SensorType.ANALOG || !!config?.scaling;
+    }
+
+    public defaultMessage() {
+        return 'config.scaling is required for an ANALOG sensor';
+    }
+}
+
+// ANALOG : mise à l'échelle valeur brute -> grandeur physique (cf. AnalogScalingModel)
+export class AnalogScalingDTO {
+    @IsEnum(AnalogSignalType)
+    public signalType: AnalogSignalType;
+    // bornes d'entrée en V (VOLTAGE), mA (CURRENT) ou unité brute (RAW)
+    @IsNumber()
+    public inputMin: number;
+    @IsNumber()
+    @Validate(IsDistinctInputBounds)
+    public inputMax: number;
+    @IsNumber()
+    public outputMin: number;
+    @IsNumber()
+    public outputMax: number;
+    // unité physique (bar, °C, %...)
+    @IsString()
+    @IsNotEmpty()
+    public unit: string;
+    @IsOptional()
+    @IsEnum(OutOfRangePolicy)
+    public outOfRange?: OutOfRangePolicy;
+
+    public static toModel(dto: AnalogScalingDTO): AnalogScalingModel {
+        const model = new AnalogScalingModel();
+        model.signalType = dto.signalType;
+        model.inputMin = dto.inputMin;
+        model.inputMax = dto.inputMax;
+        model.outputMin = dto.outputMin;
+        model.outputMax = dto.outputMax;
+        model.unit = dto.unit;
+        model.outOfRange = dto.outOfRange ?? model.outOfRange;
+        return model;
+    }
+}
+
 export class SensorConfigDTO {
-    // requis pour FORCAST/COM ; absent quand le sensor est un enfant (parentId renseigne)
-    @ValidateIf(o => o.code === undefined || o.code === null)
+    // requis pour FORCAST/COM ; absent quand le sensor est un enfant (field sans commandId)
+    @ValidateIf(o => !o.field || !!o.commandId)
     @IsString()
     @IsNotEmpty()
     public cronPattern?: string;
@@ -648,22 +680,24 @@ export class SensorConfigDTO {
     @IsEnum(forcastDataName)
     public forcastData?: forcastDataName;
 
-    // COM
+    // COM : DeviceCommand (register map)
     @ValidateIf(o => o.type === SensorType.COM)
     @IsString()
     @IsNotEmpty()
-    public comRequestId?: string;
-
-    // CHILD COM (sensor avec parentId)
-    @IsOptional()
-    @IsNumber()
-    public code?: number;
-    @IsOptional()
-    @IsNumber()
-    public scale?: number;
+    public commandId?: string;
+    // COM : slave sur lequel la commande est lue (du modèle de la commande)
+    @ValidateIf(o => o.type === SensorType.COM)
+    @IsString()
+    @IsNotEmpty()
+    public deviceId?: string;
     @IsOptional()
     @IsString()
-    public unit?: string;
+    public field?: string;
+    // ANALOG (racine ou enfant)
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => AnalogScalingDTO)
+    public scaling?: AnalogScalingDTO;
 }
 
 export class SensorSynchronizeDTO {
@@ -686,6 +720,7 @@ export class SensorSynchronizeDTO {
     @IsString()
     public parentId?: string = null;
     @ValidateNested()
+    @Validate(HasAnalogScaling)
     @Type(() => SensorConfigDTO)
     public config: SensorConfigDTO;
     @IsOptional()
@@ -708,11 +743,21 @@ export class SensorSynchronizeDTO {
         sensorModel.parentId = sensorSynchronizeDTO.parentId ?? null;
         sensorModel.isEnabled = sensorSynchronizeDTO.isEnabled ?? true;
         sensorModel.display = sensorSynchronizeDTO.display ?? true;
-        sensorModel.config = sensorSynchronizeDTO.type === SensorType.FORCAST
-            ? Object.assign(new ForcastSensorConfigModel(), sensorSynchronizeDTO.config)
-            : Object.assign(new ComSensorConfigModel(), sensorSynchronizeDTO.config);
+        sensorModel.config = SensorSynchronizeDTO._mapConfigToModel(sensorSynchronizeDTO);
         sensorModel.delete = sensorSynchronizeDTO.delete ?? false;
         return sensorModel;
+    }
+
+    private static _mapConfigToModel(sensorSynchronizeDTO: SensorSynchronizeDTO): SynchronizeSensorModel['config'] {
+        const { type, config } = sensorSynchronizeDTO;
+        if (type === SensorType.FORCAST) {
+            return Object.assign(new ForcastSensorConfigModel(), config);
+        }
+        if (type === SensorType.ANALOG) {
+            const { scaling, ...comConfig } = config;
+            return Object.assign(new AnalogSensorConfigModel(), comConfig, { scaling: scaling && AnalogScalingDTO.toModel(scaling) });
+        }
+        return Object.assign(new ComSensorConfigModel(), config);
     }
 }
 
@@ -722,25 +767,22 @@ export class ValveConfigDTO {
     public deviceId: string;
     @IsNumber()
     public channel: number;
-    @IsString()
-    public flowMeterId: string;
-    @IsNumber()
-    public maxFlowRate?: number;
-    @IsNumber()
-    public kP?: number;
+    @IsOptional()
     @IsNumber()
     public minOpening?: number;
+    @IsOptional()
     @IsNumber()
     public maxOpening?: number;
-    @IsNumber()
-    public tolerance?: number;
-    @IsNumber()
-    public maxIterations?: number;
-    @IsNumber()
-    public iterationDelayMs?: number;
     @IsOptional()
     @IsNumber()
     public fullStrokeMs?: number;
+    // valeurs de sortie (unité de la commande set) pour 0% et 100% d'ouverture
+    @IsOptional()
+    @IsNumber()
+    public minOutputValue?: number;
+    @IsOptional()
+    @IsNumber()
+    public maxOutputValue?: number;
     @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
@@ -751,7 +793,7 @@ export class ValveConfigDTO {
 export class ValveSynchronizeDTO {
     @IsOptional()
     @IsNotEmpty()
-    public id: string;
+    public _id: string;
     @IsString()
     public name: string;
     @IsString()
@@ -767,7 +809,7 @@ export class ValveSynchronizeDTO {
 
     public static mapToValveModel(valveSynchronizeDTO: ValveSynchronizeDTO): SynchronizeActuatorModel {
         const valveModel = new SynchronizeActuatorModel();
-        valveModel._id = valveSynchronizeDTO.id;
+        valveModel._id = valveSynchronizeDTO._id;
         valveModel.name = valveSynchronizeDTO.name;
         valveModel.description = valveSynchronizeDTO.description;
         valveModel.type = ActuatorType.CTRL;
@@ -780,13 +822,155 @@ export class ValveSynchronizeDTO {
     }
 }
 
-export class ComActuatorActionConfigDTO {
+export class InverterParameterSyncDTO {
     @IsString()
     @IsNotEmpty()
-    public comRequestId: string;
-
+    public blockId: string;
+    // null : valeur plus imposée
+    @IsOptional()
+    @ValidateIf((_o, value) => value !== null)
     @IsNumber()
-    public digitalPort: number;
+    public value?: number | null;
+    @IsOptional()
+    @IsBoolean()
+    public isPersistent?: boolean;
+}
+
+// réglages d'un élément variateur existant (créé par l'auto-création du slave)
+export class InverterSynchronizeDTO {
+    @IsString()
+    @IsNotEmpty()
+    public _id: string;
+    @IsOptional()
+    @IsString()
+    public name?: string;
+    @IsOptional()
+    @IsString()
+    public description?: string;
+    @IsOptional()
+    @IsEnum(InverterMode)
+    public defaultMode?: InverterMode;
+    @IsOptional()
+    @IsNumber()
+    public releaseGraceMs?: number;
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => InverterParameterSyncDTO)
+    public parameters?: InverterParameterSyncDTO[];
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToInverterModel(dto: InverterSynchronizeDTO): SynchronizeInverterModel {
+        const model = new SynchronizeInverterModel();
+        model._id = dto._id;
+        model.name = dto.name;
+        model.description = dto.description;
+        model.defaultMode = dto.defaultMode;
+        model.releaseGraceMs = dto.releaseGraceMs;
+        model.parameters = dto.parameters?.map(({ blockId, value, isPersistent }) => ({ blockId, value, isPersistent }));
+        model.delete = dto.delete ?? false;
+        return model;
+    }
+}
+
+export class ControlLoopParamsDTO {
+    @IsOptional()
+    @IsNumber()
+    public kP?: number;
+    @IsOptional()
+    @IsNumber()
+    public kI?: number;
+    @IsOptional()
+    @IsNumber()
+    public kD?: number;
+    @IsOptional()
+    @IsNumber()
+    public tolerance?: number;
+    @IsOptional()
+    @IsNumber()
+    public maxIterations?: number;
+    @IsOptional()
+    @IsNumber()
+    public iterationDelayMs?: number;
+}
+
+export class ControlLoopFollowDTO {
+    @IsOptional()
+    @IsNumber()
+    public inputMin?: number;
+    @IsOptional()
+    @IsNumber()
+    public inputMax?: number;
+    @IsOptional()
+    @IsNumber()
+    public deadband?: number;
+}
+
+export class ControlLoopSynchronizeDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    public _id?: string;
+    @IsString()
+    public name: string;
+    @IsString()
+    @IsNotEmpty()
+    public actuatorId: string;
+    @IsString()
+    @IsNotEmpty()
+    public sensorId: string;
+    @IsOptional()
+    @IsEnum(ControlLoopMode)
+    public mode?: ControlLoopMode;
+    @IsOptional()
+    @IsEnum(ControlAlgorithm)
+    public algorithm?: ControlAlgorithm;
+    // ignorée en mode FOLLOW (la vanne recopie la mesure du sensor)
+    @ValidateIf(o => o.mode !== ControlLoopMode.FOLLOW)
+    @IsNumber()
+    public setpoint?: number;
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ControlLoopParamsDTO)
+    public params?: ControlLoopParamsDTO;
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ControlLoopFollowDTO)
+    public follow?: ControlLoopFollowDTO;
+    @IsOptional()
+    @IsBoolean()
+    public isEnabled?: boolean = true;
+    @IsOptional()
+    @IsBoolean()
+    public delete?: boolean = false;
+
+    public static mapToControlLoopModel(controlLoopSynchronizeDTO: ControlLoopSynchronizeDTO): SynchronizeControlLoopModel {
+        const controlLoopModel = new SynchronizeControlLoopModel();
+        controlLoopModel._id = controlLoopSynchronizeDTO._id;
+        controlLoopModel.name = controlLoopSynchronizeDTO.name;
+        controlLoopModel.actuatorId = controlLoopSynchronizeDTO.actuatorId;
+        controlLoopModel.sensorId = controlLoopSynchronizeDTO.sensorId;
+        controlLoopModel.mode = controlLoopSynchronizeDTO.mode ?? ControlLoopMode.REGULATION;
+        controlLoopModel.algorithm = controlLoopSynchronizeDTO.algorithm ?? ControlAlgorithm.P;
+        controlLoopModel.setpoint = controlLoopSynchronizeDTO.setpoint;
+        controlLoopModel.params = Object.assign(new PidParamsModel(), controlLoopSynchronizeDTO.params);
+        controlLoopModel.follow = Object.assign(new FollowParamsModel(), controlLoopSynchronizeDTO.follow);
+        controlLoopModel.isEnabled = controlLoopSynchronizeDTO.isEnabled ?? true;
+        controlLoopModel.delete = controlLoopSynchronizeDTO.delete ?? false;
+        return controlLoopModel;
+    }
+}
+
+export class ComActuatorActionConfigDTO {
+    // DeviceCommand (register map)
+    @IsString()
+    @IsNotEmpty()
+    public commandId: string;
+
+    @IsOptional()
+    @IsNumber()
+    public channel?: number;
 }
 
 export class ActuatorConfigDTO {
@@ -882,6 +1066,16 @@ export class StructureSynchronizeDTO {
 
 
 
+export class PortConfigDTO {
+    @IsNumber()
+    @ApiProperty({ description: 'Numéro du premier port' })
+    public portNumStart: number;
+
+    @IsNumber()
+    @ApiProperty({ description: 'Nombre de ports' })
+    public portCount: number;
+}
+
 export class DeviceConfigDTO {
     // MASTER
     @ValidateIf(o => o.type === DeviceType.MASTER)
@@ -893,6 +1087,11 @@ export class DeviceConfigDTO {
     @IsString()
     @ApiProperty({ description: 'Adresse IP de l\'équipement' })
     public ipAddress?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant matériel Waveshare, utilisé pour retrouver l\'IP (DHCP)' })
+    public deviceId?: string;
 
     @ValidateIf(o => o.type === DeviceType.MASTER && o.protocol === MasterProtocol.TCP)
     @IsNumber()
@@ -914,6 +1113,11 @@ export class DeviceConfigDTO {
     @ApiProperty({ description: 'timeout de connexion (ms)' })
     public timeout?: number;
 
+    @IsOptional()
+    @IsNumber()
+    @ApiProperty({ description: 'silence imposé entre deux trames sur le bus (ms, défaut 30)', required: false })
+    public interFrameDelay?: number;
+
     // SLAVE
     @ValidateIf(o => o.type === DeviceType.SLAVE)
     @IsNotEmpty()
@@ -926,6 +1130,22 @@ export class DeviceConfigDTO {
     @IsString()
     @ApiProperty({ description: 'Identifiant du DeviceModel MASTER associé' })
     public masterDeviceId?: string;
+
+    @IsOptional()
+    @IsEnum(DeviceKind)
+    @ApiProperty({ description: 'Nature de l\'équipement (esclave Modbus générique, onduleur, ...)', required: false })
+    public kind?: DeviceKind;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({ description: 'Modèle (slave template) dont le slave partage les commandes', required: false })
+    public modelId?: string;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => PortConfigDTO)
+    @ApiProperty({ description: 'Configuration des ports de l\'équipement', required: false })
+    public portConfig?: PortConfigDTO;
 }
 
 export class DeviceSynchronizeDTO {
@@ -942,11 +1162,6 @@ export class DeviceSynchronizeDTO {
     @IsNotEmpty()
     public type: DeviceType;
 
-    @IsOptional()
-    @IsEnum(DeviceKind)
-    @ApiProperty({ description: 'Nature de l\'équipement (esclave Modbus générique, onduleur, ...)' })
-    public kind?: DeviceKind;
-
     @ValidateNested()
     @Type(() => DeviceConfigDTO)
     public config: DeviceConfigDTO;
@@ -962,13 +1177,6 @@ export class DeviceSynchronizeDTO {
     @Type(() => DeviceSynchronizeDTO)
     public slaveDevices?: DeviceSynchronizeDTO[];
 
-    // comrequests imbriques appartenant a ce device (leur deviceId sera ecrase cote serveur).
-    @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => ComRequestDTO)
-    public comRequests?: ComRequestDTO[];
-
     // --- Méthode de mapping vers le modèle principal ---
     public static mapToDeviceModel(dto: DeviceSynchronizeDTO): SynchronizeDeviceModel {
         const model = new SynchronizeDeviceModel();
@@ -976,73 +1184,109 @@ export class DeviceSynchronizeDTO {
         model.name = dto.name;
         model.description = dto.description;
         model.type = dto.type;
-        model.kind = dto.kind;
         model.config = dto.type === DeviceType.MASTER
             ? Object.assign(new MasterConfigModel(), dto.config)
             : Object.assign(new SlaveConfigModel(), dto.config);
         model.delete = dto.delete ?? false;
         // undefined si non fourni par le client : ne pas defaulter a [] (voir synchronizeService._synchronizeDeviceTree)
         model.devices = dto.slaveDevices?.map(DeviceSynchronizeDTO.mapToDeviceModel);
-        model.comrequests = dto.comRequests?.map(ComRequestDTO.mapToComRequestModel);
         return model;
     }
 }
 
-export class ComRequestDTO {
-    @IsOptional()
+// Champs d'une DeviceCommand hors identifiants (aussi utilisés par les slave templates)
+export class DeviceCommandBaseDTO {
     @IsNotEmpty()
     @IsString()
-    @ApiProperty({ description: 'Identifiant unique de la requête' })
-    public _id: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Identifiant de la connexion associée' })
-    public deviceId: string;
-
-    @IsNotEmpty()
-    @IsString()
-    @ApiProperty({ description: 'Nom lisible ou étiquette de la requête' })
+    @ApiProperty({ description: 'Nom lisible de la commande' })
     public name: string;
 
     @IsOptional()
     @IsString()
-    @ApiProperty({ description: 'Description de la requête' })
+    @ApiProperty({ description: 'Description de la commande', required: false })
     public description?: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant du bloc (registerMap[].id)' })
+    public blockId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant de l\'opération (registerMap[].operations[].id)' })
+    public operationId: string;
+
+    @IsOptional()
+    @IsNumber()
+    @ApiProperty({ description: 'Voie par défaut, 0-based (scope channel)', required: false })
+    public channel?: number;
+
+    // Forme dépendante de operation.input (nombre, tableau, champs composite) : validée à l'exécution par le template
+    @IsOptional()
+    @ApiProperty({ description: 'Valeur par défaut (selon operation.input)', required: false })
+    public value?: RegisterOperationValue;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: 'Écriture persistante', required: false })
+    public isPersistent?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @ApiProperty({ description: 'Confirmation des opérations sensibles (bloc danger)', required: false })
+    public isConfirmed?: boolean;
 
     @IsArray()
     @ArrayNotEmpty()
-    @IsEnum(ComRequestType, { each: true })
-    @ApiProperty({ description: 'Type(s) de la requête de communication', enum: ComRequestType, isArray: true })
-    public type: ComRequestType[];
+    @IsEnum(DeviceCommandType, { each: true })
+    @ApiProperty({ enum: DeviceCommandType, isArray: true, description: 'Usages cumulables de la commande : set, read, init (initialisation du device), reset (remise à zéro du device)' })
+    public types: DeviceCommandType[];
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    @ApiProperty({ description: 'Lecture à champs : champs retenus (params.result.fields[].name), absent = tous', required: false, type: [String] })
+    public fields?: string[];
+
+    // Recalculé depuis la register map à l'enregistrement : la valeur reçue n'est conservée que si l'opération est introuvable
+    @IsOptional()
+    @IsObject()
+    @ApiProperty({ description: 'Typage de la voie et de la valeur (listes, bornes) pour les formulaires', required: false })
+    public params?: RegisterOperationParams;
+}
+
+export class DeviceCommandDTO extends DeviceCommandBaseDTO {
+    @IsOptional()
+    @IsNotEmpty()
+    @IsString()
+    @ApiProperty({ description: 'Identifiant unique de la commande' })
+    public _id: string;
 
     @IsNotEmpty()
-    @ValidateNested()
-    @Type(() => ComRequestConfigDTO)
-    @ApiProperty({ description: 'Configuration Modbus (fonction, adresse, paramètres)' })
-    public config: ComRequestConfigDTO;
+    @IsString()
+    @ApiProperty({ description: 'Modèle (slave template) propriétaire, partagé par ses slaves (son kind désigne la register map)' })
+    public modelId: string;
+
     @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
 
-    // --- Méthode de mapping vers le modèle principal ---
-    public static mapToComRequestModel(dto: ComRequestDTO): SynchronizeComRequestModel {
-        const model = new SynchronizeComRequestModel();
+    public static mapToDeviceCommandModel(dto: DeviceCommandDTO): SynchronizeDeviceCommandModel {
+        const model = new SynchronizeDeviceCommandModel();
         model._id = dto._id;
-        model.deviceId = dto.deviceId;
+        model.modelId = dto.modelId;
         model.name = dto.name;
         model.description = dto.description;
-        model.type = dto.type;
-        model.config = {
-            function: dto.config.function,
-            address: dto.config.address,
-            disabled: dto.config.disabled,
-            done: dto.config.done ?? false,
-            type: dto.config.type,
-            params: dto.config.params || undefined
-        };
+        model.blockId = dto.blockId;
+        model.operationId = dto.operationId;
+        model.channel = dto.channel;
+        model.value = dto.value;
+        model.isPersistent = dto.isPersistent;
+        model.isConfirmed = dto.isConfirmed;
+        model.types = [...dto.types];
+        model.fields = dto.fields && [...dto.fields];
+        model.params = dto.params;
         model.delete = dto.delete ?? false;
         return model;
     }
 }
-

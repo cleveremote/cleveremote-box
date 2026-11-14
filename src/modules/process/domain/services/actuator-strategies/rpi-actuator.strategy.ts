@@ -1,12 +1,12 @@
 import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { BinaryValue, Gpio } from 'onoff';
 import { NotSwitchError } from '../../errors/not-switch.error';
 import { GPIODirection, ModuleStatus } from '../../interfaces/structure.interface';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { FakeGpio, ActuatorModel, RpiActuatorConfigModel } from '../../models/actuator.model';
 import { ActuatorStrategy } from './actuator-strategy.interface';
+import { GpioBinaryValue, isGpioAvailable, loadGpio } from '../../utils/gpio.util';
 
 const GPIO_ROOT_PATH = '/sys/class/gpio/';
 
@@ -22,13 +22,26 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
 
     public constructor(private readonly logger: Logger) { }
 
-    public async configure(actuator: ActuatorModel): Promise<void> {
+    public async reset(actuator: ActuatorModel): Promise<void> {
+        const config = actuator.config as RpiActuatorConfigModel;
+        if (!config.instance) {
+            await this.init(actuator);
+        }
+        if (config.instance.direction() !== GPIODirection.OUT) {
+            throw new NotSwitchError();
+        }
+        config.instance.writeSync(0);
+        actuator.status = ModuleStatus.OFF;
+    }
+
+    public async init(actuator: ActuatorModel): Promise<void> {
         const config = actuator.config as RpiActuatorConfigModel;
         if (config.instance) {
             config.instance.unexport();
         }
         /* istanbul ignore next */
-        if (Gpio.accessible) {
+        if (isGpioAvailable()) {
+            const Gpio = loadGpio();
             const gpioOptions = {
                 debounceTimeout: config.debounceTimeout,
                 activeLow: config.activeLow,
@@ -46,13 +59,13 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
         }
     }
 
-    public async execute(actuator: ActuatorModel, action: number): Promise<void> {
+    public async set(actuator: ActuatorModel, action: number): Promise<void> {
         if (!(actuator.config as RpiActuatorConfigModel).instance) {
-            await this.configure(actuator);
+            await this.init(actuator);
         }
         const config = actuator.config as RpiActuatorConfigModel;
         if (config.instance.direction() === GPIODirection.OUT) {
-            config.instance.writeSync(action as BinaryValue);
+            config.instance.writeSync(action as GpioBinaryValue);
             actuator.status = action === 1 ? ModuleStatus.ON : ModuleStatus.OFF;
         }
         else {
@@ -60,7 +73,7 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
         }
     }
 
-    public read(actuator: ActuatorModel): number {
+    public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as RpiActuatorConfigModel).instance.readSync();
     }
 

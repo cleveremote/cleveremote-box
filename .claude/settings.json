@@ -17,7 +17,11 @@
       "Bash(awk -F: '$1<520')",
       "Bash(git checkout *)",
       "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/publish.yml'\\)\\); print\\('YAML OK'\\)\")",
-      "Bash(node -e \"require\\('yaml'\\) && console.log\\('use js yaml lib'\\)\")"
+      "Bash(node -e \"require\\('yaml'\\) && console.log\\('use js yaml lib'\\)\")",
+      "Bash(mkdir -p /home/clv/dev-workspace/cleveremote-updater/src/common/websocket/socket-io-client-proxy)",
+      "Bash(mkdir -p /home/clv/dev-workspace/cleveremote-updater/src/modules/updater)",
+      "Bash(mkdir -p /home/clv/dev-workspace/cleveremote-updater/test)",
+      "Read(//home/clv/dev-workspace/**)"
     ],
     "additionalDirectories": [
       "/home/clv/.claude/plans"

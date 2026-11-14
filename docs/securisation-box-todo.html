@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sécurisation box CleverRemote</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --border: #e3e3de; --accent: #2f6f4f; --accent-soft: #e5f0ea;
+    --warn: #9a5b00; --warn-soft: #fbf0dc; --danger: #a12d2d; --danger-soft: #f9e3e1;
+    --code-bg: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #9c9c95;
+      --border: #33332f; --accent: #6cc196; --accent-soft: #1f3329;
+      --warn: #e5a94a; --warn-soft: #3a2d17; --danger: #ec7d7d; --danger-soft: #3b1f1f;
+      --code-bg: #262624;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #9c9c95;
+    --border: #33332f; --accent: #6cc196; --accent-soft: #1f3329;
+    --warn: #e5a94a; --warn-soft: #3a2d17; --danger: #ec7d7d; --danger-soft: #3b1f1f;
+    --code-bg: #262624;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 6px 0 0; }
+  pre code { background: none; padding: 0; }
+
+  .progress { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 10px 0 14px; }
+  .bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .progress-label { display: flex; justify-content: space-between; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+  .progress-label button {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit;
+  }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin: 0 0 18px; }
+  .chain { white-space: pre; overflow-x: auto; }
+
+  .phase-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .phase-count { font-size: .8rem; color: var(--muted); }
+  .phase-desc { color: var(--muted); margin: 0 0 10px; font-size: .9rem; }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: 1px 7px; border-radius: 99px; margin-left: 6px; vertical-align: 2px; }
+  .tag.safe { background: var(--accent-soft); color: var(--accent); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.danger { background: var(--danger-soft); color: var(--danger); }
+
+  ul.tasks { list-style: none; margin: 0; padding: 0; }
+  ul.tasks li { border-top: 1px solid var(--border); padding: 10px 0; }
+  ul.tasks label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  ul.tasks input { margin-top: 4px; width: 17px; height: 17px; accent-color: var(--accent); flex: none; }
+  ul.tasks .t { font-weight: 500; }
+  ul.tasks .d { color: var(--muted); font-size: .88rem; margin-top: 2px; }
+  ul.tasks .body { min-width: 0; flex: 1; }
+  ul.tasks li.done .t { text-decoration: line-through; color: var(--muted); }
+
+  .callout { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 12px; border-radius: 0 6px 6px 0; margin: 10px 0 0; font-size: .9rem; }
+  .callout.danger { border-color: var(--danger); background: var(--danger-soft); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 7px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; border-top: none; }
+  .table-wrap { overflow-x: auto; }
+  footer { color: var(--muted); font-size: .8rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sécurisation de la box CleverRemote</h1>
+  <p class="sub">Todo list : chaîne de confiance matérielle (OTP + Secure Boot + LUKS + age). Raspberry Pi 4B rev 1.5, Debian 12, systemd 252, MongoDB en localhost.</p>
+
+  <div class="progress">
+    <div class="progress-label"><span id="progress-text">0 / 0 tâches</span><button id="reset" type="button">Tout décocher</button></div>
+    <div class="bar"><div id="progress-bar"></div></div>
+  </div>
+
+  <section class="card">
+    <h2>Architecture cible</h2>
+    <pre class="chain"><code>OTP du SoC (clé 256 bits unique par box, gravée dans le Pi)
+   │   protégée par Secure Boot (seul un boot.img signé peut la lire)
+   ├──► LUKS : rootfs + données Mongo chiffrées, déverrouillées au boot via la clé OTP
+   └──► age  : identité age dérivée de la clé OTP → déchiffre .env.age en RAM
+                 └──► service systemd durci, utilisateur dédié, secrets jamais sur disque</code></pre>
+    <div class="callout">Mongo tourne en localhost : sans LUKS, une carte SD volée donne accès direct aux données, même si le <code>.env</code> est chiffré. Les phases 4 et 5 sont celles qui apportent la sécurité maximale.</div>
+  </section>
+
+  <div id="phases"></div>
+
+  <section class="card">
+    <h2>Ce qui est couvert</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Menace</th><th>Résultat</th></tr></thead>
+      <tbody>
+        <tr><td>Vol / clonage de la carte SD</td><td>✅ Protégé (LUKS + clé OTP)</td></tr>
+        <tr><td>Démarrer un autre OS sur la box volée</td><td>✅ Protégé (Secure Boot)</td></tr>
+        <tr><td>Fuite git / release / backup</td><td>✅ Protégé (<code>.env.age</code> chiffré par box)</td></tr>
+        <tr><td>Compromission d'une box</td><td>✅ Limitée à cette box (clés uniques)</td></tr>
+        <tr><td>RCE dans l'appli (utilisateur <code>cleveremote</code>)</td><td>⚠️ Partiel : pas d'accès à l'OTP, mais les secrets sont dans l'environnement du process</td></tr>
+        <tr><td>Attaquant root sur la box allumée</td><td>❌ Aucune solution logicielle</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <footer>Les cases cochées sont mémorisées dans ce navigateur uniquement. Créé le 09/11/2026.</footer>
+</main>
+
+<script>
+const PHASES = [
+  {
+    id: "p0", title: "Phase 0 : Préparation", tag: ["safe", "Sans risque"],
+    desc: "À faire avant de toucher à quoi que ce soit.",
+    tasks: [
+      ["Réserver une box de test sacrifiable", "Pi 4B rev ≥ 1.4 (puce BCM2711 B0 requise pour le Secure Boot). Les étapes OTP / Secure Boot sont irréversibles."],
+      ["Faire une image complète de la carte SD actuelle", "<pre><code>sudo dd if=/dev/mmcblk0 of=box-backup.img bs=4M status=progress</code></pre>"],
+      ["Générer la clé RSA de signature Secure Boot et la stocker hors ligne", "2 copies minimum (coffre / clé USB chiffrée). Perdue = plus aucune mise à jour du boot possible.<pre><code>openssl genrsa -out secure-boot-private.pem 2048</code></pre>"],
+      ["Inventorier tous les secrets", "<code>.env</code> (APP_PORT, SOCKET_SERVER*, INITIAL_PASSWORD, MONGO_*) et <code>.env.local</code> (SMTP_*). Décider lesquels deviennent uniques par box."],
+      ["Créer l'inventaire des box", "Tableau : numéro de série, recipient <code>age1…</code>, date de provisioning, version boot signée."]
+    ]
+  },
+  {
+    id: "p1", title: "Phase 1 : Repo", tag: ["safe", "Sans risque"],
+    desc: "Changements dans cleveremote-box, aucune action sur le matériel.",
+    tasks: [
+      ["Ajouter les secrets au .gitignore", "<code>.env</code>, <code>.env.local</code>, <code>*.key</code>, <code>*.pem</code>. Seuls les <code>*.env.age</code> sont versionnés."],
+      ["Vérifier si des secrets ont déjà été commités", "Si oui : changer ces secrets (purger l'historique ne suffit pas).<pre><code>git log --all --oneline -- .env .env.local pprd.env</code></pre>"],
+      ["Script de provisioning OTP → identité age", "<code>scripts/security/provision-box.sh</code> : écrit la clé OTP si elle est vide, dérive l'identité age X25519 (32 octets OTP → bech32 <code>AGE-SECRET-KEY-1…</code>), affiche le recipient <code>age1…</code>."],
+      ["Script de chiffrement côté poste", "<code>scripts/security/encrypt-env.sh &lt;age1…&gt; &lt;fichier&gt;</code> → produit <code>.env.age</code> / <code>.env.local.age</code> pour une box donnée."],
+      ["build-sea.js : ne plus copier le .env en clair", "Copier <code>.env.age</code> (+ <code>.env.local.age</code>) et le unit systemd dans <code>release/linux-arm64</code>."],
+      ["Unit systemd durcie cleveremote-box.service", "<code>User=cleveremote</code>, <code>ExecStartPre=+</code> déchiffre dans <code>/run/cleveremote/env</code> (tmpfs, 0400), <code>EnvironmentFile=</code>, <code>ExecStartPost=+</code> supprime le fichier, <code>AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW</code> (BLE hci0), <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome</code>, <code>PrivateTmp</code>, <code>ReadWritePaths</code> minimal."],
+      ["Mettre à jour scripts/BUILD-SEA.md", "Documenter le nouveau déploiement (plus de .env en clair)."]
+    ]
+  },
+  {
+    id: "p2", title: "Phase 2 : Durcissement de l'OS", tag: ["safe", "Réversible"],
+    desc: "Sur la box, sans toucher à l'OTP.",
+    tasks: [
+      ["Créer l'utilisateur système dédié", "Hors du groupe <code>video</code> : il ne doit pas pouvoir lire l'OTP via <code>/dev/vcio</code>.<pre><code>sudo useradd --system --no-create-home --shell /usr/sbin/nologin cleveremote</code></pre>"],
+      ["SSH : clé uniquement", "Dans <code>/etc/ssh/sshd_config</code> : <code>PasswordAuthentication no</code>, <code>PermitRootLogin no</code>."],
+      ["Désactiver la console série", "Retirer <code>console=serial0,115200</code> de <code>cmdline.txt</code>, <code>enable_uart=0</code> dans <code>config.txt</code> (sauf si l'UART sert au Modbus)."],
+      ["MongoDB : utilisateur applicatif à droits minimum", "<code>bindIp: 127.0.0.1</code>, utilisateur <code>readWrite</code> sur la seule base de l'appli ; <code>MONGO_URI</code> n'utilise plus le compte root Mongo."],
+      ["INITIAL_PASSWORD unique par box + changement forcé au premier login", ""],
+      ["Pare-feu nftables", "N'ouvrir que les ports nécessaires (SSH, APP_PORT si accès local requis)."],
+      ["Mises à jour de sécurité automatiques", "<code>unattended-upgrades</code>, en excluant noyau / firmware une fois le Secure Boot actif (voir phase 6)."]
+    ]
+  },
+  {
+    id: "p3", title: "Phase 3 : Clé OTP + age", tag: ["warn", "Écriture OTP irréversible"],
+    desc: "Clé unique par box, jamais stockée sur la carte SD.",
+    tasks: [
+      ["Vérifier que la clé OTP est vide", "Doit afficher uniquement des zéros.<pre><code>sudo rpi-otp-private-key</code></pre>"],
+      ["Écrire la clé OTP (une seule fois par box)", "<pre><code>sudo rpi-otp-private-key -w $(openssl rand -hex 32)</code></pre>"],
+      ["Lancer le provisioning et noter le recipient age1…", "Reporter le recipient dans l'inventaire des box."],
+      ["Chiffrer .env et .env.local pour cette box (sur le poste)", "Puis déployer les <code>.age</code> à côté du binaire."],
+      ["Supprimer les .env en clair de la box", "<pre><code>shred -u .env .env.local</code></pre>"],
+      ["Tester le démarrage du service", "Vérifier : appli OK, <code>/run/cleveremote/env</code> absent après le démarrage, <code>/proc/&lt;pid&gt;/environ</code> illisible pour les autres utilisateurs."]
+    ],
+    callout: ["warn", "Sans les phases 4 et 5, la clé OTP reste lisible par quiconque démarre sa propre carte SD sur la box."]
+  },
+  {
+    id: "p4", title: "Phase 4 : Secure Boot", tag: ["danger", "Irréversible"],
+    desc: "Sur la box de test d'abord. Référence : dépôt raspberrypi/usbboot (secure-boot-recipe) et documentation rpi-eeprom.",
+    tasks: [
+      ["Mettre l'EEPROM à jour", "<pre><code>sudo rpi-eeprom-update -a</code></pre>"],
+      ["Construire boot.img + boot.sig", "Partition boot (noyau, DTB, initramfs, config.txt, cmdline.txt) empaquetée en image FAT, signée avec <code>rpi-eeprom-digest</code> et la clé RSA."],
+      ["Flasher une EEPROM signée en mode non verrouillé et tester le boot", "Vérifier que la box démarre avec boot.img signé avant toute gravure OTP."],
+      ["Graver le hash de la clé publique dans l'OTP", "<code>program_pubkey=1</code> puis <code>revoke_devkey=1</code> (noms à revérifier dans la doc usbboot avant exécution)."],
+      ["Verrouiller le JTAG", "<code>program_jtag_lock=1</code>."],
+      ["Vérifier qu'une carte SD non signée ne démarre plus", ""]
+    ],
+    callout: ["danger", "Perte de la clé de signature = box bloquée sur son boot actuel. Valider toute la procédure sur la box de test avant la flotte."]
+  },
+  {
+    id: "p5", title: "Phase 5 : Chiffrement LUKS", tag: ["danger", "Risque de perte de données"],
+    desc: "Rend la carte SD illisible hors de sa box.",
+    tasks: [
+      ["Préparer l'initramfs de déverrouillage", "cryptsetup + script qui lit la clé OTP et la passe comme keyfile (en RAM uniquement). Inclus dans le boot.img signé."],
+      ["Chiffrer la rootfs en LUKS2", "Au minimum <code>/var/lib/mongodb</code>, <code>/opt/cleveremote</code>, <code>/etc/cleveremote</code>. <code>cryptsetup reencrypt --encrypt</code> ou réinstallation propre."],
+      ["Ajouter un keyslot de secours", "Passphrase longue stockée hors ligne : seul moyen de récupérer les données si la box meurt."],
+      ["Mettre à jour crypttab et cmdline.txt", "<code>root=/dev/mapper/…</code>, puis re-signer boot.img."],
+      ["Tester l'attaque", "Carte SD dans un autre Pi → ne déverrouille pas. Carte SD sur un PC → illisible."]
+    ]
+  },
+  {
+    id: "p6", title: "Phase 6 : Exploitation", tag: ["safe", "Continu"],
+    desc: "Procédures à documenter une fois la chaîne en place.",
+    tasks: [
+      ["Procédure de mise à jour noyau / initramfs", "Chaque mise à jour impose de reconstruire et re-signer boot.img : bloquer les mises à jour auto du noyau ou ajouter un hook."],
+      ["Procédure de rotation des secrets", "Rechiffrer les <code>.env.age</code> de chaque box concernée, redéployer, redémarrer le service."],
+      ["Procédure de révocation d'une box compromise", "Révoquer ses accès côté serveur (socket), changer les secrets partagés."],
+      ["Rotation périodique des secrets Mongo / SMTP", ""]
+    ]
+  }
+];
+
+const STORAGE_KEY = "cleveremote-secu-todo-v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {}; } catch (e) { state = {}; }
+function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {} }
+
+const root = document.getElementById("phases");
+PHASES.forEach(phase => {
+  const sec = document.createElement("section");
+  sec.className = "card";
+  let html = `<div class="phase-head"><h2>${phase.title}<span class="tag ${phase.tag[0]}">${phase.tag[1]}</span></h2><span class="phase-count" data-count="${phase.id}"></span></div>`;
+  html += `<p class="phase-desc">${phase.desc}</p><ul class="tasks">`;
+  phase.tasks.forEach((t, i) => {
+    const id = `${phase.id}-${i}`;
+    html += `<li data-id="${id}"><label><input type="checkbox" data-id="${id}"><div class="body"><div class="t">${t[0]}</div>${t[1] ? `<div class="d">${t[1]}</div>` : ""}</div></label></li>`;
+  });
+  html += `</ul>`;
+  if (phase.callout) html += `<div class="callout ${phase.callout[0] === "danger" ? "danger" : ""}">${phase.callout[1]}</div>`;
+  sec.innerHTML = html;
+  root.appendChild(sec);
+});
+
+function render() {
+  let total = 0, done = 0;
+  PHASES.forEach(phase => {
+    let pDone = 0;
+    phase.tasks.forEach((_, i) => {
+      const id = `${phase.id}-${i}`;
+      const checked = !!state[id];
+      const box = document.querySelector(`input[data-id="${id}"]`);
+      box.checked = checked;
+      box.closest("li").classList.toggle("done", checked);
+      if (checked) pDone++;
+    });
+    total += phase.tasks.length; done += pDone;
+    document.querySelector(`[data-count="${phase.id}"]`).textContent = `${pDone} / ${phase.tasks.length}`;
+  });
+  document.getElementById("progress-text").textContent = `${done} / ${total} tâches`;
+  document.getElementById("progress-bar").style.width = total ? `${(done / total) * 100}%` : "0";
+}
+
+root.addEventListener("change", e => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+  state[id] = e.target.checked;
+  save(); render();
+});
+document.getElementById("reset").addEventListener("click", () => {
+  if (!confirm("Décocher toutes les tâches ?")) return;
+  state = {}; save(); render();
+});
+render();
+</script>
+</body>
+</html>

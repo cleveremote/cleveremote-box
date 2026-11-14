@@ -2,8 +2,35 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
-import { forcastDataName } from '@process/domain/models/sensor.model';
+import { AnalogSignalType, forcastDataName } from '@process/domain/models/sensor.model';
+import { OutOfRangePolicy } from '@process/domain/utils/linear-scale.util';
 import { CycleStyle, CycleStyleSchema } from './style.schema';
+
+// ANALOG : mise à l'échelle de la valeur brute lue vers la grandeur physique (cf. AnalogScalingModel)
+@Schema({ _id: false })
+export class AnalogScaling {
+    @Prop({ required: true, enum: AnalogSignalType })
+    public signalType: AnalogSignalType;
+
+    @Prop({ required: true })
+    public inputMin: number;
+
+    @Prop({ required: true })
+    public inputMax: number;
+
+    @Prop({ required: true })
+    public outputMin: number;
+
+    @Prop({ required: true })
+    public outputMax: number;
+
+    @Prop({ required: true })
+    public unit: string;
+
+    @Prop({ enum: OutOfRangePolicy, default: OutOfRangePolicy.CLAMP })
+    public outOfRange: OutOfRangePolicy;
+}
+export const AnalogScalingSchema = SchemaFactory.createForClass(AnalogScaling);
 
 @Schema({ _id: false })
 export class SensorConfig {
@@ -15,19 +42,21 @@ export class SensorConfig {
     @Prop({ enum: forcastDataName })
     public forcastData?: forcastDataName;
 
-    // COM
+    // COM : DeviceCommand (register map)
     @Prop()
-    public comRequestId?: string;
+    public commandId?: string;
 
-    // CHILD COM (sensor avec parentId)
+    // COM : slave sur lequel la commande est lue
     @Prop()
-    public code?: number;
+    public deviceId?: string;
 
+    // nom du champ decode a retenir (racine ou enfant)
     @Prop()
-    public scale?: number;
+    public field?: string;
 
-    @Prop()
-    public unit?: string;
+    // ANALOG (racine ou enfant)
+    @Prop({ type: AnalogScalingSchema })
+    public scaling?: AnalogScaling;
 }
 export const SensorConfigSchema = SchemaFactory.createForClass(SensorConfig);
 
@@ -62,6 +91,10 @@ export class Sensor {
     // relation auto-referencee vers le sensor parent (device MASTER_COM)
     @Prop({ type: String, default: null, index: true })
     public parentId: string | null;
+
+    // fixe a la creation (cf. SensorMapper.mapToSchema) : absent des mises a jour, donc conserve
+    @Prop({ type: Boolean, default: false })
+    public autoCreated: boolean;
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

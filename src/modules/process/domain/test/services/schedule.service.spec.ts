@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { Connection } from 'mongoose';
@@ -18,7 +19,7 @@ import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedu
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { CycleModel } from '@process/domain/models/cycle.model';
-import { ExecutableAction, ProcessType } from '@process/domain/interfaces/executable.interface';
+import { ExecutableAction, StartPolicy } from '@process/domain/interfaces/executable.interface';
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
 import { CreateCycleModel } from './cycle.spec-mock';
@@ -43,7 +44,7 @@ describe('ScheduleService', () => {
     let scheduleRepository: ScheduleRepository;
     let configurationService: { schedules: ScheduleModel[]; structure: { cycles: CycleModel[] } };
     let processService: { execute: jest.Mock };
-    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined };
+    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined; timeZone: string; onLocationChanged: Subject<void> };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: ScheduleService;
 
@@ -91,7 +92,7 @@ describe('ScheduleService', () => {
         }
         configurationService = { schedules: [], structure: { cycles: [] } };
         processService = CreateProcessServiceMock();
-        globalSettingsService = { localCoordinates: undefined };
+        globalSettingsService = { localCoordinates: undefined, timeZone: 'UTC', onLocationChanged: new Subject<void>() };
         logger = CreateLoggerMock();
         service = new ScheduleService(
             schedulerRegistry,
@@ -375,7 +376,7 @@ describe('ScheduleService', () => {
         it('should track the schedule and register its cron job when not deleted', async () => {
             const schedule = CreateScheduleModel();
 
-            await service.initSchedule(schedule, false, undefined, undefined, jest.fn());
+            await service.initSchedule(schedule, false, undefined, jest.fn());
 
             expect(configurationService.schedules).toContain(schedule);
             expect(schedulerRegistry.doesExist('cron', schedule._id)).toBe(true);
@@ -385,16 +386,16 @@ describe('ScheduleService', () => {
             // setPaused() peut rappeler initSchedule() pour re-armer un schedule deja tracke dont le
             // job a disparu du registre (cf. tests setPaused) : le push doit rester idempotent.
             const schedule = CreateScheduleModel();
-            await service.initSchedule(schedule, false, undefined, undefined, jest.fn());
+            await service.initSchedule(schedule, false, undefined, jest.fn());
 
-            await service.initSchedule(schedule, false, undefined, undefined, jest.fn());
+            await service.initSchedule(schedule, false, undefined, jest.fn());
 
             expect(configurationService.schedules.filter(x => x._id === schedule._id)).toHaveLength(1);
         });
 
         it('should untrack the schedule and remove its cron job when deleted', async () => {
             const schedule = CreateScheduleModel();
-            await service.initSchedule(schedule, false, undefined, undefined, jest.fn());
+            await service.initSchedule(schedule, false, undefined, jest.fn());
 
             await service.initSchedule(schedule, true);
 
@@ -406,7 +407,7 @@ describe('ScheduleService', () => {
             const schedule = CreateScheduleModel({
                 cron: { sunBehavior: { sunState: SunState.SUNRISE, timeDirection: TimeDirection.AFTER, time: 24 * 60 * 60 * 1000 } }
             });
-            await service.initSchedule(schedule, false, undefined, undefined, jest.fn());
+            await service.initSchedule(schedule, false, undefined, jest.fn());
             expect(schedulerRegistry.doesExist('cron', `${schedule._id}::instant`)).toBe(true);
 
             await service.initSchedule(schedule, true);
@@ -525,7 +526,7 @@ describe('ScheduleService', () => {
 
             expect(process.cycle).toBe(cycle);
             expect(process.action).toEqual(ExecutableAction.ON);
-            expect(process.type).toEqual(ProcessType.INIT);
+            expect(process.policy).toEqual(StartPolicy.ARBITRATE);
             expect(process.schedule).toBe(schedule);
         });
 

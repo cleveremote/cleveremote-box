@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { GENERATED_TEXTS } from '@framework/i18n/generated-texts';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import { DeviceModel, DeviceKind, DeviceType, MasterConfigModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DEVICE_STRATEGIES, DeviceStrategy } from './device-strategies/device-strategy.interface';
-import { ModbusService } from './modbus.service';
+import { ModbusDeviceService } from './modbus-device.service';
+import { GlobalSettingsService } from './global-settings.service';
 import { DEFAULT_UNCONFIGURED_UNIT_ID } from '../utils/modbus-registers.util';
 
 export interface SlaveDiscoveryHandle {
@@ -19,35 +21,40 @@ export class DeviceService {
     public constructor(
         private readonly logger: Logger,
         private deviceRepository: DeviceRepository,
-        private modbusService: ModbusService,
+        private modbusDeviceService: ModbusDeviceService,
+        private globalSettingsService: GlobalSettingsService,
         @Inject(DEVICE_STRATEGIES) strategies: DeviceStrategy[]
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.kind, strategy]));
     }
 
     public async init(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).init(device);
+        return this._resolveStrategy(device).init(device);
     }
 
     public async reset(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).reset(device);
+        return this._resolveStrategy(device).reset(device);
     }
 
     public async configure(device: DeviceModel): Promise<void> {
-        return this._resolveStrategy(device.kind).configure(device);
+        return this._resolveStrategy(device).configure(device);
     }
 
     public async write(device: DeviceModel, params: { name: string; value: number }): Promise<void> {
-        return this._resolveStrategy(device.kind).write(device, params);
+        return this._resolveStrategy(device).write(device, params);
     }
 
     public async read(device: DeviceModel, params: { name: string; value: number }): Promise<number> {
-        return this._resolveStrategy(device.kind).read(device, params);
+        return this._resolveStrategy(device).read(device, params);
     }
 
-    private _resolveStrategy(kind?: DeviceKind): DeviceStrategy {
-        const resolvedKind = kind ?? DeviceKind.MODBUS_SLAVE;
-        const strategy = this._strategies.get(resolvedKind);
+    private _resolveStrategy(device: DeviceModel): DeviceStrategy {
+        if (device.type !== DeviceType.SLAVE) {
+            throw new NotImplementedError(`DeviceService: no strategy for ${device.type} device "${device._id}"`);
+        }
+        const resolvedKind = (device.config as SlaveConfigModel).kind ?? DeviceKind.MODBUS_SLAVE;
+        // Les kinds sans stratégie dédiée (capteurs, modules IO) sont des esclaves Modbus génériques
+        const strategy = this._strategies.get(resolvedKind) ?? this._strategies.get(DeviceKind.MODBUS_SLAVE);
         if (!strategy) {
             throw new NotImplementedError(`DeviceService: unsupported device kind "${resolvedKind}"`);
         }
@@ -56,7 +63,7 @@ export class DeviceService {
 
     public async initAll(): Promise<void> {
         const deviceModel = await this.deviceRepository.get('8d6f3fe2-af41-405b-9523-a0a6fb589b70') as DeviceModel
-        return this._resolveStrategy(deviceModel.kind).init(deviceModel);
+        return this._resolveStrategy(deviceModel).init(deviceModel); 
     }
 
     /**
@@ -86,7 +93,7 @@ export class DeviceService {
     // fois le précédent terminé, pour ne jamais empiler deux sondes sur le même Master.
     public async discoverDevice(masterDeviceId: string): Promise<DeviceModel[]> {
         const master: DeviceModel = await this.deviceRepository.get(masterDeviceId) as DeviceModel;
-        const detectedRegister = await this.modbusService.probeMasterForNewSlave(master);
+        const detectedRegister = await this.modbusDeviceService.probeMasterForNewSlave(master);
         if (detectedRegister) {
             await this.addSlaveDevice(master, detectedRegister);
         }
@@ -102,11 +109,11 @@ export class DeviceService {
         const newSlaveId = Math.max(DEFAULT_UNCONFIGURED_UNIT_ID, ...siblingIds) + 1;
 
         try {
-            await this.modbusService.setSlaveAdress(master, detectedRegister, DEFAULT_UNCONFIGURED_UNIT_ID, newSlaveId)
+            await this.modbusDeviceService.setSlaveAddress(master, detectedRegister, DEFAULT_UNCONFIGURED_UNIT_ID, newSlaveId)
             //await this._enqueue(() => client.writeRegister(detectedRegister, newSlaveId));
         } catch (err) {
             this.logger.error(
-                { masterId: master._id, newSlaveId, register: detectedRegister, err: err.message },
+                { masterId: master._id, newSlaveId, register: detectedRegister, err: err instanceof Error ? err.message : String(err) },
                 'new slave address write failed, device left unconfigured for retry'
             );
             return null;
@@ -115,12 +122,12 @@ export class DeviceService {
         const slaveConfig = new SlaveConfigModel();
         slaveConfig.slaveId = newSlaveId;
         slaveConfig.masterDeviceId = master._id;
+        slaveConfig.kind = DeviceKind.MODBUS_SLAVE;
 
         const slaveModel = new DeviceModel();
         slaveModel.name = `Slave ${newSlaveId} (auto-detected)`;
         slaveModel.type = DeviceType.SLAVE;
-        slaveModel.kind = DeviceKind.MODBUS_SLAVE;
-        slaveModel.description = `Auto-detected on master "${master.name}" via register 0x${detectedRegister.toString(16)}`;
+        slaveModel.description = GENERATED_TEXTS[this.globalSettingsService.language].detectedSlave(master.name, `0x${detectedRegister.toString(16)}`);
         slaveModel.config = slaveConfig;
 
         try {
@@ -129,15 +136,15 @@ export class DeviceService {
             return slaveModel;
         } catch (err) {
             this.logger.error(
-                { masterId: master._id, newSlaveId, err: err.message },
+                { masterId: master._id, newSlaveId, err: err instanceof Error ? err.message : String(err) },
                 'db save failed after address write, attempting rollback to unconfigured unit id'
             );
             try {
-                await this.modbusService.setSlaveAdress(master, detectedRegister, newSlaveId, DEFAULT_UNCONFIGURED_UNIT_ID);
+                await this.modbusDeviceService.setSlaveAddress(master, detectedRegister, newSlaveId, DEFAULT_UNCONFIGURED_UNIT_ID);
                 this.logger.error({ masterId: master._id, newSlaveId }, 'rollback succeeded, device remains discoverable');
             } catch (rollbackErr) {
                 this.logger.error(
-                    { masterId: master._id, newSlaveId, err: rollbackErr.message },
+                    { masterId: master._id, newSlaveId, err: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr) },
                     'CRITICAL: rollback failed after db save failure - device now at an orphaned address, manual recovery required'
                 );
             }

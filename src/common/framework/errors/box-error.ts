@@ -1,0 +1,42 @@
+// Codes d'erreur remontés au front (RpcException) : le front traduit `code` avec `params` ; `message` ne sert qu'aux logs
+export enum BoxErrorCode {
+    UNKNOWN = 'UNKNOWN',
+    VALIDATION = 'VALIDATION',
+    // register map / device commands
+    REGISTER_MAP_NOT_FOUND = 'REGISTER_MAP_NOT_FOUND',
+    OPERATION_NOT_FOUND = 'OPERATION_NOT_FOUND',
+    DEVICE_COMMAND_NOT_FOUND = 'DEVICE_COMMAND_NOT_FOUND',
+    DEVICE_COMMAND_MODEL_MISMATCH = 'DEVICE_COMMAND_MODEL_MISMATCH',
+    SLAVE_NOT_FOUND = 'SLAVE_NOT_FOUND',
+    MASTER_NOT_FOUND = 'MASTER_NOT_FOUND',
+    CONFIRMATION_REQUIRED = 'CONFIRMATION_REQUIRED',
+    PERSISTENCE_NOT_ALLOWED = 'PERSISTENCE_NOT_ALLOWED',
+    FIXED_VALUE_MISSING = 'FIXED_VALUE_MISSING',
+    VALUE_NOT_IN_ENUM = 'VALUE_NOT_IN_ENUM',
+    VALUE_OUT_OF_RANGE = 'VALUE_OUT_OF_RANGE',
+    ARRAY_LENGTH_MISMATCH = 'ARRAY_LENGTH_MISMATCH',
+    RANGE_INVALID = 'RANGE_INVALID',
+    CHANNEL_OUT_OF_RANGE = 'CHANNEL_OUT_OF_RANGE',
+    FORMULA_INVALID = 'FORMULA_INVALID',
+    SLAVE_ADDRESS_INVALID = 'SLAVE_ADDRESS_INVALID',
+    // cycles
+    CYCLE_AUTO_CREATED_ONLY = 'CYCLE_AUTO_CREATED_ONLY',
+    // conversion analogique
+    ANALOG_BOUNDS_INVALID = 'ANALOG_BOUNDS_INVALID',
+    ANALOG_RANGE_DEGENERATE = 'ANALOG_RANGE_DEGENERATE',
+    ANALOG_VALUE_NOT_NUMERIC = 'ANALOG_VALUE_NOT_NUMERIC',
+    ANALOG_VALUE_OUT_OF_RANGE = 'ANALOG_VALUE_OUT_OF_RANGE',
+    ANALOG_SIGNAL_UNKNOWN = 'ANALOG_SIGNAL_UNKNOWN',
+    ANALOG_UNIT_INCOMPATIBLE = 'ANALOG_UNIT_INCOMPATIBLE',
+    ANALOG_SCALING_MISSING = 'ANALOG_SCALING_MISSING'
+}
+
+export type BoxErrorParams = Record<string, string | number | boolean | (string | number)[] | undefined>;
+
+export class BoxError extends Error {
+    public constructor(message: string, public readonly code: BoxErrorCode = BoxErrorCode.UNKNOWN,
+        public readonly params?: BoxErrorParams) {
+        super(message);
+    }
+}
+

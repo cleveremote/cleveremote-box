@@ -1,46 +1,51 @@
-import { Controller, Injectable, ParseArrayPipe, PipeTransform, UsePipes, ValidationError, ValidationPipe } from '@nestjs/common';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+import { Controller, Injectable, ParseArrayPipe, PipeTransform, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { RpcErrorsFilter, RpcValidationExceptionFactory } from '@framework/errors/rpc-errors';
 import { CycleModel } from '@process/domain/models/cycle.model';
 import { StructureModel } from '@process/domain/models/structure.model';
 import { StructureService } from '@process/domain/services/configuration.service';
+import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { SynchronizeService } from '@process/domain/services/synchronize.service';
 import { ConfigurationFetchUC } from '@process/use-cases/configuration-fetch.uc';
 import { ValuesFetchUC } from '@process/use-cases/values-fetch.uc';
 import { EventFetchUC } from '@process/use-cases/event-fetch.uc';
 import { EventModel } from '@process/domain/models/event.model';
+import { CycleRunModel } from '@process/domain/models/cycle-history.model';
 import { EventQueryDTO } from '../dto/event-query.dto';
+import { EventPurgeDTO } from '../dto/event-purge.dto';
+import { EventPurgeUC } from '@process/use-cases/event-purge.uc';
+import { EventPurgeResultModel } from '@process/domain/models/event-purge.model';
 import { CycleSynchronizeUC } from '@process/use-cases/cycle-synchronize.uc';
 import { ConfigurationSynchronizeUC } from '@process/use-cases/configuration-synchronize.uc';
 import { ScheduleSynchronizeUC } from '@process/use-cases/schedule-synchronize.uc';
-import { ComRequestDTO, CycleSynchronizeDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO } from '../dto/synchronize.dto';
+import { CycleSynchronizeDTO, DeviceCommandDTO, DeviceSynchronizeDTO, ScheduleSynchronizeDTO, SensorSynchronizeDTO, StructureSynchronizeDTO, TriggerSynchronizeDTO, ValveSynchronizeDTO, ControlLoopSynchronizeDTO, InverterSynchronizeDTO } from '../dto/synchronize.dto';
 import { ActuatorSynchronizeDTO } from '../dto/synchronize.dto';
 import { TriggerSynchronizeUC } from '@process/use-cases/trigger-synchronize.uc';
 import { SensorSynchronizeUC } from '@process/use-cases/sensor-synchronize.uc';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { DeviceModel } from '@process/domain/models/device.model';
-import { ComRequestModel } from '@process/domain/models/com-request.model';
+import { DeviceConnectivityModel, DeviceModel, DeviceWithCommands } from '@process/domain/models/device.model';
 import { DeviceSynchronizeUC } from '@process/use-cases/device-synchronize.uc';
-import { ModbusTaskSynchronizeUC } from '@process/use-cases/modbustask-synchronize.uc';
+import { DeviceCommandSynchronizeUC } from '@process/use-cases/device-command-synchronize.uc';
+import { DeviceCommandModel } from '@process/domain/models/device-command.model';
 import { ValveSynchronizeUC } from '@process/use-cases/valve-synchronize.uc';
 import { ActuatorSynchronizeUC } from '@process/use-cases/actuator-synchronize.uc';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
+import { ControlLoopSynchronizeUC } from '@process/use-cases/control-loop-synchronize.uc';
+import { ControlLoopModel } from '@process/domain/models/control-loop.model';
+import { InverterSynchronizeUC } from '@process/use-cases/inverter-synchronize.uc';
+import { InverterModel } from '@process/domain/models/inverter.model';
 import { DeviceDiscoverUC } from '@process/use-cases/device-discover.uc';
 import { DeviceService } from '@process/domain/services/device.service';
-import { DiscoverDeviceDTO } from '../dto/discover.dto';
-
-function flattenValidationErrors(errors: ValidationError[]): string[] {
-    return errors.flatMap(error => [
-        ...Object.values(error.constraints ?? {}),
-        ...flattenValidationErrors(error.children ?? [])
-    ]);
-}
-
-function validationExceptionFactory(errors: ValidationError[] | string): RpcException {
-    const message = Array.isArray(errors) ? flattenValidationErrors(errors).join(', ') : errors;
-    return new RpcException(message);
-}
+import { CheckDeviceDTO, DiscoverDeviceDTO } from '../dto/discover.dto';
+import { DeviceConnectivityCheckUC } from '@process/use-cases/device-connectivity-check.uc';
+import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
+import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
+import { AuthenticationService } from '@process/domain/services/authentication.service';
+import { AccountSynchronizeUC } from '@process/use-cases/account-synchronize.uc';
+import { AccountSynchronizeResultModel } from '@process/domain/models/authentication-result.model';
+import { AccountSynchronizeDTO } from '../dto/account-synchronize.dto';
 
 @Injectable()
 class ToArrayPipe implements PipeTransform {
@@ -50,13 +55,17 @@ class ToArrayPipe implements PipeTransform {
 }
 
 @Controller()
-@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: validationExceptionFactory }))
+@UseFilters(new RpcErrorsFilter())
+@UsePipes(new ValidationPipe({ transform: true, exceptionFactory: RpcValidationExceptionFactory }))
 export class ConfigurationController {
 
     public constructor(
         private _configurationService: StructureService,
+         private _waveshareDiscoveryService: WaveshareDiscoveryService    ,
         private _synchronizeService: SynchronizeService,
-        private _deviceService: DeviceService
+        private _deviceConnectivityService: DeviceConnectivityService,
+        private _globalSettingsService: GlobalSettingsService,
+        private _authenticationService: AuthenticationService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -66,9 +75,25 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
+    // currentPassword requis ; password / email absents (ou email null) = inchangés.
+    // status/message : même logique que box/check/login ; account renseigné si ACCOUNT_UPDATED
+    @MessagePattern(['box/synchronize/account'])
+    public async synchroniseAccount(@Payload() accountSynchronizeDTO: AccountSynchronizeDTO): Promise<AccountSynchronizeResultModel> {
+        const uc = new AccountSynchronizeUC(this._authenticationService);
+        const input = AccountSynchronizeDTO.mapToAccountModel(accountSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    // resetPassword : code requis ; newPassword requis
+    @MessagePattern(['box/reset/account'])
+    public async resetAccount(@Payload() resetPasswordDTO: any): Promise<boolean> {
+       
+        return true;
+    }
+
     @MessagePattern(['box/synchronize/device'])
     public async synchroniseDevice(
-        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: DeviceSynchronizeDTO, exceptionFactory: RpcValidationExceptionFactory }))
             deviceSynchronizeDTOs: DeviceSynchronizeDTO[]
     ): Promise<DeviceModel[]> {
         const uc = new DeviceSynchronizeUC(this._synchronizeService);
@@ -79,20 +104,24 @@ export class ConfigurationController {
     @MessagePattern(['box/discover/device'])
     public async discoverDevice(
         @Payload() discoverDeviceDTO: DiscoverDeviceDTO
-    ): Promise<DeviceModel[]> {
-        const uc = new DeviceDiscoverUC(this._deviceService);
+    ): Promise<DeviceModel[] | DeviceWithCommands[]> {
+        const uc = new DeviceDiscoverUC(this._configurationService,this._waveshareDiscoveryService);
         return uc.execute(discoverDeviceDTO.masterId);
-        return [];
     }
 
-    @MessagePattern(['box/synchronize/comrequest'])
-    public async synchroniseComRequest(
-        @Payload(new ParseArrayPipe({ items: ComRequestDTO, exceptionFactory: validationExceptionFactory }))
-            comRequestDTOs: ComRequestDTO[]
-    ): Promise<ComRequestModel[]> {
-        const uc = new ModbusTaskSynchronizeUC(this._synchronizeService);
-        const input = comRequestDTOs.map(ComRequestDTO.mapToComRequestModel);
-        return uc.execute(input);
+    @MessagePattern(['box/check/device'])
+    public async checkDevice(@Payload() checkDeviceDTO: CheckDeviceDTO): Promise<DeviceConnectivityModel[]> {
+        const uc = new DeviceConnectivityCheckUC(this._deviceConnectivityService);
+        return uc.execute(checkDeviceDTO?.deviceId);
+    }
+
+    @MessagePattern(['box/synchronize/device-command'])
+    public async synchroniseDeviceCommand(
+        @Payload(new ParseArrayPipe({ items: DeviceCommandDTO, exceptionFactory: RpcValidationExceptionFactory }))
+            deviceCommandDTOs: DeviceCommandDTO[]
+    ): Promise<DeviceCommandModel[]> {
+        const uc = new DeviceCommandSynchronizeUC(this._synchronizeService);
+        return uc.execute(deviceCommandDTOs.map(DeviceCommandDTO.mapToDeviceCommandModel));
     }
 
     @MessagePattern(['box/synchronize/cycle'])
@@ -130,9 +159,22 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
+    @MessagePattern(['box/synchronize/control-loop'])
+    public async synchroniseControlLoop(@Payload() controlLoopSynchronizeDTO: ControlLoopSynchronizeDTO): Promise<ControlLoopModel> {
+        const uc = new ControlLoopSynchronizeUC(this._synchronizeService);
+        const input = ControlLoopSynchronizeDTO.mapToControlLoopModel(controlLoopSynchronizeDTO);
+        return uc.execute(input);
+    }
+
+    @MessagePattern(['box/synchronize/inverter'])
+    public async synchroniseInverter(@Payload() inverterSynchronizeDTO: InverterSynchronizeDTO): Promise<InverterModel> {
+        const uc = new InverterSynchronizeUC(this._synchronizeService);
+        return uc.execute(InverterSynchronizeDTO.mapToInverterModel(inverterSynchronizeDTO));
+    }
+
     @MessagePattern(['box/synchronize/actuator'])
     public async synchroniseActuator(
-        @Payload(new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: validationExceptionFactory }))
+        @Payload(new ToArrayPipe(), new ParseArrayPipe({ items: ActuatorSynchronizeDTO, exceptionFactory: RpcValidationExceptionFactory }))
             actuatorSynchronizeDTOs: ActuatorSynchronizeDTO[]
     ): Promise<ActuatorModel[]> {
         const uc = new ActuatorSynchronizeUC(this._synchronizeService);
@@ -167,8 +209,16 @@ export class ConfigurationController {
     }
 
     @MessagePattern(['box/fetch/events'])
-    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[]> {
+    // cycle ou deviceId absent (derniers runs tous cycles) : CycleRunModel[] ; capteur / sequence : EventModel[]
+    public async getEvents(@Payload() eventQueryDTO: EventQueryDTO): Promise<EventModel[] | CycleRunModel[]> {
         const uc = new EventFetchUC(this._configurationService);
-        return uc.execute(eventQueryDTO);
+        return uc.execute({ ...eventQueryDTO, lang: eventQueryDTO.lang ?? this._globalSettingsService.language });
+    }
+
+    // deviceId : cycle (sequences comprises) ou capteur ; absent = purge globale. before : purge partielle
+    @MessagePattern(['box/purge/events'])
+    public async purgeEvents(@Payload() eventPurgeDTO: EventPurgeDTO): Promise<EventPurgeResultModel> {
+        const uc = new EventPurgeUC(this._configurationService);
+        return uc.execute(eventPurgeDTO);
     }
 }

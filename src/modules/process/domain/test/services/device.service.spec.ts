@@ -2,7 +2,7 @@ import { NotImplementedError } from '@process/domain/errors/not-implemented.erro
 import { DeviceKind, DeviceModel, DeviceType, MasterConfigModel, MasterProtocol } from '@process/domain/models/device.model';
 import { DeviceService } from '@process/domain/services/device.service';
 import { DeviceStrategy } from '@process/domain/services/device-strategies/device-strategy.interface';
-import { ModbusService } from '@process/domain/services/modbus.service';
+import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
 
 function CreateLoggerMock(): { log: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock } {
     return { log: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -23,7 +23,7 @@ function CreateDeviceModel(kind?: DeviceKind): DeviceModel {
     const device = new DeviceModel();
     device._id = 'device-1';
     device.type = DeviceType.SLAVE;
-    device.kind = kind;
+    device.config = { slaveId: 1, kind: kind };
     return device;
 }
 
@@ -55,20 +55,21 @@ describe('DeviceService', () => {
 
     beforeEach(() => {
         modbusSlaveStrategy = CreateStrategyMock(DeviceKind.MODBUS_SLAVE);
-        inverterStrategy = CreateStrategyMock(DeviceKind.INVERTER);
+        inverterStrategy = CreateStrategyMock(DeviceKind.INVERTER_VEICHI_SI23_V1);
         deviceRepository = { getByType: jest.fn().mockResolvedValue([]), get: jest.fn() };
         modbusService = { probeMasterForNewSlave: jest.fn().mockResolvedValue(undefined) };
         logger = CreateLoggerMock();
         service = new DeviceService(
             logger as never,
             deviceRepository as never,
-            modbusService as unknown as ModbusService,
+            modbusService as unknown as ModbusDeviceService,
+            { language: 'fr' } as never,
             [modbusSlaveStrategy, inverterStrategy]
         );
     });
 
     it('should dispatch to the strategy matching the device kind', async () => {
-        const device = CreateDeviceModel(DeviceKind.INVERTER);
+        const device = CreateDeviceModel(DeviceKind.INVERTER_VEICHI_SI23_V1);
         const params = { name: 'value', value: 0 };
 
         await service.read(device, params);
@@ -106,7 +107,7 @@ describe('DeviceService', () => {
 
     describe('watchMasterDevicesForNewSlaves', () => {
         it('should log and return a no-op handle when no MASTER devices exist', async () => {
-            const handle = await service.watchMasterDevicesForNewSlaves(20);
+            const handle = await service.watchMasterDevicesForNewSlaves(20) as unknown as { stop: () => Promise<void> };
 
             expect(logger.log).toHaveBeenCalledWith('no master devices with discoveryRegisters configured, slave discovery not started');
             await expect(handle.stop()).resolves.toBeUndefined();
@@ -118,7 +119,7 @@ describe('DeviceService', () => {
             const masterWithEmpty = CreateMasterModel('master-empty-discovery', []);
             deviceRepository.getByType.mockResolvedValue([masterWithout, masterWithEmpty]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(40);
             await handle.stop();
 
@@ -133,7 +134,7 @@ describe('DeviceService', () => {
             const masterB = CreateMasterModel('master-b', [0x4000]);
             deviceRepository.getByType.mockResolvedValue([masterA, masterB]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(50);
             await handle.stop();
 
@@ -150,7 +151,7 @@ describe('DeviceService', () => {
                 master._id === 'master-iso-a' ? new Promise(() => { /* never resolves */ }) : Promise.resolve()
             );
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(60);
             await handle.stop();
 
@@ -165,7 +166,7 @@ describe('DeviceService', () => {
                 .mockRejectedValueOnce(new Error('boom'))
                 .mockResolvedValue(undefined);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(50);
             await handle.stop();
 
@@ -181,7 +182,7 @@ describe('DeviceService', () => {
             const masterB = CreateMasterModel('master-stop-b', [0x4000]);
             deviceRepository.getByType.mockResolvedValue([masterA, masterB]);
 
-            const handle = await service.watchMasterDevicesForNewSlaves(15);
+            const handle = await service.watchMasterDevicesForNewSlaves(15) as unknown as { stop: () => Promise<void> };
             await Wait(40);
             await handle.stop();
             const countAfterStop = modbusService.probeMasterForNewSlave.mock.calls.length;

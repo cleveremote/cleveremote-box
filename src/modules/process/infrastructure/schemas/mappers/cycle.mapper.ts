@@ -16,11 +16,11 @@ export class CycleMapper {
         model.type = cycle.type;
         model.description = cycle.description;
         model.display = cycle.display;
+        model.autoCreated = cycle.autoCreated ?? false;
         model.status = cycle.status;
         model.style = cycle.style;
         model.executionMode = cycle.executionMode;
-        model.conditions = (cycle.conditions ?? []).map(ConditionMapper.mapToModel);
-        model.modePriority = (cycle.modePriority ?? []).map((mp) => ({ mode: mp.mode, priority: mp.priority }));
+        model.conditions = ConditionMapper.mapListToModel(cycle.conditions);
         model.sequences = [];
         model.schedules = [];
         model.triggers = [];
@@ -38,11 +38,14 @@ export class CycleMapper {
         cycle.type = model.type;
         cycle.description = model.description;
         cycle.display = model.display ?? true;
+        // positionne seulement a la creation automatique : une synchro du front (autoCreated absent) ne l'efface pas
+        if (model.autoCreated) {
+            cycle.autoCreated = true;
+        }
         cycle.status = model.status;
         cycle.style = model.style as Cycle['style'];
         cycle.executionMode = model.executionMode;
         cycle.conditions = (model.conditions ?? []).map(ConditionMapper.mapToSchema);
-        cycle.modePriority = model.modePriority ?? [];
         cycle.parentCycleId = model.parentCycleId ?? null;
         cycle.childCycles = (model.childCycles ?? []).map(ChildCycleMapper.mapToSchema);
         return cycle;

@@ -1,39 +1,169 @@
-import { Injectable } from '@nestjs/common';
-import { DeviceModel, DeviceType } from '@process/domain/models/device.model';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
+import { Observable, Subject } from 'rxjs';
+import { DeviceConnectivityModel, DeviceKind, DeviceModel, DeviceType, SlaveConfigModel } from '@process/domain/models/device.model';
 import { SynchronizeDeviceModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
+import { ModbusDeviceService } from '@process/domain/services/modbus-device.service';
 import { DeviceMongooseRepository } from './device-mongoose.repository';
+import { ActuatorRepository } from './actuator.repository';
+import { SensorRepository } from './sensor.repository';
+import { InverterRepository } from './inverter.repository';
+
+type DeviceCascade = (deviceId: string) => Promise<void>;
+type BeforeDeleteHook = () => Promise<void>;
 
 @Injectable()
 export class DeviceRepository {
+    private readonly _changes = new Subject<string>();
 
-    public constructor(private deviceMongooseRepository: DeviceMongooseRepository) { }
+    // id de chaque device créé, modifié (connectivité comprise) ou soft-supprimé, émis après l'écriture en base
+    public readonly changes$: Observable<string> = this._changes.asObservable();
+
+    // devices en cours de suppression : plus lus par les pollers (leur adresse va etre reinitialisee)
+    private readonly _pendingDeletions = new Set<string>();
+    private readonly _beforeDeleteHooks = new Set<BeforeDeleteHook>();
+
+    public constructor(
+        private deviceMongooseRepository: DeviceMongooseRepository,
+        private actuatorRepository: ActuatorRepository,
+        private sensorRepository: SensorRepository,
+        private inverterRepository: InverterRepository,
+        @Inject(forwardRef(() => ModbusDeviceService)) private modbusDeviceService: ModbusDeviceService,
+        private readonly logger: Logger
+    ) { }
+
+    // elements rattaches au device (config.deviceId) soft-supprimes avec lui, selon ce que l'auto-creation
+    // cree pour son kind (cf. slave-provisioning/auto-creation/strategies). Record complet : tout nouveau
+    // DeviceKind doit etre declare ici. Device sans kind (master, slave generique) : actionneurs rattaches.
+    private readonly _defaultCascade: DeviceCascade = (deviceId) => this.actuatorRepository.deleteForDevice(deviceId);
+    private readonly _sensorCascade: DeviceCascade = (deviceId) => this.sensorRepository.deleteForDevice(deviceId);
+    // variateur : élément INVERTER + sensors du monitoring
+    private readonly _inverterCascade: DeviceCascade = async (deviceId) => {
+        await this.inverterRepository.deleteForDevice(deviceId);
+        await this.sensorRepository.deleteForDevice(deviceId);
+    };
+    private readonly _cascadeByKind: Record<DeviceKind, DeviceCascade> = {
+        [DeviceKind.DIGITAL_IO_8_CH]: this._defaultCascade,
+        [DeviceKind.FLOWMETER_V1]: this._sensorCascade,
+        [DeviceKind.PRESSURE_V1]: this._sensorCascade,
+        [DeviceKind.EC_METER_V1]: this._sensorCascade,
+        [DeviceKind.FLOWMETER_ULTRASONIC_V1]: this._sensorCascade,
+        [DeviceKind.TEMPERATURE_MOISTURE_V1]: this._sensorCascade,
+        // sensors ANALOG racines (un par voie, config.deviceId = slave)
+        [DeviceKind.ANALOG_INPUT_8_CH]: this._sensorCascade,
+        [DeviceKind.INVERTER_VEICHI_SI23_V1]: this._inverterCascade,
+        // TODO: a adapter quand l'auto-creation analog output sera implementee
+        [DeviceKind.ANALOG_OUTPUT_8_CH]: this._defaultCascade,
+        [DeviceKind.ANALOG_OUTPUT_8_CH_MA]: this._defaultCascade,
+        [DeviceKind.MODBUS_SLAVE]: this._defaultCascade,
+        [DeviceKind.UNKNOWN_DEVICE]: this._defaultCascade
+    };
 
     public async save(model: DeviceModel): Promise<DeviceModel> {
-        if (model._id) {
-            if (!isValidUuid(model._id)) {
-                throw new InvalidIdException(model._id, 'device');
-            }
-            return this.deviceMongooseRepository.upsert(model._id, model);
+        if (model._id && !isValidUuid(model._id)) {
+            throw new InvalidIdException(model._id, 'device');
         }
-        return this.deviceMongooseRepository.create(model);
+        const saved = model._id
+            ? await this.deviceMongooseRepository.upsert(model._id, await this._keepSlaveState(model))
+            : await this.deviceMongooseRepository.create(model);
+        this._changes.next(saved?._id ?? model._id);
+        return saved;
     }
 
+    // cascade : soft-supprime les slaves (config.masterDeviceId), puis les elements rattaches selon le kind
+    // (cf _cascadeByKind), avant le device lui-meme (les commandes appartiennent au modele, partage avec d'autres slaves). Chaque slave concerne est d'abord remis sur
+    // l'adresse d'origine de sa plage (cf ModbusDeviceService.resetSlaveAddress) : tous les resets sont
+    // faits avant toute suppression, et un echec de reset annule la suppression (exception propagee).
+    // Les devices concernes sont d'abord retires du polling (cf isPendingDeletion / onBeforeDelete) : aucune
+    // lecture a l'ancienne adresse une fois le reset envoye. Reprise du polling si la suppression echoue.
     public async delete(id: string): Promise<boolean> {
-        return this.deviceMongooseRepository.delete(id);
+        const device = await this.deviceMongooseRepository.findById(id);
+        const slaves = await this.deviceMongooseRepository.findSlavesByMasterId(id);
+        const ids = [...slaves.map((slave) => slave._id), id];
+        ids.forEach((deviceId) => this._pendingDeletions.add(deviceId));
+        try {
+            await Promise.allSettled([...this._beforeDeleteHooks].map((hook) => hook()));
+            for (const slave of slaves) {
+                await this._resetSlaveAddress(slave);
+            }
+            if (device?.type === DeviceType.SLAVE) {
+                await this._resetSlaveAddress(device);
+            }
+            for (const slave of slaves) {
+                await this._softDelete(slave._id, slave);
+            }
+            return await this._softDelete(id, device);
+        } finally {
+            ids.forEach((deviceId) => this._pendingDeletions.delete(deviceId));
+        }
+    }
+
+    public isPendingDeletion(id: string): boolean {
+        return this._pendingDeletions.has(id);
+    }
+
+    // hook attendu apres le marquage des devices en suppression et avant tout reset d'adresse (ex: fin de la
+    // lecture en cours d'un poller) ; renvoie la fonction de desinscription
+    public onBeforeDelete(hook: BeforeDeleteHook): () => void {
+        this._beforeDeleteHooks.add(hook);
+        return () => this._beforeDeleteHooks.delete(hook);
+    }
+
+    private async _softDelete(id: string, device: DeviceModel | null): Promise<boolean> {
+        const kind = device?.type === DeviceType.SLAVE ? (device.config as SlaveConfigModel)?.kind : undefined;
+        await (kind ? this._cascadeByKind[kind] : this._defaultCascade)(id);
+        const deleted = await this.deviceMongooseRepository.delete(id);
+        this._changes.next(id);
+        return deleted;
+    }
+
+    // kind, modelId et initDoneCommandIds non fournis (ex: synchro client) : conserves depuis la base, pour ne
+    // pas perdre la strategie du slave, rejouer les init deja appliquees ni detacher le slave de son modele
+    private async _keepSlaveState(model: DeviceModel): Promise<DeviceModel> {
+        const config = model.config as SlaveConfigModel;
+        if (model.type !== DeviceType.SLAVE
+            || (config.kind !== undefined && config.modelId !== undefined && config.initDoneCommandIds !== undefined)) {
+            return model;
+        }
+        const existing = (await this.deviceMongooseRepository.findById(model._id))?.config as SlaveConfigModel | undefined;
+        return {
+            ...model,
+            config: {
+                ...config,
+                kind: config.kind ?? existing?.kind,
+                modelId: config.modelId ?? existing?.modelId,
+                initDoneCommandIds: config.initDoneCommandIds ?? existing?.initDoneCommandIds
+            }
+        };
     }
 
     // un device n'est soft-supprime que s'il est explicitement marque `delete: true`.
     public async saveMany(models: SynchronizeDeviceModel[]): Promise<DeviceModel[]> {
         for (const model of models) {
             if (model.delete) {
-                await this.deviceMongooseRepository.delete(model._id);
+                await this.delete(model._id);
                 continue;
             }
             await this.save(model);
         }
         return this.deviceMongooseRepository.findAll();
+    }
+
+    // prioritaire sur la suppression : toute erreur (master introuvable, module injoignable) est propagee.
+    private async _resetSlaveAddress(slave: DeviceModel): Promise<void> {
+        const master = await this.deviceMongooseRepository.findById((slave.config as SlaveConfigModel).masterDeviceId);
+        if (!master) {
+            this.logger.error({ deviceId: slave._id }, 'slave address reset failed: master not found, deletion aborted');
+            throw new Error(`slave address reset failed for device ${slave._id}: master not found`);
+        }
+        try {
+            await this.modbusDeviceService.resetSlaveAddress(slave, master);
+        } catch (err) {
+            this.logger.error({ deviceId: slave._id, err: err instanceof Error ? err.message : String(err) }, 'slave address reset failed, deletion aborted');
+            throw err;
+        }
     }
 
     public async get(id?: string): Promise<DeviceModel | DeviceModel[]> {
@@ -45,6 +175,11 @@ export class DeviceRepository {
 
     public async getByType(type: DeviceType): Promise<DeviceModel[]> {
         return this.deviceMongooseRepository.findByType(type);
+    }
+
+    public async updateConnectivity(id: string, connectivity: DeviceConnectivityModel): Promise<void> {
+        await this.deviceMongooseRepository.updateConnectivity(id, connectivity);
+        this._changes.next(id);
     }
 
     public async getSlavesByMasterId(masterDeviceId: string): Promise<DeviceModel[]> {

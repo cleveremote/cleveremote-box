@@ -1,24 +1,46 @@
-import { ExecutableAction } from '../interfaces/executable.interface';
 import { ElementType } from './event.model';
 
 export enum ConditionSymbolStart {
-    OPEN_PAREN = '(',
-    NOT = 'not'
+    NONE = '',
+    OPEN_PAREN = '('
 }
 
 export enum ConditionSymbolEnd {
-    CLOSE_PAREN = ')',
+    NONE = '',
+    CLOSE_PAREN = ')'
+}
+
+export enum ConditionConnector {
     AND = 'and',
     OR = 'or'
 }
 
+export enum ConditionOperator {
+    EQ = '=',
+    NEQ = '!=',
+    GT = '>',
+    GTE = '>=',
+    LT = '<',
+    LTE = '<='
+}
+
+export enum ConditionParentType {
+    TRIGGER = 'TRIGGER',
+    CYCLE = 'CYCLE',
+    SEQUENCE = 'SEQUENCE'
+}
+
+// Expression reconstruite (tri par order) : connector (sauf 1re) + symbolStart + condition + symbolEnd
 export class ConditionModel {
-    public name: string;
     public elementId: string;
     public elementType: ElementType;
-    public operator: string;
-    public value: ExecutableAction | number;
+    public operator: ConditionOperator;
+    // 'ON' | 'OFF' pour CYCLE/SEQUENCE, valeur numerique (string ou number) pour SENSOR
+    public value: string | number;
     public order: number;
+    public connector?: ConditionConnector;
     public symbolStart?: ConditionSymbolStart;
     public symbolEnd?: ConditionSymbolEnd;
+    public parentId?: string;
+    public parentType?: ConditionParentType;
 }

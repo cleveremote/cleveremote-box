@@ -1,5 +1,6 @@
-import { ExecutableStatus, ProcessType } from '../interfaces/executable.interface';
+import { CauseType, ExecutableStatus } from '../interfaces/executable.interface';
 import { ExecutableType } from './value.model';
+import { ProcessLastEventModel } from './event.model';
 
 export class ProcessValueModel {
     public id: string;
@@ -7,5 +8,6 @@ export class ProcessValueModel {
     public status: ExecutableStatus;
     public startedAt?: Date;
     public duration?: number;
-    public causes?: { type: ProcessType; cause: string }[];
+    public causes?: { type: CauseType; cause: string }[];
+    public lastEvent?: ProcessLastEventModel;
 }

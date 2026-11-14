@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SensorModel } from '@process/domain/models/sensor.model';
+import { forcastDataName, SensorModel } from '@process/domain/models/sensor.model';
 import { SynchronizeSensorModel } from '@process/domain/models/synchronize.model';
 import { InvalidIdException } from '@process/domain/errors/db-errors';
 import { isValidUuid } from '@process/domain/utils/id.util';
@@ -21,7 +21,20 @@ export class SensorRepository {
     }
 
     public async delete(id: string): Promise<boolean> {
-        return this.sensorMongooseRepository.delete(id);
+        return this.sensorMongooseRepository.delete(id); 
+    }
+
+    // cascade utilisee par DeviceRepository.delete() : soft-supprime les sensors COM lus sur le device
+    // (config.deviceId, sensors parents) et leurs enfants, independamment de tout flag `delete`.
+    public async deleteForDevice(deviceId: string): Promise<void> {
+        const parents = await this.sensorMongooseRepository.findByDeviceId(deviceId);
+        for (const parent of parents) {
+            const children = await this.sensorMongooseRepository.findByParentId(parent._id);
+            for (const child of children) {
+                await this.sensorMongooseRepository.delete(child._id);
+            }
+            await this.sensorMongooseRepository.delete(parent._id);
+        }
     }
 
     public async get(id?: string): Promise<SensorModel | SensorModel[]> {
@@ -29,6 +42,11 @@ export class SensorRepository {
             return this.sensorMongooseRepository.findAll();
         }
         return this.sensorMongooseRepository.findById(id);
+    }
+
+    // donnees FORCAST deja seedees (ou creees a la main), soft-supprimees comprises
+    public async getSeededForcastData(): Promise<forcastDataName[]> {
+        return this.sensorMongooseRepository.findForcastData();
     }
 
     // relation auto-referencee : acces au sensor parent et a la liste de ses enfants

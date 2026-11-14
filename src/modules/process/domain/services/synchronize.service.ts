@@ -5,9 +5,11 @@ import { Logger } from 'nestjs-pino';
 import { CycleModel } from '../models/cycle.model';
 import {
     SynchronizeActuatorModel,
-    SynchronizeComRequestModel,
+    SynchronizeControlLoopModel,
     SynchronizeCycleModel,
+    SynchronizeDeviceCommandModel,
     SynchronizeDeviceModel,
+    SynchronizeInverterModel,
     SynchronizeScheduleModel,
     SynchronizeSensorModel,
     SynchronizeTriggerModel
@@ -26,17 +28,26 @@ import { SequenceRepository } from '@process/infrastructure/repositories/sequenc
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
 import { DeviceModel, SlaveConfigModel } from '../models/device.model';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ComRequestModel } from '../models/com-request.model';
+import { DeviceCommandRepository } from '@process/infrastructure/repositories/device-command.repository';
+import { DeviceCommandModel } from '../models/device-command.model';
+import { DeviceCommandService } from './device-command.service';
 import { SensorService } from './sensor.service';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
+import { ControlLoopMode, ControlLoopModel } from '../models/control-loop.model';
+import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
+import { RegulationService } from './regulation.service';
+import { InverterModel } from '../models/inverter.model';
+import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
+import { ElementNotFoundExeception } from '../errors/db-errors';
+import { AUTO_CREATED_ONLY_CYCLE_TYPES } from '../interfaces/executable.interface';
+import { BoxError, BoxErrorCode } from '@framework/errors/box-error';
+import { ProcessService } from './execution.service';
 
 @Injectable()
 export class SynchronizeService {
     public constructor(
         private deviceRepository: DeviceRepository,
-        private modbusTaskRepository: ComRequestRepository,
         private cycleRepository: CycleRepository,
         private sequenceRepository: SequenceRepository,
         private triggerRepository: TriggerRepository,
@@ -47,7 +58,13 @@ export class SynchronizeService {
         private scheduleService: ScheduleService,
         private triggerService: TriggerService,
         private sensorService: SensorService,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private deviceCommandRepository: DeviceCommandRepository,
+        private deviceCommandService: DeviceCommandService,
+        private controlLoopRepository: ControlLoopRepository,
+        private regulationService: RegulationService,
+        private inverterRepository: InverterRepository,
+        private processService: ProcessService
     ) { }
 
     public async synchronize(structureModel: StructureModel): Promise<StructureModel> {
@@ -58,17 +75,20 @@ export class SynchronizeService {
             // structureModel.cycles proviennent de StructureSynchronizeDTO.mapToStructureModel(), donc
             // reellement des SynchronizeCycleModel (avec sequences: SynchronizeSequenceModel[])
             cycles: structureModel.cycles as SynchronizeCycleModel[],
-            sensors: structureModel.sensors,
-            modbusTasks: structureModel.modbusTasks
+            sensors: structureModel.sensors
         };
+        for (const cycle of incoming.cycles) {
+            if (!cycle.delete) await this._guardAutoCreatedOnlyType(cycle);
+        }
         structureModel.cycles = [];
         structureModel.sensors = [];
-        structureModel.modbusTasks = [];
         const data = new StructureModel();
         data.cycles = await this.cycleRepository.replaceAll(incoming.cycles);
         data.sensors = await this.sensorRepository.replaceAll(incoming.sensors ?? []);
-        data.modbusTasks = await this.modbusTaskRepository.replaceAll(incoming.modbusTasks ?? []);
+        // les commandes se synchronisent par device (box/synchronize/device, box/synchronize/device-command)
+        data.models = await this.deviceCommandService.modelsWithParams();
         this.configurationService.structure = data;
+        await this.processService.applyControlValues();
 
         return data;
     }
@@ -78,6 +98,7 @@ export class SynchronizeService {
             await this._deleteCycle(cycleModel._id);
             return { ...cycleModel, deletedAt: new Date() } as CycleModel;
         }
+        await this._guardAutoCreatedOnlyType(cycleModel);
         const cycle = await this.cycleRepository.save(cycleModel);
         cycle.sequences = await this.sequenceRepository.replaceForCycle(cycle._id, cycleModel.sequences ?? []);
         cycle.schedules = await this.scheduleRepository.replaceForCycle(cycle._id, cycleModel.schedules ?? []);
@@ -86,7 +107,24 @@ export class SynchronizeService {
         for (const schedule of cycle.schedules) {
             await this.scheduleService.initSchedule(schedule, false);
         }
+        // cycle en cours : le nouveau pourcentage d'ouverture (customValue) de ses actuators CTRL s'applique tout de suite
+        await this.processService.applyControlValues({ cycleId: cycle._id });
         return cycle;
+    }
+
+    // un type auto-créé uniquement (PROPORTIONAL) ne vient que de l'auto-création d'un slave : la synchronisation
+    // ne peut ni créer un tel cycle ni y convertir un cycle existant ; un cycle déjà de ce type garde son type
+    // (le DTO met CYCLE par défaut quand le front omet `type`).
+    private async _guardAutoCreatedOnlyType(cycleModel: SynchronizeCycleModel): Promise<void> {
+        const existing = cycleModel._id ? await this.cycleRepository.get(cycleModel._id) as CycleModel | null : null;
+        if (existing && AUTO_CREATED_ONLY_CYCLE_TYPES.includes(existing.type)) {
+            cycleModel.type = existing.type;
+            return;
+        }
+        if (AUTO_CREATED_ONLY_CYCLE_TYPES.includes(cycleModel.type)) {
+            throw new BoxError(`cycle type ${cycleModel.type} is auto-created only`, BoxErrorCode.CYCLE_AUTO_CREATED_ONLY,
+                { type: cycleModel.type });
+        }
     }
 
     // cascade deja geree par cycleRepository.delete() (soft-delete des sequences/schedules/triggers
@@ -103,12 +141,70 @@ export class SynchronizeService {
         }
         const valve = await this.actuatorRepository.save(valveModel);
         await this.configurationService.getStructure();
+        // vanne pilotée par un cycle en cours : bornes min/max (ouverture, sortie) appliquées tout de suite
+        await this.processService.applyControlValues({ actuatorId: valve._id });
         return valve;
     }
 
     private async _deleteValve(id: string): Promise<void> {
         await this.actuatorRepository.delete(id);
         await this.configurationService.getStructure();
+    }
+
+    // un suivi (FOLLOW) en cours s'arrête si la boucle est supprimée, désactivée, change de mode ou d'actionneur ;
+    // puis l'exécution des actionneurs concernés (ancien et nouveau) est réinitialisée dans les séquences en cours,
+    // pour que la boucle à jour (bornes, deadband, consigne, mode...) s'applique tout de suite et non au prochain ON.
+    public async synchronizeControlLoop(controlLoopModel: SynchronizeControlLoopModel): Promise<ControlLoopModel> {
+        const previous = controlLoopModel._id ? await this.controlLoopRepository.get(controlLoopModel._id) as ControlLoopModel : null;
+        if (controlLoopModel.delete) {
+            await this.controlLoopRepository.delete(controlLoopModel._id);
+            if (previous) {
+                this.regulationService.stopFollow(previous.actuatorId);
+                await this.processService.resetControlLoopExecution(previous.actuatorId);
+            }
+            return { ...controlLoopModel, deletedAt: new Date() } as ControlLoopModel;
+        }
+        const controlLoop = await this.controlLoopRepository.save(controlLoopModel);
+        const isFollowing = controlLoop.mode === ControlLoopMode.FOLLOW && controlLoop.isEnabled !== false;
+        if (previous && (!isFollowing || previous.actuatorId !== controlLoop.actuatorId)) {
+            this.regulationService.stopFollow(previous.actuatorId);
+        }
+        const actuatorIds = new Set([previous?.actuatorId, controlLoop.actuatorId].filter(Boolean));
+        for (const actuatorId of actuatorIds) {
+            await this.processService.resetControlLoopExecution(actuatorId);
+        }
+        return controlLoop;
+    }
+
+    /**
+     * Réglages d'un élément variateur : nom, mode par défaut, délai de retour au mode par défaut, valeurs imposées des
+     * paramètres. Enregistré, il est repris par InverterControlService (paramètres réécrits s'ils diffèrent de l'appareil).
+     */
+    public async synchronizeInverter(model: SynchronizeInverterModel): Promise<InverterModel> {
+        const inverter = await this.inverterRepository.get(model._id) as InverterModel;
+        if (!inverter) {
+            throw new ElementNotFoundExeception(model._id, 'synchronize', 'inverter');
+        }
+        if (model.delete) {
+            await this.inverterRepository.delete(model._id);
+            await this.configurationService.refreshInverters();
+            return { ...inverter, deletedAt: new Date() };
+        }
+        inverter.name = model.name ?? inverter.name;
+        inverter.description = model.description ?? inverter.description;
+        inverter.defaultMode = model.defaultMode ?? inverter.defaultMode;
+        inverter.releaseGraceMs = model.releaseGraceMs ?? inverter.releaseGraceMs;
+        for (const update of model.parameters ?? []) {
+            const parameter = inverter.parameters.find((p) => p.blockId === update.blockId);
+            if (!parameter) continue;
+            if (update.value !== undefined) {
+                parameter.value = update.value ?? undefined;
+            }
+            parameter.isPersistent = update.isPersistent ?? parameter.isPersistent;
+        }
+        const saved = await this.inverterRepository.save(inverter);
+        await this.configurationService.refreshInverters();
+        return saved;
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {
@@ -123,19 +219,16 @@ export class SynchronizeService {
         return this.deviceRepository.get() as Promise<DeviceModel[]>;
     }
 
-    // cascade recursive : sauvegarde le device puis, uniquement si le champ correspondant est
-    // explicitement fourni (undefined = non fourni = pas touche, retro-compat clients non migres),
-    // remplace completement ses comrequests et/ou ses devices slaves imbriques.
+    // cascade recursive : sauvegarde le device puis, uniquement si le champ est explicitement fourni
+    // (undefined = non fourni = pas touche, retro-compat clients non migres), remplace completement ses
+    // devices slaves imbriques. Les commandes register map appartiennent au modele, pas au device.
     private async _synchronizeDeviceTree(model: SynchronizeDeviceModel): Promise<DeviceModel> {
         if (model.delete) {
-            await this.deviceRepository.delete(model._id);
+            await this._deleteDevice(model._id);
             return { ...model, deletedAt: new Date() } as DeviceModel;
         }
         const device = await this.deviceRepository.save(model);
 
-        if (model.comrequests !== undefined) {
-            await this.modbusTaskRepository.replaceForDevice(device._id, model.comrequests);
-        }
         if (model.devices !== undefined) {
             await this._replaceChildDevices(device._id, model.devices);
         }
@@ -149,7 +242,7 @@ export class SynchronizeService {
         const incomingIds = new Set(childModels.filter(child => child._id).map(child => child._id));
         for (const existingChild of existing) {
             if (!incomingIds.has(existingChild._id)) {
-                await this.deviceRepository.delete(existingChild._id);
+                await this._deleteDevice(existingChild._id);
             }
         }
         const saved: DeviceModel[] = [];
@@ -162,10 +255,21 @@ export class SynchronizeService {
         return saved;
     }
 
-    public async synchronizeModbusTaskList(modbusTaskModels: SynchronizeComRequestModel[]): Promise<ComRequestModel[]> {
-        const modbusTasks = await this.modbusTaskRepository.saveMany(modbusTaskModels);
+    // la cascade (DeviceRepository.delete) soft-supprime les sensors rattaches au device et a ses slaves : leurs
+    // crons sont arretes ici, sinon ils continuent a lire un slave supprime jusqu'au prochain redemarrage
+    private async _deleteDevice(id: string): Promise<void> {
+        const sensorIds = (await this.sensorRepository.get() as SensorModel[]).map((sensor) => sensor._id);
+        await this.deviceRepository.delete(id);
+        const remainingIds = new Set((await this.sensorRepository.get() as SensorModel[]).map((sensor) => sensor._id));
+        for (const sensorId of sensorIds.filter((sensorId) => !remainingIds.has(sensorId))) {
+            await this.sensorService.initScheduledSensor({ _id: sensorId } as SensorModel, true);
+        }
+    }
+
+    public async synchronizeDeviceCommandList(models: SynchronizeDeviceCommandModel[]): Promise<DeviceCommandModel[]> {
+        const commands = await this.deviceCommandRepository.saveMany(await this.deviceCommandService.withParams(models));
         await this.configurationService.getStructure();
-        return modbusTasks;
+        return commands;
     }
 
     public async synchronizeTrigger(trigerModel: SynchronizeTriggerModel): Promise<TriggerModel> {

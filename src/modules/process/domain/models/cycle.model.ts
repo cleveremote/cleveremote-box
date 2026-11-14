@@ -3,7 +3,6 @@ import {
     ExecutionMode,
     CycleType,
     IExecutable,
-    ProcessMode,
     SequenceExecutionEntry
 } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
@@ -11,6 +10,7 @@ import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ScheduleModel } from './schedule.model';
 import { ModuleTimingConfig, SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
+import { ProcessLastEventModel } from './event.model';
 
 export interface ChildCycleConfig {
     order: number;
@@ -32,9 +32,13 @@ export class CycleModel implements IExecutable {
     public style: { bgColor: string; fontColor: string; iconColor: { icon: string; base: string } };
     public description: string;
     public display?: boolean = true;
+    // cree automatiquement par la box (provisioning d'un slave) et non par l'utilisateur ;
+    // fixe a la creation, jamais modifie par une synchronisation du front
+    public autoCreated?: boolean = false;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
-    public modePriority: { mode: ProcessMode; priority: number }[] = [];
     public progression?: { startedAt: Date; duration: number };
+    // dernier event de statut (non persiste sur l'element : relu du journal, tenu a jour par ProcessService)
+    public lastEvent?: ProcessLastEventModel;
     public sequences?: SequenceModel[] = [];
     public schedules?: ScheduleModel[] = [];
     public triggers?: TriggerModel[] = [];
@@ -52,6 +56,11 @@ export class CycleModel implements IExecutable {
         return this.sequences.flatMap((sequence) => sequence.getActuatorIds());
     }
 
+    // variateurs pilotés par au moins une séquence du cycle
+    public getInverterIds(): string[] {
+        return [...new Set(this.sequences.flatMap((sequence) => sequence.getInverterIds?.() ?? []))];
+    }
+
     public getModules(actuatorRegistry: Map<string, IActuatorModule>): IActuatorModule[] {
         let modules: IActuatorModule[] = [];
         this.sequences.forEach((sequence) => {
@@ -63,21 +72,29 @@ export class CycleModel implements IExecutable {
         return modules;
     }
 
+    // Identité par _id : deux slaves du même modèle créent des actuators homonymes (ex: DO7)
     public exists(module: IActuatorModule, actuatorRegistry: Map<string, IActuatorModule>): boolean {
-        return !!this.getModules(actuatorRegistry).find(x => x.name === module.name);
+        return this.getModules(actuatorRegistry).some(x => x._id === module._id);
     }
 
+    // Timings indexés par _id d'actuator
     public getModuleTimings(actuatorRegistry: Map<string, IActuatorModule>): Map<string, ModuleTimingConfig> {
         const timings = new Map<string, ModuleTimingConfig>();
         this.sequences.forEach((sequence) => {
             sequence.moduleConfigs.forEach((ref) => {
                 const actuator = actuatorRegistry.get(ref.moduleId);
                 if (actuator) {
-                    timings.set(actuator.name, ref.configTiming);
+                    timings.set(actuator._id, ref.configTiming);
                 }
             });
         });
         return timings;
+    }
+
+    // duree prevue du cycle : somme des durees de sequence, surcharge comprise (meme regle que getExecutionStructure)
+    public getPlannedDuration(overrideDuration?: number): number {
+        return (this.sequences ?? []).reduce((total, sequence) =>
+            total + Number(overrideDuration || sequence.securityConfig.maxDuration), 0);
     }
 
     public getExecutionStructure(overrideDuration: number | undefined, actuatorRegistry: Map<string, IActuatorModule>): SequenceExecutionEntry[] {
@@ -85,13 +102,14 @@ export class CycleModel implements IExecutable {
         const sequences: SequenceModel[] = [...this.sequences].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         sequences.forEach((sequence) => {
             const sequenceId = sequence._id;
-            const names = sequence.getActuatorIds()
-                .map((moduleId) => actuatorRegistry.get(moduleId)?.name)
-                .filter((name): name is string => name !== undefined);
-            sequence.securityConfig.maxDuration = overrideDuration || sequence.securityConfig.maxDuration;
-            const securityConfig = sequence.securityConfig;
+            const moduleIds = sequence.getActuatorIds()
+                .map((moduleId) => actuatorRegistry.get(moduleId)?._id)
+                .filter((id): id is string => id !== undefined);
+            // copie : ne pas ecrire la surcharge dans la structure partagee, sinon elle
+            // persisterait pour les executions suivantes (duree heritee)
+            const securityConfig = { ...sequence.securityConfig, maxDuration: overrideDuration || sequence.securityConfig.maxDuration };
 
-            executionLst.push({ sequenceId, names, securityConfig });
+            executionLst.push({ sequenceId, moduleIds, securityConfig });
         });
         return executionLst;
     }

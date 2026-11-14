@@ -25,8 +25,17 @@
       ],
       "@framework/*": [
         "src/common/framework/*"
+      ],
+      "@register-map/*": [
+        "src/modules/register-map/*"
+      ],
+      "@control/*": [
+        "src/modules/control/*"
+      ],
+      "@simulator/*": [
+        "src/modules/simulator/*"
       ]
-      
+
     }
   }
 }

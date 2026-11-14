@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { SensorModel } from '@process/domain/models/sensor.model';
+import { forcastDataName, SensorModel } from '@process/domain/models/sensor.model';
+import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { ElementNotFoundExeception } from '@process/domain/errors/db-errors';
 import { Sensor, SensorDocument } from '../schemas/sensor.schema';
 import { SensorMapper } from '../schemas/mappers/sensor.mapper';
@@ -54,6 +55,16 @@ export class SensorMongooseRepository {
 
     public async findByParentId(parentId: string): Promise<SensorModel[]> {
         const sensors = await this.sensorModel.find({ parentId, ...NOT_DELETED_FILTER });
+        return sensors.map(SensorMapper.mapToModel);
+    }
+
+    // donnees des sensors FORCAST deja crees, soft-supprimes compris (seed : un sensor supprime n'est pas recree)
+    public async findForcastData(): Promise<forcastDataName[]> {
+        return this.sensorModel.distinct('config.forcastData', { type: SensorType.FORCAST });
+    }
+
+    public async findByDeviceId(deviceId: string): Promise<SensorModel[]> {
+        const sensors = await this.sensorModel.find({ 'config.deviceId': deviceId, ...NOT_DELETED_FILTER });
         return sensors.map(SensorMapper.mapToModel);
     }
 

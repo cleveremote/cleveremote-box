@@ -1,6 +1,8 @@
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
-import { ComRequestConfigModel } from './com-request.model';
+import { DeviceCommandOverride } from './device-command.model';
+import { SequenceInverterDirective } from './inverter.model';
+import { ProcessLastEventModel } from './event.model';
 
 export interface ModuleTimingConfig {
     waitBeforeExec: number;
@@ -15,10 +17,18 @@ export interface SequenceModuleRef {
     customValue?: number;
 }
 
+export interface CustomStackModel {
+    commandId: string;
+    deviceId: string;
+    params?: DeviceCommandOverride;
+    defaultParams?: DeviceCommandOverride;
+}
+
 export interface SecurityConfig {
     maxDuration: number;
     conditions?: ConditionModel[];
-    customStacks?: { comRequestId: string; params?: ComRequestConfigModel; defaultParams?: ComRequestConfigModel }[];
+    // DeviceCommand exécutée sur le slave deviceId au démarrage (params) et à l'arrêt (defaultParams) de la séquence
+    customStacks?: CustomStackModel[];
 }
 
 export class SequenceModel {
@@ -28,6 +38,8 @@ export class SequenceModel {
     public name: string;
     public description: string;
     public progression: { startedAt: Date; duration: number };
+    // dernier event de statut (non persiste sur l'element : relu du journal, tenu a jour par ProcessService)
+    public lastEvent?: ProcessLastEventModel;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
 
     // determine l'ordre d'execution des sequences d'un meme cycle (croissant)
@@ -35,6 +47,9 @@ export class SequenceModel {
     public securityConfig: SecurityConfig = { maxDuration: undefined };
     // references vers des modules partages entre plusieurs sequences (moduleId + timings propres a cet usage)
     public moduleConfigs: SequenceModuleRef[] = [];
+    // directives données aux variateurs pendant la séquence (mode PID / RS485 et consigne) ; restituées au mode par
+    // défaut du variateur à la fin de la séquence
+    public inverterDirectives?: SequenceInverterDirective[];
 
     public createdAt?: Date;
     public updatedAt?: Date;
@@ -42,5 +57,9 @@ export class SequenceModel {
 
     public getActuatorIds(): string[] {
         return this.moduleConfigs.map((ref) => ref.moduleId);
+    }
+
+    public getInverterIds(): string[] {
+        return (this.inverterDirectives ?? []).map((directive) => directive.inverterId);
     }
 }

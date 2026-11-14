@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Cycle, CycleSchema } from './schemas/cycle.schema';
-import { Sequence, SequenceSchema } from './schemas/sequence.schema';
-import { Schedule, ScheduleSchema } from './schemas/schedule.schema';
-import { Trigger, TriggerSchema } from './schemas/trigger.schema';
-import { Sensor, SensorSchema } from './schemas/sensor.schema';
+import { Connection } from 'mongoose';
+import { watchMongoConnection } from '../../../common/database/mongo-connection.util';
 import { Event, EventSchema } from './schemas/event.schema';
 import { Authentication, AuthenticationSchema } from './schemas/authentication.schema';
-import { GlobalSettings, GlobalSettingsSchema } from './schemas/global-settings.schema';
+import { RecoveryCode, RecoveryCodeSchema } from './schemas/recovery-code.schema';
+import { RecoveryCodeRepository } from './repositories/recovery-code.repository';
+import { VerificationCode, VerificationCodeSchema } from './schemas/verification-code.schema';
+import { VerificationCodeRepository } from './repositories/verification-code.repository';
+import { MailService } from '@process/domain/services/mail.service';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
 import { ProcessService } from '@process/domain/services/execution.service';
@@ -21,34 +22,30 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { CycleRepository } from './repositories/cycle.repository';
-import { SequenceRepository } from './repositories/sequence.repository';
-import { TriggerRepository } from './repositories/trigger.repository';
-import { ScheduleRepository } from './repositories/schedule.repository';
-import { SensorRepository } from './repositories/sensor.repository';
 import { ValueRepository } from './repositories/value.repository';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AuthenticationRepository } from './repositories/authentication.repository';
 import { AuthenticationController } from './controllers/authentication.controller';
-import { GlobalSettingsRepository } from './repositories/global-settings.repository';
-import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { GlobalSettingsController } from './controllers/global-settings.controller';
 import { EventRepository } from './repositories/event.repository';
 import { EventMongooseRepository } from './repositories/event-mongoose.repository';
 import { HttpModule } from '@nestjs/axios';
-import { BleService } from '@process/domain/services/ble.service';
 import { PingController } from './controllers/ping.controller';
-import { CycleMongooseRepository } from './repositories/cycle-mongoose.repository';
-import { SequenceMongooseRepository } from './repositories/sequence-mongoose.repository';
-import { ScheduleMongooseRepository } from './repositories/schedule-mongoose.repository';
-import { TriggerMongooseRepository } from './repositories/trigger-mongoose.repository';
-import { SensorMongooseRepository } from './repositories/sensor-mongoose.repository';
+import { SlaveTemplateService } from '@process/domain/services/slave-template.service';
+import { SlaveTemplateController } from './controllers/slave-template.controller';
+import { RegisterMapController } from './controllers/register-map.controller';
 import { CycleGroupService } from '@process/domain/services/cycle-group.service';
 import { ActuatorModule } from '@process/domain/services/actuator-strategies/actuator.module';
 import { DeviceModule } from '@process/domain/services/device-strategies/device.module';
 import { ForcastSensorStrategy } from '@process/domain/services/sensor-strategies/forcast-sensor.strategy';
 import { ComSensorStrategy } from '@process/domain/services/sensor-strategies/com-sensor.strategy';
+import { AnalogSensorStrategy } from '@process/domain/services/sensor-strategies/analog-sensor.strategy';
 import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sensor-strategies/sensor-strategy.interface';
+import { RegisterMapModule } from '@register-map/infrastructure/register-map.module';
+import { SlaveProvisioningModule } from '@process/domain/services/slave-provisioning/slave-provisioning.module';
+import { DeviceConnectivityService } from '@process/domain/services/device-connectivity.service';
+import { DigitalIoMonitorService } from '@process/domain/services/digital-io-monitor.service';
+import { InverterControlService } from '@process/domain/services/inverter/inverter-control.service';
 @Module({
     imports: [
         ConfigModule.forRoot(),
@@ -57,50 +54,52 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         MongooseModule.forRootAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                uri: config.get<string>('MONGO_URI')
-            })
+            useFactory: (config: ConfigService) => {
+                const uri = config.get<string>('MONGO_URI');
+                // echec rapide de chaque tentative (defaut 30s), les retries sont geres par watchMongoConnection
+                const options = { serverSelectionTimeoutMS: 5000 };
+                return {
+                    uri,
+                    ...options,
+                    // ne pas bloquer le demarrage de l'app si Mongo est indisponible
+                    lazyConnection: true,
+                    connectionFactory: (connection: Connection) => watchMongoConnection(connection, uri, options)
+                };
+            }
         }),
         MongooseModule.forFeature([
-            { name: Cycle.name, schema: CycleSchema },
-            { name: Sequence.name, schema: SequenceSchema },
-            { name: Schedule.name, schema: ScheduleSchema },
-            { name: Trigger.name, schema: TriggerSchema },
-            { name: Sensor.name, schema: SensorSchema },
             { name: Event.name, schema: EventSchema },
             { name: Authentication.name, schema: AuthenticationSchema },
-            { name: GlobalSettings.name, schema: GlobalSettingsSchema }
+            { name: RecoveryCode.name, schema: RecoveryCodeSchema },
+            { name: VerificationCode.name, schema: VerificationCodeSchema }
         ]),
         ActuatorModule,
-        DeviceModule
+        DeviceModule,
+        SlaveProvisioningModule,
+        RegisterMapModule
     ],
     controllers: [
         ConfigurationController,
         ExecutionController,
         AuthenticationController,
         GlobalSettingsController,
+        SlaveTemplateController,
+        RegisterMapController,
         PingController
     ],
     providers: [
         //----Repositories------//
         AuthenticationRepository,
-        GlobalSettingsRepository,
-        CycleRepository,
-        SequenceRepository,
-        TriggerRepository,
-        ScheduleRepository,
-        SensorRepository,
+        RecoveryCodeRepository,
+        VerificationCodeRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
-        CycleMongooseRepository,
-        SequenceMongooseRepository,
-        ScheduleMongooseRepository,
-        TriggerMongooseRepository,
-        SensorMongooseRepository,
         //---------------------//
         AuthenticationService,
-        GlobalSettingsService,
+        MailService,
+        // GlobalSettingsService : fourni par ActuatorModule (instance unique)
+        SlaveTemplateService,
         StructureService,
         ProcessService,
         SocketIoClientProvider,
@@ -112,13 +111,17 @@ import { SENSOR_STRATEGIES, SensorStrategy } from '@process/domain/services/sens
         SensorService,
         ForcastSensorStrategy,
         ComSensorStrategy,
+        AnalogSensorStrategy,
         {
             provide: SENSOR_STRATEGIES,
-            useFactory: (forcast: ForcastSensorStrategy, com: ComSensorStrategy): SensorStrategy[] => [forcast, com],
-            inject: [ForcastSensorStrategy, ComSensorStrategy]
+            useFactory: (forcast: ForcastSensorStrategy, com: ComSensorStrategy, analog: AnalogSensorStrategy): SensorStrategy[] => [forcast, com, analog],
+            inject: [ForcastSensorStrategy, ComSensorStrategy, AnalogSensorStrategy]
         },
-        BleService,
-        CycleGroupService
+        CycleGroupService,
+        DeviceConnectivityService,
+        DigitalIoMonitorService,
+        // pilotage des variateurs par les séquences (directives, détection du manuel)
+        InverterControlService
     ],
     exports: [
         ProcessService,

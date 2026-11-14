@@ -3,18 +3,34 @@ import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { ExecutableStatus } from '@process/domain/interfaces/executable.interface';
 import { Condition, ConditionSchema } from './condition.schema';
-import { ComRequestConfig, ComRequestConfigSchema } from './comrequest.schema';
+import { RegisterOperationValue } from '@register-map/domain/models/register-map.model';
+import { InverterMode } from '@process/domain/models/inverter.model';
+
+// surcharge voie / valeur d'une DeviceCommand
+@Schema({ _id: false })
+export class DeviceCommandOverride {
+    @Prop({ type: Number, default: undefined })
+    public channel?: number;
+
+    @Prop({ type: Object, default: undefined })
+    public value?: RegisterOperationValue;
+}
+export const DeviceCommandOverrideSchema = SchemaFactory.createForClass(DeviceCommandOverride);
 
 @Schema()
 export class CustomStack {
     @Prop({ required: true })
-    public comRequestId: string;
+    public commandId: string;
 
-    @Prop({ type: ComRequestConfigSchema, default: undefined })
-    public params?: ComRequestConfig;
+    // slave sur lequel la commande est executee
+    @Prop({ required: true })
+    public deviceId: string;
 
-    @Prop({ type: ComRequestConfigSchema, default: undefined })
-    public defaultParams?: ComRequestConfig;
+    @Prop({ type: DeviceCommandOverrideSchema, default: undefined })
+    public params?: DeviceCommandOverride;
+
+    @Prop({ type: DeviceCommandOverrideSchema, default: undefined })
+    public defaultParams?: DeviceCommandOverride;
 }
 export const CustomStackSchema = SchemaFactory.createForClass(CustomStack);
 
@@ -46,6 +62,23 @@ export class SequenceModuleConfig {
     public customValue?: number;
 }
 export const SequenceModuleConfigSchema = SchemaFactory.createForClass(SequenceModuleConfig);
+
+// directive donnée à un variateur pendant la séquence
+@Schema({ _id: false })
+export class SequenceInverterDirective {
+    @Prop({ required: true })
+    public inverterId: string;
+
+    @Prop({ type: String, required: true, enum: InverterMode })
+    public mode: InverterMode;
+
+    @Prop({ type: Number, default: undefined })
+    public frequency?: number;
+
+    @Prop({ type: Number, default: undefined })
+    public pidSetpoint?: number;
+}
+export const SequenceInverterDirectiveSchema = SchemaFactory.createForClass(SequenceInverterDirective);
 
 @Schema({ _id: false })
 export class SecurityConfig {
@@ -90,6 +123,9 @@ export class Sequence {
 
     @Prop({ type: [SequenceModuleConfigSchema], default: [] })
     public moduleConfigs: SequenceModuleConfig[];
+
+    @Prop({ type: [SequenceInverterDirectiveSchema], default: undefined })
+    public inverterDirectives?: SequenceInverterDirective[];
 
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;

@@ -34,7 +34,7 @@ de Node.js requise sur la machine cible) dans `release/<platform>-<arch>/`.
 5. Résultat dans `release/<platform>-<arch>/` :
    - `cleveremote-box` (ou `.exe` sous Windows) — l'exécutable
    - `node_modules/` — dépendances de production (y compris les binaires
-     natifs : epoll, i2c-bus, bcrypt, serialport, etc.)
+     natifs : bcrypt, serialport, et epoll sur cible GPIO)
    - `.env` — copié depuis la racine du projet
 
 ## Déploiement
@@ -49,34 +49,21 @@ cd cleveremote-box-linux-arm64   # ou le nom que vous avez donné au dossier cop
 
 Rien d'autre n'est nécessaire — pas de Node.js à installer sur la cible.
 
-## Bluetooth : cap_net_admin
+## GPIO : Raspberry Pi uniquement
 
-`BleService` a besoin de gérer l'interface `hci0` (l'arrêter/redémarrer) sans
-tourner en root. Sans la capability Linux `cap_net_admin`, il échoue au
-démarrage avec `Could not bring down hci0 interface: EPERM`.
+Le pilotage GPIO (actionneurs de type `RPI`, led « ready ») repose sur `onoff`
+et son addon natif `epoll`, déclarés en **dépendance optionnelle** :
 
-Après chaque build (et après chaque déploiement sur une nouvelle machine),
-appliquer la capability sur le binaire réel — pas sur `node` (le binaire nvm
-de dev), mais sur l'exécutable généré lui-même, puisque c'est une copie du
-binaire Node avec le script embarqué :
-
-```bash
-sudo setcap cap_net_admin=ep ./release/<platform>-<arch>/cleveremote-box
-```
-
-`npm run build:sea` affiche cette commande à la fin (avec le bon chemin) pour
-ne pas l'oublier.
-
-Points à retenir :
-- **Effacée à chaque rebuild** : `npm run build:sea` régénère le binaire de
-  zéro, donc la capability doit être réappliquée après chaque build.
-- **Pas garantie de survivre à une copie** vers une autre machine (`scp`,
-  `rsync` sans `-X`...) → la réappliquer directement sur la machine cible
-  après déploiement, par sécurité.
-- Vérifier avec :
-  ```bash
-  getcap ./release/<platform>-<arch>/cleveremote-box
-  ```
+- **Build** : `onoff`/`epoll` ne sont vérifiés et copiés dans la release que
+  pour une cible `linux-arm` / `linux-arm64`. Sur les autres plateformes, ils
+  sont exclus (et un échec de compilation d'`epoll` à l'`npm install` est
+  toléré par npm puisque la dépendance est optionnelle).
+- **Exécution** : `onoff` n'est chargé que si `/proc/device-tree/model`
+  indique un Raspberry Pi (`src/modules/process/domain/utils/gpio.util.ts`).
+  Ailleurs, la stratégie d'actionneur `RPI` n'est pas enregistrée : un
+  actionneur `RPI` lève `NotImplementedError` au lieu d'être simulé.
+- Pour ne pas installer `onoff` du tout sur une machine non-Pi (déploiement
+  prod) : `npm ci --omit=dev --omit=optional`.
 
 ## Limite : pas de cross-compilation
 
@@ -85,8 +72,7 @@ outil comme `pkg`. Concrètement :
 
 - Le binaire produit **embarque le binaire Node exact de la machine qui a
   lancé le build** → il ne tourne que sur le même OS + architecture CPU.
-- Les modules natifs (epoll, i2c-bus, bcrypt, pi-spi, hci-socket,
-  `@serialport/bindings-cpp`) sont des fichiers `.node` compilés pour cette
+- Les modules natifs (epoll, bcrypt, `@serialport/bindings-cpp`) sont des fichiers `.node` compilés pour cette
   même machine → eux non plus ne sont pas portables d'une architecture à
   l'autre.
 

@@ -1,0 +1,624 @@
+[
+  {
+    "_id": "8081f8c2-05b1-4d1c-8b02-0f7847310591",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "READ OUTPUTS",
+    "description": "Lire l'état des sorties 1~8",
+    "blockId": "outputs",
+    "operationId": "read",
+    "types": ["read"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "dbcbf89b-2254-4ab3-88ad-c1fc1400a143",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "DIGITAL OUTPUT REQUEST",
+    "description": "Sortie ON / OFF (voie et valeur surchargées à l'exécution)",
+    "blockId": "outputs",
+    "operationId": "set",
+    "types": ["set"],
+    "channel": 0,
+    "value": 1,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "channel": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "enum",
+        "entries": [
+          {
+            "value": 1,
+            "wire": "0xFF00",
+            "label": "ON"
+          },
+          {
+            "value": 0,
+            "wire": "0x0000",
+            "label": "OFF"
+          }
+        ]
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "ddbae7ca-4594-4d22-a9ab-c9571e0d5f6f",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "TOGGLE OUTPUT",
+    "description": "Basculer une sortie",
+    "blockId": "outputs",
+    "operationId": "toggle",
+    "types": ["set"],
+    "channel": 0,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "channel": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "40089314-3452-4df5-aa8b-e02654dfa7c2",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SET OUTPUTS MASK",
+    "description": "Écrire les 8 sorties",
+    "blockId": "outputs",
+    "operationId": "setMask",
+    "types": ["set"],
+    "value": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "boolean[]",
+        "length": 8
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "a9cc31f1-89ab-4a39-9473-feaa6670e7af",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "TOGGLE OUTPUTS ONE BY ONE",
+    "description": "Basculer les 8 sorties une à une",
+    "blockId": "outputs",
+    "operationId": "toggleRange",
+    "types": ["set"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "f5930e22-3dec-4f00-9c39-133091ed3b3f",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SWITCH ALL OFF",
+    "description": "Toutes les sorties OFF",
+    "blockId": "allOutputs",
+    "operationId": "set",
+    "types": ["init"],
+    "value": 0,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "value": {
+        "type": "enum",
+        "entries": [
+          {
+            "value": 1,
+            "wire": "0xFF00",
+            "label": "ON"
+          },
+          {
+            "value": 0,
+            "wire": "0x0000",
+            "label": "OFF"
+          }
+        ]
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "03b1dfee-b2f3-4a77-b760-7348d5d3d381",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SWITCH ALL ON",
+    "description": "Toutes les sorties ON",
+    "blockId": "allOutputs",
+    "operationId": "set",
+    "types": ["set"],
+    "value": 1,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "value": {
+        "type": "enum",
+        "entries": [
+          {
+            "value": 1,
+            "wire": "0xFF00",
+            "label": "ON"
+          },
+          {
+            "value": 0,
+            "wire": "0x0000",
+            "label": "OFF"
+          }
+        ]
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "4ec8666d-f61f-4f90-907a-54e47621d278",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "TOGGLE ALL",
+    "description": "Basculer toutes les sorties",
+    "blockId": "allOutputs",
+    "operationId": "toggle",
+    "types": ["set"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "0f11cf81-d09f-4e7c-af5e-036cd359de51",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "FLASH ON",
+    "description": "Impulsion ON de 700 ms (value × 100 ms)",
+    "blockId": "flashOn",
+    "operationId": "pulse",
+    "types": ["set"],
+    "channel": 0,
+    "value": 7,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "channel": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "number",
+        "min": 1,
+        "max": 32767,
+        "default": 7,
+        "scale": 100,
+        "unit": "ms"
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "236c209c-2c4e-455f-a8ba-b7ec44df5413",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "FLASH OFF",
+    "description": "Impulsion OFF de 500 ms (value × 100 ms)",
+    "blockId": "flashOff",
+    "operationId": "pulse",
+    "types": ["set"],
+    "channel": 0,
+    "value": 5,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "channel": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "number",
+        "min": 1,
+        "max": 32767,
+        "default": 5,
+        "scale": 100,
+        "unit": "ms"
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "a15c1f88-b80b-423c-902c-53ee0c35bdd5",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "READ INPUTS",
+    "description": "Lire l'état des entrées 1~8",
+    "blockId": "inputs",
+    "operationId": "read",
+    "types": ["read"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "05bcfe46-3357-435f-802b-21695cacb45b",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "READ OUTPUT MODES",
+    "description": "Lire les modes des sorties 1~8",
+    "blockId": "outputModes",
+    "operationId": "read",
+    "types": ["read"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "e2c693f9-1144-4e0d-bb94-78217a773db4",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SET OUTPUT MODE",
+    "description": "Mode d'une sortie (0 Normal, 1 Linkage, 2 Toggle, 3 Edge trigger)",
+    "blockId": "outputModes",
+    "operationId": "set",
+    "types": ["set"],
+    "channel": 0,
+    "value": 0,
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "channel": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "enum",
+        "entries": [
+          {
+            "value": 0,
+            "hex": "0x0000",
+            "label": "Normal",
+            "description": "Sortie pilotée uniquement par commande Modbus"
+          },
+          {
+            "value": 1,
+            "hex": "0x0001",
+            "label": "Linkage",
+            "description": "La sortie recopie l'état de l'entrée de même rang"
+          },
+          {
+            "value": 2,
+            "hex": "0x0002",
+            "label": "Toggle",
+            "description": "Chaque impulsion sur l'entrée bascule la sortie"
+          },
+          {
+            "value": 3,
+            "hex": "0x0003",
+            "label": "Edge trigger",
+            "description": "Chaque changement d'état de l'entrée bascule la sortie"
+          }
+        ]
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "2693e2e4-ef24-4b75-a4e9-7e80ab730ed2",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SET ALL TOGGLE MODE",
+    "description": "Toutes les sorties en mode Toggle",
+    "blockId": "outputModes",
+    "operationId": "setAll",
+    "types": ["init"],
+    "value": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "range": {
+        "min": 0,
+        "max": 7,
+        "labelStart": 1
+      },
+      "value": {
+        "type": "enum[]",
+        "length": 8,
+        "entries": [
+          {
+            "value": 0,
+            "hex": "0x0000",
+            "label": "Normal",
+            "description": "Sortie pilotée uniquement par commande Modbus"
+          },
+          {
+            "value": 1,
+            "hex": "0x0001",
+            "label": "Linkage",
+            "description": "La sortie recopie l'état de l'entrée de même rang"
+          },
+          {
+            "value": 2,
+            "hex": "0x0002",
+            "label": "Toggle",
+            "description": "Chaque impulsion sur l'entrée bascule la sortie"
+          },
+          {
+            "value": 3,
+            "hex": "0x0003",
+            "label": "Edge trigger",
+            "description": "Chaque changement d'état de l'entrée bascule la sortie"
+          }
+        ]
+      },
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "dd8ac9b1-7450-49a9-aa79-574246c7a19d",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SET UART 9600 N",
+    "description": "9600 bauds sans parité (danger : coupe la com si différent du port)",
+    "blockId": "uart",
+    "operationId": "set",
+    "types": ["set"],
+    "value": {
+      "parity": 0,
+      "baudRate": 1
+    },
+    "isPersistent": false,
+    "isConfirmed": true,
+    "params": {
+      "value": {
+        "type": "composite",
+        "encode": "(parity << 8) | baudRate",
+        "fields": [
+          {
+            "name": "parity",
+            "byte": "high",
+            "default": 0,
+            "entries": [
+              {
+                "value": 0,
+                "hex": "0x00",
+                "label": "None"
+              },
+              {
+                "value": 1,
+                "hex": "0x01",
+                "label": "Even",
+                "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte"
+              },
+              {
+                "value": 2,
+                "hex": "0x02",
+                "label": "Odd",
+                "description": "Doc Waveshare incohérente even/odd entre requête et réponse : à vérifier sur la carte"
+              }
+            ]
+          },
+          {
+            "name": "baudRate",
+            "byte": "low",
+            "default": 1,
+            "entries": [
+              {
+                "value": 0,
+                "hex": "0x00",
+                "label": "4800"
+              },
+              {
+                "value": 1,
+                "hex": "0x01",
+                "label": "9600"
+              },
+              {
+                "value": 2,
+                "hex": "0x02",
+                "label": "19200"
+              },
+              {
+                "value": 3,
+                "hex": "0x03",
+                "label": "38400"
+              },
+              {
+                "value": 4,
+                "hex": "0x04",
+                "label": "57600"
+              },
+              {
+                "value": 5,
+                "hex": "0x05",
+                "label": "115200"
+              },
+              {
+                "value": 6,
+                "hex": "0x06",
+                "label": "128000"
+              },
+              {
+                "value": 7,
+                "hex": "0x07",
+                "label": "256000"
+              }
+            ]
+          }
+        ]
+      },
+      "isConfirmRequired": true,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "a77547d7-ad45-4041-b14c-e068b9abf62e",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "READ DEVICE ADDRESS",
+    "description": "Lire l'adresse Modbus du module",
+    "blockId": "deviceAddress",
+    "operationId": "read",
+    "types": ["read"],
+    "isPersistent": false,
+    "isConfirmed": true,
+    "params": {
+      "isConfirmRequired": true,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "5b25d727-f727-49f9-bd8d-85e4f29a29f6",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "SET DEVICE ADDRESS",
+    "description": "Changer l'adresse Modbus (danger)",
+    "blockId": "deviceAddress",
+    "operationId": "set",
+    "types": ["set"],
+    "value": 1,
+    "isPersistent": false,
+    "isConfirmed": true,
+    "params": {
+      "value": {
+        "type": "number",
+        "min": 1,
+        "max": 255,
+        "default": 1
+      },
+      "isConfirmRequired": true,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  },
+  {
+    "_id": "bebb9a03-c33c-48ea-9c65-8d86fcd92a77",
+    "modelId": "5efbb9e0-d0d9-4f22-a1fa-6dbf9232dc76",
+    "name": "READ VERSION",
+    "description": "Lire la version logicielle",
+    "blockId": "version",
+    "operationId": "read",
+    "types": ["read"],
+    "isPersistent": false,
+    "isConfirmed": false,
+    "params": {
+      "isConfirmRequired": false,
+      "isPersistable": false
+    },
+    "createdAt": "2026-10-24T18:46:15.078Z",
+    "updatedAt": "2026-10-24T18:46:15.078Z",
+    "deletedAt": null
+  }
+]

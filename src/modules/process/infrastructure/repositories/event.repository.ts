@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EventModel } from '@process/domain/models/event.model';
+import { EventPurgeFilterModel } from '@process/domain/models/event-purge.model';
+import { RunIdsFilter } from '@process/domain/models/cycle-history.model';
 import { EventMongooseRepository } from './event-mongoose.repository';
 
 @Injectable()
@@ -15,8 +17,33 @@ export class EventRepository {
         return this.eventMongooseRepository.findByDeviceAndDateRange(elementId, startDate, endDate);
     }
 
+    // tous les events de ces runs, meme hors de la periode demandee (run a cheval sur une borne)
+    public async getByRunIds(runIds: string[]): Promise<EventModel[]> {
+        return runIds.length ? this.eventMongooseRepository.findByRunIds(runIds) : [];
+    }
+
+    // nombre d'events supprimes
+    public async purge(filter: EventPurgeFilterModel): Promise<number> {
+        return this.eventMongooseRepository.deleteMany(filter);
+    }
+
+    // dernier event, quel qu'il soit (capteur : derniere valeur ; cycle / sequence : lastEvent)
     public async getLast(elementId: string): Promise<EventModel> {
         return this.eventMongooseRepository.findLastByDevice(elementId);
+    }
+
+    // elementIds absent : tous les cycles ; startDate / endDate absentes : pas de filtre de date ; outcomes absent : tous les etats
+    public async getRunIds(filter: RunIdsFilter): Promise<string[]> {
+        return this.eventMongooseRepository.findRunIds(filter);
+    }
+
+    public async getLatestByDevice(elementId: string, limit: number): Promise<EventModel[]> {
+        return this.eventMongooseRepository.findLatestByDevice(elementId, limit);
+    }
+
+    // dernier event portant un statut (ignore STATUSLESS_EVENT_KINDS) : rehydratation statut / progression
+    public async getLastStatus(elementId: string): Promise<EventModel> {
+        return this.eventMongooseRepository.findLastStatusByDevice(elementId);
     }
 
 }

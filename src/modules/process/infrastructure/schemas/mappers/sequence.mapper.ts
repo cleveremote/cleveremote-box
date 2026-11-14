@@ -1,4 +1,5 @@
 import { SequenceModel } from '@process/domain/models/sequence.model';
+import { SequenceInverterDirective } from '@process/domain/models/inverter.model';
 import { Sequence, SequenceDocument } from '../sequence.schema';
 import { ConditionMapper } from './condition.mapper';
 import { CustomStackMapper } from './custom-stack.mapper';
@@ -19,7 +20,7 @@ export class SequenceMapper {
         model.securityConfig = {
             maxDuration: sequence.securityConfig?.maxDuration,
             ...(sequence.securityConfig?.customStacks !== undefined && { customStacks: sequence.securityConfig.customStacks.map(CustomStackMapper.mapToModel) }),
-            ...(sequence.securityConfig?.conditions !== undefined && { conditions: sequence.securityConfig.conditions.map(ConditionMapper.mapToModel) })
+            ...(sequence.securityConfig?.conditions !== undefined && { conditions: ConditionMapper.mapListToModel(sequence.securityConfig.conditions) })
         };
         model.moduleConfigs = (sequence.moduleConfigs ?? []).map((ref) => ({
             moduleId: ref.moduleId,
@@ -31,6 +32,9 @@ export class SequenceMapper {
             },
             ...(ref.customValue !== undefined && { customValue: ref.customValue })
         }));
+        if (sequence.inverterDirectives !== undefined && sequence.inverterDirectives !== null) {
+            model.inverterDirectives = sequence.inverterDirectives.map(SequenceMapper._directive);
+        }
         model.createdAt = (sequence as unknown as { createdAt?: Date }).createdAt;
         model.updatedAt = (sequence as unknown as { updatedAt?: Date }).updatedAt;
         model.deletedAt = sequence.deletedAt ?? null;
@@ -59,7 +63,20 @@ export class SequenceMapper {
             },
             ...(ref.customValue !== undefined && { customValue: ref.customValue })
         }));
+        if (model.inverterDirectives !== undefined) {
+            sequence.inverterDirectives = model.inverterDirectives.map(SequenceMapper._directive);
+        }
         return sequence;
+    }
+
+    // clés absentes (pas undefined) : sinon persistées à null
+    private static _directive(directive: SequenceInverterDirective): SequenceInverterDirective {
+        return {
+            inverterId: directive.inverterId,
+            mode: directive.mode,
+            ...(directive.frequency !== undefined && directive.frequency !== null && { frequency: directive.frequency }),
+            ...(directive.pidSetpoint !== undefined && directive.pidSetpoint !== null && { pidSetpoint: directive.pidSetpoint })
+        };
     }
 
 }

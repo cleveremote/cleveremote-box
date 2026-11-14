@@ -1,0 +1,859 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; adresses de la doc en hexa (0x000C → 12), aucun décalage",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'channel' : block.address.start + index × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : entier brut ; 'composite' : champs encodés par octet, un mot par 'word' ; 'number[]' : mots bruts",
+    "fixedPoint": "Valeurs décimales sur 3 registres : partie entière int32 (2 mots, big-endian) + partie décimale × 100 (1 mot) ; valeur = entier + centièmes / 100 (ex : 00 00 00 07 00 32 → 7.50)",
+    "fixedPointWrite": "Écriture d'une valeur décimale (writeRegisters, 3 mots) : [entier mot fort, entier mot faible, centièmes] (ex : total 10 L → [0, 10, 0])",
+    "fields": "result 'fields' : champs décodés depuis la lecture (offset en mots) ; formules mathjs avec raw et les autres champs de la lecture",
+    "wordOrder": "valeurs 32 bits : mot de poids fort en premier (hardware.wordOrder = highFirst)",
+    "defaultValue": "Valeur usine du paramètre, au format de la valeur décodée du 1er champ (code enum ou nombre)",
+    "views": "Blocs groupés (monitoring, configuration) : lecture de plusieurs registres en une trame, mêmes champs que les blocs unitaires",
+    "danger": "true : l'opération peut couper la communication (adresse, vitesse) (confirmation requise)"
+  },
+  "_id": "f14f73c3-c7e0-4340-9d9c-90206ffb06f9",
+  "name": "DEBITMETRE RS485",
+  "description": "Convertisseur de débit (débit, volume total, pression) - protocole Modbus RTU V1.63",
+  "kind": "FLOWMETER_V1",
+  "hardware": {
+    "manufacturer": "Non précisé (Flow Converter)",
+    "model": "Flow Converter Modbus RTU (identifiant 0x2022)",
+    "protocolVersion": "Flow Converter MODBUS Communication Protocol V1.63 (oct. 2022)",
+    "documentation": "flowmeter-rs485.pdf",
+    "serial": {
+      "baudRate": 115200,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1,
+      "baudRates": [
+        2400,
+        4800,
+        9600,
+        19200,
+        38400,
+        57600,
+        115200
+      ],
+      "parities": [
+        "none"
+      ],
+      "note": "Vitesse modifiable via le registre 0x0004 (enum baudRate) ; parité fixe"
+    },
+    "unitId": {
+      "default": 255,
+      "min": 1,
+      "max": 255
+    },
+    "discoveryRegister": 5,
+    "exceptionCodes": "modbusException",
+    "wordOrder": "highFirst",
+    "functionCodes": [
+      3,
+      6,
+      16
+    ],
+    "registerNumbering": "Adresses de la doc en hexa (0xNNNN) ; aucun décalage ; 0xFE = adresse publique (répond quel que soit le numéro configuré)"
+  },
+  "enums": {
+    "baudRate": [
+      {
+        "value": 0,
+        "label": "2400"
+      },
+      {
+        "value": 1,
+        "label": "4800"
+      },
+      {
+        "value": 2,
+        "label": "9600"
+      },
+      {
+        "value": 3,
+        "label": "19200"
+      },
+      {
+        "value": 4,
+        "label": "38400"
+      },
+      {
+        "value": 5,
+        "label": "57600"
+      },
+      {
+        "value": 6,
+        "label": "115200",
+        "description": "Configuration usine"
+      }
+    ],
+    "modbusException": [
+      {
+        "value": 1,
+        "label": "Illegal function"
+      },
+      {
+        "value": 2,
+        "label": "Illegal data address"
+      },
+      {
+        "value": 3,
+        "label": "Illegal data value"
+      },
+      {
+        "value": 4,
+        "label": "Server failure"
+      }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "monitoring",
+      "label": "Mesures (0x0009-0x0011)",
+      "description": "Débit instantané, volume total et pression en une seule lecture",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 9,
+        "count": 9
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les mesures",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 9
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 0,
+                "type": "int32",
+                "unit": "L/min",
+                "formula": "raw + instantFlowHundredths / 100",
+                "autoCreate": true
+              },
+              {
+                "name": "instantFlowHundredths",
+                "label": "Débit instantané (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              },
+              {
+                "name": "totalFlow",
+                "label": "Volume total",
+                "offset": 3,
+                "type": "int32",
+                "unit": "L",
+                "formula": "raw + totalFlowHundredths / 100",
+                "autoCreate": true
+              },
+              {
+                "name": "totalFlowHundredths",
+                "label": "Volume total (centièmes)",
+                "offset": 5,
+                "type": "uint16"
+              },
+              {
+                "name": "pressure",
+                "label": "Pression",
+                "offset": 6,
+                "type": "int32",
+                "formula": "raw + pressureHundredths / 100",
+                "description": "Unité non précisée par la doc (dépend des coefficients A et B)"
+              },
+              {
+                "name": "pressureHundredths",
+                "label": "Pression (centièmes)",
+                "offset": 8,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "configuration",
+      "label": "Configuration (0x0003-0x0008)",
+      "description": "Identifiant, vitesse, adresse et coefficient K1 en une seule lecture",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 3,
+        "count": 6
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la configuration",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 6
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "modelId",
+                "label": "Identifiant du modèle (toujours 0x2022)",
+                "offset": 0,
+                "type": "uint16",
+                "expected": 8226
+              },
+              {
+                "name": "baudRate",
+                "label": "Vitesse de communication",
+                "offset": 1,
+                "type": "uint16",
+                "enum": "baudRate"
+              },
+              {
+                "name": "deviceAddress",
+                "label": "Adresse Modbus",
+                "offset": 2,
+                "type": "uint16"
+              },
+              {
+                "name": "kFactor",
+                "label": "Coefficient de débit K1",
+                "offset": 3,
+                "type": "int32",
+                "formula": "raw + kFactorHundredths / 100"
+              },
+              {
+                "name": "kFactorHundredths",
+                "label": "Coefficient K1 (centièmes)",
+                "offset": 5,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "modelId",
+      "label": "Identifiant du modèle",
+      "description": "Valeur fixe 0x2022 : identifie le type d'équipement (recherche automatique vitesse / adresse)",
+      "defaultValue": 8226,
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 3,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'identifiant",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "modelId",
+                "label": "Identifiant (0x2022)",
+                "offset": 0,
+                "type": "uint16",
+                "expected": 8226
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "baudRate",
+      "label": "Vitesse de communication",
+      "description": "Prise en compte immédiate : la communication est perdue si le maître n'est pas reconfiguré",
+      "defaultValue": 6,
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 4,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la vitesse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "baudRate",
+                "label": "Vitesse",
+                "offset": 0,
+                "type": "uint16",
+                "enum": "baudRate"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer la vitesse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "enum",
+            "enum": "baudRate"
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Écrire 115200 (0x0004 = 6)",
+          "frame": "01 06 00 04 00 06 48 09"
+        }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse Modbus",
+      "description": "Registre de découverte (adresse 5) ; usine 0xFF ; 0xFE réservée (adresse publique, relit l'adresse oubliée)",
+      "defaultValue": 255,
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": {
+        "start": 5,
+        "count": 1
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 1
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "deviceAddress",
+                "label": "Adresse",
+                "offset": 0,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "number",
+            "min": 1,
+            "max": 255,
+            "default": 255
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire l'adresse (0x0005)",
+          "frame": "01 03 00 05 00 01 94 0B"
+        },
+        {
+          "label": "Réponse adresse 1",
+          "frame": "01 03 02 00 01 79 84"
+        }
+      ]
+    },
+    {
+      "id": "kFactor",
+      "label": "Coefficient de débit K1",
+      "description": "Partie entière limitée à 10 (doc V1.4)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 6,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le coefficient K1",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "kFactor",
+                "label": "Coefficient K1",
+                "offset": 0,
+                "type": "int32",
+                "formula": "raw + kFactorHundredths / 100"
+              },
+              {
+                "name": "kFactorHundredths",
+                "label": "Coefficient K1 (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler le coefficient K1",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "composite",
+            "encode": "[0, entier, centièmes] : K = entier + centièmes / 100",
+            "fields": [
+              {
+                "name": "integer",
+                "word": 1,
+                "byte": "low",
+                "min": 0,
+                "max": 10
+              },
+              {
+                "name": "hundredths",
+                "word": 2,
+                "byte": "low",
+                "min": 0,
+                "max": 99,
+                "default": 0
+              }
+            ]
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Lire K1 (0x0006-0x0008)",
+          "frame": "01 03 00 06 00 03 E5 CA"
+        },
+        {
+          "label": "Réponse K1 = 7.50",
+          "frame": "01 03 06 00 00 00 07 00 32 11 61"
+        }
+      ]
+    },
+    {
+      "id": "instantFlow",
+      "label": "Débit instantané",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 9,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le débit",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "instantFlow",
+                "label": "Débit instantané",
+                "offset": 0,
+                "type": "int32",
+                "unit": "L/min",
+                "formula": "raw + instantFlowHundredths / 100"
+              },
+              {
+                "name": "instantFlowHundredths",
+                "label": "Débit instantané (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "totalFlow",
+      "label": "Volume total",
+      "description": "Écriture : [entier mot fort, entier mot faible, centièmes] (ex : remise à zéro → [0, 0, 0])",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 12,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le volume total",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "totalFlow",
+                "label": "Volume total",
+                "offset": 0,
+                "type": "int32",
+                "unit": "L",
+                "formula": "raw + totalFlowHundredths / 100"
+              },
+              {
+                "name": "totalFlowHundredths",
+                "label": "Volume total (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Écrire le volume total",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "number[]",
+            "length": 3,
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ],
+      "examples": [
+        {
+          "label": "Écrire un total de 10 L",
+          "frame": "01 10 00 0C 00 03 06 00 00 00 0A 00 00 06 BD"
+        },
+        {
+          "label": "Réponse",
+          "frame": "01 10 00 0C 00 03 40 0B"
+        }
+      ]
+    },
+    {
+      "id": "pressure",
+      "label": "Pression",
+      "description": "Unité non précisée par la doc (dépend des coefficients A et B)",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": {
+        "start": 15,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la pression",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "pressure",
+                "label": "Pression",
+                "offset": 0,
+                "type": "int32",
+                "formula": "raw + pressureHundredths / 100"
+              },
+              {
+                "name": "pressureHundredths",
+                "label": "Pression (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "totalFlowSaveReference",
+      "label": "Référence de sauvegarde du volume total",
+      "description": "Le total est mémorisé (zone non volatile, ~100 000 écritures) à chaque variation de référence × 60 L (ex : 30 → tous les 1800 L)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 18,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la référence",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "totalFlowSaveReference",
+                "label": "Référence de sauvegarde",
+                "offset": 0,
+                "type": "int32",
+                "formula": "raw + totalFlowSaveReferenceHundredths / 100"
+              },
+              {
+                "name": "totalFlowSaveReferenceHundredths",
+                "label": "Référence de sauvegarde (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler la référence",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "number[]",
+            "length": 3,
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pressureCoefficientA",
+      "label": "Coefficient de pression A",
+      "description": "Vout = VCC × A + B (coefficients fournis avec le manomètre)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 21,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le coefficient A",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "pressureCoefficientA",
+                "label": "Coefficient A",
+                "offset": 0,
+                "type": "int32",
+                "formula": "raw + pressureCoefficientAHundredths / 100"
+              },
+              {
+                "name": "pressureCoefficientAHundredths",
+                "label": "Coefficient A (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler le coefficient A",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "number[]",
+            "length": 3,
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pressureCoefficientB",
+      "label": "Coefficient de pression B",
+      "description": "Vout = VCC × A + B (coefficients fournis avec le manomètre)",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": {
+        "start": 24,
+        "count": 3
+      },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire le coefficient B",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "none"
+          },
+          "result": {
+            "type": "fields",
+            "fields": [
+              {
+                "name": "pressureCoefficientB",
+                "label": "Coefficient B",
+                "offset": 0,
+                "type": "int32",
+                "formula": "raw + pressureCoefficientBHundredths / 100"
+              },
+              {
+                "name": "pressureCoefficientBHundredths",
+                "label": "Coefficient B (centièmes)",
+                "offset": 2,
+                "type": "uint16"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Régler le coefficient B",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "fixed",
+          "params": {
+            "length": 3
+          },
+          "input": {
+            "type": "number[]",
+            "length": 3,
+            "min": 0,
+            "max": 65535
+          },
+          "result": {
+            "type": "echo"
+          }
+        }
+      ]
+    }
+  ],
+  "device": {
+    "name": "DEBITMETRE RS485",
+    "description": "Débitmètre (débit, volume total, pression)"
+  }
+}

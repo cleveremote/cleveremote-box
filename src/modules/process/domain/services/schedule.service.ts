@@ -8,7 +8,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
-import { ExecutableAction, ProcessMode, ProcessType } from '../interfaces/executable.interface';
+import { ExecutableAction, ProcessMode, StartPolicy } from '../interfaces/executable.interface';
 import { ProcessService } from './execution.service';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { CycleModel } from '../models/cycle.model';
@@ -16,9 +16,14 @@ import { ScheduleRepository } from '@process/infrastructure/repositories/schedul
 import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 import { ComputeSunEventDate, ResolveCoordinates } from './sun-event.util';
 import { GlobalSettingsService } from './global-settings.service';
+import { EventOriginModel, EventSource } from '../models/event.model';
 
 @Injectable()
 export class ScheduleService {
+
+    // callback de chaque job enregistre (schedule._id) : rescheduleAll() recree les jobs sans perdre
+    // un callback specifique (ex: methode d'un trigger, qu'un _buildExecutionMethode ecraserait)
+    private _methodes = new Map<string, () => void>();
 
     public constructor(
         private schedulerRegistry: SchedulerRegistry,
@@ -29,6 +34,7 @@ export class ScheduleService {
         private globalSettingsService: GlobalSettingsService,
         private readonly logger: Logger
     ) {
+        this.globalSettingsService.onLocationChanged.subscribe(() => this.rescheduleAll());
     }
 
     public createSchedule(schedule: ScheduleModel, methode: () => void): ScheduleModel {
@@ -41,6 +47,7 @@ export class ScheduleService {
         // schedule (ex: sunBehavior retire lors d'une edition) : on le purge systematiquement,
         // la branche sunBehavior ci-dessous le rearmera si necessaire.
         this._deleteInstantJob(schedule._id);
+        this._methodes.set(schedule._id, methode);
 
         try {
             const sunBehavior = schedule.cron.sunBehavior;
@@ -48,7 +55,7 @@ export class ScheduleService {
                 this._createSunDrivenSchedule(schedule, sunBehavior, methode);
             } else {
                 const now = new Date();
-                const job = new CronJob(schedule.cron.pattern || schedule.cron.date || new Date(now.getTime() + 10000), methode);
+                const job = this._createCronJob(schedule.cron.pattern || schedule.cron.date || new Date(now.getTime() + 10000), methode);
                 this.schedulerRegistry.addCronJob(schedule._id, job);
                 if (schedule.isPaused) {
                     job.stop();
@@ -71,7 +78,7 @@ export class ScheduleService {
     // toujours par un CronJob one-shot distinct, cf. _armSunInstant.
     private _createSunDrivenSchedule(schedule: ScheduleModel, sunBehavior: SunBehavior, methode: () => void): void {
         const driverPattern = this._normalizeSunDriverPattern(schedule.cron.pattern);
-        const driverJob = new CronJob(driverPattern, () => this._armSunInstant(schedule, sunBehavior, methode));
+        const driverJob = this._createCronJob(driverPattern, () => this._armSunInstant(schedule, sunBehavior, methode));
         this.schedulerRegistry.addCronJob(schedule._id, driverJob);
         if (schedule.isPaused) {
             driverJob.stop();
@@ -97,15 +104,35 @@ export class ScheduleService {
     // rattrape pas : le prochain tick valide du driver reessaiera pour le jour suivant.
     private _armSunInstant(schedule: ScheduleModel, sunBehavior: SunBehavior, methode: () => void): void {
         const coordinates = ResolveCoordinates(this.globalSettingsService.localCoordinates);
-        const executionDate = ComputeSunEventDate(sunBehavior, new Date(), coordinates);
+        const executionDate = ComputeSunEventDate(sunBehavior, new Date(), coordinates, this.globalSettingsService.timeZone);
         if (executionDate.getTime() <= Date.now()) {
             this.logger.warn({ scheduleId: schedule._id, executionDate }, 'sun event already passed for today, waiting for next occurrence');
             return;
         }
         this._deleteInstantJob(schedule._id);
-        const instantJob = new CronJob(executionDate, methode);
+        const instantJob = this._createCronJob(executionDate, methode);
         this.schedulerRegistry.addCronJob(this._instantJobId(schedule._id), instantJob);
         instantJob.start();
+    }
+
+    // patterns interpretes dans le fuseau de la box (sans effet sur un one-shot a date absolue)
+    private _createCronJob(cronTime: string | Date, onTick: () => void): CronJob {
+        return CronJob.from({ cronTime, onTick, timeZone: this.globalSettingsService.timeZone });
+    }
+
+    // localCoordinates ou timeZone ont change : recree les jobs a pattern (fuseau) et les drivers
+    // solaires (createSchedule purge et rearme l'instant du jour). Les one-shot a date absolue sont
+    // des instants UTC, independants du fuseau et de la position : laisses tels quels (les triggers
+    // solaires deja planifies sont recalcules par TriggerService).
+    public rescheduleAll(): void {
+        for (const schedule of this.configurationService.schedules) {
+            const isLocationDependent = !!schedule.cron?.pattern || !!schedule.cron?.sunBehavior;
+            if (!isLocationDependent || !this.schedulerRegistry.doesExist('cron', schedule._id)) { continue; }
+            const methode = this._methodes.get(schedule._id)
+                ?? this._buildExecutionMethode(schedule, this.preapreScheduleProcess(schedule, ProcessMode.SCHEDULE));
+            this.createSchedule(schedule, methode);
+        }
+        this.logger.log({ timeZone: this.globalSettingsService.timeZone }, 'schedules rescheduled after location change');
     }
 
     private _instantJobId(scheduleId: string): string {
@@ -137,7 +164,7 @@ export class ScheduleService {
         if (this.schedulerRegistry.doesExist('cron', schedule._id)) {
             this._applyPausedState(saved, isPaused);
         } else if (!isPaused) {
-            await this.initSchedule(saved, false, ProcessMode.SCHEDULED, ProcessType.INIT);
+            await this.initSchedule(saved, false, ProcessMode.SCHEDULE);
         }
         return saved;
     }
@@ -158,7 +185,7 @@ export class ScheduleService {
         }
         job.start();
         if (saved.cron.sunBehavior) {
-            const process = this.preapreScheduleProcess(saved, ProcessMode.SCHEDULED, ProcessType.INIT);
+            const process = this.preapreScheduleProcess(saved, ProcessMode.SCHEDULE);
             this._armSunInstant(saved, saved.cron.sunBehavior, this._buildExecutionMethode(saved, process));
         }
     }
@@ -176,11 +203,12 @@ export class ScheduleService {
 
         }
         this._deleteInstantJob(scheduleId);
+        this._methodes.delete(scheduleId);
         this.logger.warn({ scheduleId }, 'cron job deleted');
     }
 
     public async initSchedule(schedule: ScheduleModel, isDeleted: boolean = false,
-        mode: ProcessMode = ProcessMode.SCHEDULED, type: ProcessType = ProcessType.INIT, overridedMethode?: () => void): Promise<ScheduleModel> {
+        mode: ProcessMode = ProcessMode.SCHEDULE, overridedMethode?: () => void): Promise<ScheduleModel> {
 
         if (isDeleted) {
             const index = this.configurationService.schedules.findIndex(x => x._id === schedule._id);
@@ -195,7 +223,7 @@ export class ScheduleService {
         if (!this.configurationService.schedules.some(x => x._id === schedule._id)) {
             this.configurationService.schedules.push(schedule);
         }
-        const process = this.preapreScheduleProcess(schedule, mode, type);
+        const process = this.preapreScheduleProcess(schedule, mode);
         const methode = overridedMethode ?? this._buildExecutionMethode(schedule, process);
         return this.createSchedule(schedule, methode);
     }
@@ -222,16 +250,23 @@ export class ScheduleService {
         return this.configurationService.schedules.find(x => x._id === schedule._id) ?? schedule;
     }
 
-    public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULED,
-        type: ProcessType = ProcessType.FORCE, action: ExecutableAction = ExecutableAction.ON): ProcessModel {
+    // un declenchement planifie (schedule ou trigger) passe toujours par l'arbitrage des rangs ;
+    // origin (journal) : le schedule par defaut, le trigger pour un declenchement de trigger
+    public preapreScheduleProcess(schedule: ScheduleModel, mode: ProcessMode = ProcessMode.SCHEDULE,
+        action: ExecutableAction = ExecutableAction.ON, origin?: EventOriginModel): ProcessModel {
         const process = new ProcessModel();
+        process.origin = origin ?? ScheduleService._scheduleOrigin(schedule);
         process.cycle = this.configurationService.structure.cycles.find(x => x._id === schedule.cycleId);
         process.action = action;
-        process.type = ProcessType.INIT;
+        process.policy = StartPolicy.ARBITRATE;
         process.mode = mode;
         process.schedule = schedule;
-        process.duration = schedule.duration;
+        process.duration = ScheduleModel.effectiveDuration(schedule);
         return process;
+    }
+
+    private static _scheduleOrigin(schedule: ScheduleModel): EventOriginModel {
+        return { source: EventSource.SCHEDULE, refId: schedule._id, refName: schedule.name };
     }
 
     public async restartAllSchedules(): Promise<void> {
@@ -244,10 +279,11 @@ export class ScheduleService {
                 const process = new ProcessModel();
                 process.cycle = cycleModel;
                 process.action = ExecutableAction.ON;
-                process.type = ProcessType.INIT;
-                process.mode = ProcessMode.SCHEDULED;
-                process.duration = schedule.duration;
+                process.policy = StartPolicy.ARBITRATE;
+                process.mode = ProcessMode.SCHEDULE;
+                process.duration = ScheduleModel.effectiveDuration(schedule);
                 process.schedule = schedule;
+                process.origin = ScheduleService._scheduleOrigin(schedule);
                 this.createSchedule(schedule, this._buildExecutionMethode(schedule, process));
             }
         }
@@ -262,10 +298,14 @@ export class ScheduleService {
             try {
                 value.nextDate().toJSDate();
             } catch (e) {
-                // nextDate() ne doit throw que pour un one-shot deja passe (cf. lib "cron") ; si un
-                // job recurrent finit ici pour une autre raison, c'etait jusqu'ici totalement
-                // silencieux (job + schedule persiste supprimes sans aucune trace de la cause reelle).
-                this.logger.error({ error: e, scheduleId: key }, 'clearAllSchedules: unexpected error computing nextDate, deleting job');
+                // nextDate() throw normalement pour un one-shot deja passe (cf. lib "cron") : cas nominal
+                // (ex: schedule d'un trigger), pas une erreur. Seul un job recurrent qui finit ici est anormal.
+                const isPastOneShot = typeof value.cronTime?.source !== 'string';
+                if (isPastOneShot) {
+                    this.logger.debug({ scheduleId: key }, 'clearAllSchedules: one-shot job already executed, deleting job');
+                } else {
+                    this.logger.error({ error: (e as Error)?.message ?? e, scheduleId: key }, 'clearAllSchedules: unexpected error computing nextDate, deleting job');
+                }
                 await this.deleteCronJob(key);
             }
         }

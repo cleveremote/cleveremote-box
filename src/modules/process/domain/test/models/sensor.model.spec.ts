@@ -36,27 +36,23 @@ describe('SensorModel', () => {
         sensor.name = 'com sensor';
         sensor.config = new ComSensorConfigModel();
         sensor.config.cronPattern = '*/30 * * * * *';
-        sensor.config.comRequestId = 'request-1';
+        sensor.config.commandId = 'command-1';
 
         expect(sensor.type).toEqual(SensorType.COM);
         expect(sensor.config.cronPattern).toEqual('*/30 * * * * *');
-        expect(sensor.config.comRequestId).toEqual('request-1');
+        expect(sensor.config.commandId).toEqual('command-1');
     });
 
-    it('should hold child-specific config fields (code, scale, unit) when parentId is set', () => {
+    it('should hold the child field when parentId is set', () => {
         const sensor = new SensorModel();
         sensor.type = SensorType.COM;
         sensor._id = '3';
         sensor.name = 'child sensor';
         sensor.parentId = 'parent-1';
         sensor.config = new ComSensorConfigModel();
-        sensor.config.code = 12;
-        sensor.config.scale = 0.1;
-        sensor.config.unit = 'V';
+        sensor.config.field = 'pv';
 
         expect(sensor.parentId).toEqual('parent-1');
-        expect(sensor.config.code).toEqual(12);
-        expect(sensor.config.scale).toEqual(0.1);
-        expect(sensor.config.unit).toEqual('V');
+        expect(sensor.config.field).toEqual('pv');
     });
 });

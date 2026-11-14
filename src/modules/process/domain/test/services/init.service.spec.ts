@@ -1,4 +1,5 @@
 import { Connection } from 'mongoose';
+import { Subject } from 'rxjs';
 import { InitService } from '@process/domain/services/init.service';
 import { StructureService } from '@process/domain/services/configuration.service';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
@@ -6,15 +7,13 @@ import { ProcessService } from '@process/domain/services/execution.service';
 import { ScheduleService } from '@process/domain/services/schedule.service';
 import { TriggerService } from '@process/domain/services/trigger.service';
 import { SensorService } from '@process/domain/services/sensor.service';
-import { BleService } from '@process/domain/services/ble.service';
-import { ModbusService } from '@process/domain/services/modbus.service';
+import { ModbusBusService } from '@register-map/domain/services/modbus-bus.service';
 import { CtrlActuatorStrategy } from '@process/domain/services/actuator-strategies/ctrl-actuator.strategy';
 import { ActuatorService } from '@process/domain/services/actuator.service';
 import { DeviceService } from '@process/domain/services/device.service';
 import { GlobalSettingsService } from '@process/domain/services/global-settings.service';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ActuatorMongooseRepository } from '@process/infrastructure/repositories/actuator-mongoose.repository';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
 import { ActuatorModel } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '@process/domain/interfaces/actuator-module.interface';
 import { StartMongoMemory, StopMongoMemory } from './mongo-memory.spec-mock';
@@ -33,7 +32,11 @@ jest.mock('onoff', () => {
         public readSync = jest.fn(() => 0);
     }
     return { Gpio: MockGpio };
-});
+}, { virtual: true });
+// `onoff` n'est charge que sur Raspberry Pi (cf. gpio.util) : on force la detection pour exercer
+// le chemin GPIO (mocke) quelle que soit la machine qui execute les tests.
+jest.mock('@process/domain/utils/platform.util', () => ({ isRaspberryPi: () => true }));
+
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Gpio } = require('onoff');
@@ -48,13 +51,11 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let actuatorRepository: ActuatorRepository;
     let configurationService: { getStructure: jest.Mock; structure: { actuators: ActuatorModel[] } };
     let authenticationService: { initAuthentication: jest.Mock };
-    let processService: { resetAllModules: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
+    let processService: { resetAllModules: jest.Mock; startIdleProportionalCycles: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
     let scheduleService: { restartAllSchedules: jest.Mock };
     let triggerService: { initilize: jest.Mock };
     let sensorService: { initialize: jest.Mock; restartAllScheduledSensors: jest.Mock };
-    let bleService: { initialize: jest.Mock };
-    let modBusService: { execute: jest.Mock; testExecuteTask: jest.Mock; monitorDigitalOutputs: jest.Mock };
-    let comRequestRepository: { migrateMissingType: jest.Mock };
+    let modbusBus: { runExclusive: jest.Mock };
     let ctrlActuatorStrategy: { testSetDeviceAddress: jest.Mock; testStepOutput: jest.Mock };
     let actuatorService: { execute: jest.Mock };
     let deviceService: { initAll: jest.Mock; watchMasterDevicesForNewSlaves: jest.Mock };
@@ -68,7 +69,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
             actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
             connection, CreateLoggerMock() as never
-        ));
+        ), { removeModuleConfigsByModuleId: jest.fn(), findCycleIdsByModuleId: jest.fn().mockResolvedValue([]) } as never, {} as never);
     }, 120000);
 
     afterAll(async () => {
@@ -83,6 +84,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         authenticationService = { initAuthentication: jest.fn().mockResolvedValue(true) };
         processService = {
             resetAllModules: jest.fn().mockResolvedValue(undefined),
+            startIdleProportionalCycles: jest.fn().mockResolvedValue(undefined),
             applyInverterConfig: jest.fn().mockResolvedValue(undefined),
             executeModuleCycleForDigitalOutput: jest.fn().mockResolvedValue(undefined)
         };
@@ -92,13 +94,7 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             initialize: jest.fn().mockResolvedValue(undefined),
             restartAllScheduledSensors: jest.fn().mockResolvedValue(undefined)
         };
-        bleService = { initialize: jest.fn().mockResolvedValue(undefined) };
-        modBusService = {
-            execute: jest.fn().mockResolvedValue(undefined),
-            testExecuteTask: jest.fn().mockResolvedValue(undefined),
-            monitorDigitalOutputs: jest.fn().mockResolvedValue(undefined)
-        };
-        comRequestRepository = { migrateMissingType: jest.fn().mockResolvedValue(undefined) };
+        modbusBus = { runExclusive: jest.fn((run: () => Promise<unknown>) => run()) };
         ctrlActuatorStrategy = {
             testSetDeviceAddress: jest.fn().mockResolvedValue(undefined),
             testStepOutput: jest.fn().mockResolvedValue(undefined)
@@ -118,16 +114,25 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             scheduleService as unknown as ScheduleService,
             triggerService as unknown as TriggerService,
             sensorService as unknown as SensorService,
-            bleService as unknown as BleService,
-            modBusService as unknown as ModbusService,
+            modbusBus as unknown as ModbusBusService,
             actuatorRepository,
-            comRequestRepository as unknown as ComRequestRepository,
             ctrlActuatorStrategy as unknown as CtrlActuatorStrategy,
             actuatorService as unknown as ActuatorService,
             deviceService as unknown as DeviceService,
             globalSettingsService as unknown as GlobalSettingsService,
+            {} as never,
+            { discover: jest.fn().mockResolvedValue([]) } as never,
             logger as never,
-            processService as unknown as ProcessService
+            processService as unknown as ProcessService,
+            { tests: jest.fn().mockResolvedValue(undefined) } as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            { seed: jest.fn().mockResolvedValue(undefined) } as never,
+            { watch: jest.fn() } as never,
+            { migrateFromCtrlActuators: jest.fn().mockResolvedValue(undefined) } as never,
+            { watch: jest.fn(), outputChanges$: new Subject() } as never,
+            { load: jest.fn().mockResolvedValue(undefined) } as never
         );
     });
 
@@ -137,7 +142,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
 
             expect(globalSettingsService.get).toHaveBeenCalledTimes(1);
             expect(authenticationService.initAuthentication).toHaveBeenCalledTimes(1);
-            expect(bleService.initialize).toHaveBeenCalledTimes(1);
             expect(triggerService.initilize).toHaveBeenCalledTimes(1);
             expect(sensorService.initialize).toHaveBeenCalledTimes(1);
             expect(processService.resetAllModules).toHaveBeenCalledTimes(1);
@@ -186,16 +190,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
                 'initialization failed'
             );
         });
-
-        // le monitoring monitorDigitalOutputs est actuellement desactive dans initialize()
-        // (cf. le .then(...) commente) : un rejet de ce mock ne peut donc plus se propager.
-        it('should not call monitorDigitalOutputs while the monitoring step stays disabled', async () => {
-            modBusService.monitorDigitalOutputs.mockRejectedValue(undefined);
-
-            await expect(service.initialize()).resolves.toBeUndefined();
-
-            expect(modBusService.monitorDigitalOutputs).not.toHaveBeenCalled();
-        });
     });
 
     describe('seedDefaultValves (via initialize)', () => {
@@ -215,24 +209,6 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
             const config = (service as any)._createDefaultValveConfig(3);
 
             expect(config).toEqual(expect.objectContaining({ valveType: 'PROPORTIONAL', channel: 3 }));
-        });
-    });
-
-    // le mapping digital-output -> module cycle est actuellement desactive dans initialize()
-    // (cf. le .then(...) commente sur monitorDigitalOutputs) : ces tests verrouillent ce
-    // comportement intentionnel plutot que de tester un mapping qui ne se declenche plus au demarrage.
-    describe('digital-output -> module cycle mapping (via initialize)', () => {
-        it('should not map any digital output change while the monitoring step stays disabled', async () => {
-            const change = { channel: 3, previous: false, current: true };
-            modBusService.monitorDigitalOutputs.mockImplementation((_deviceId, _interval, _length, onChange) => {
-                onChange([change]);
-                return Promise.resolve(undefined);
-            });
-
-            await service.initialize();
-            await new Promise((resolve) => setImmediate(resolve));
-
-            expect(processService.executeModuleCycleForDigitalOutput).not.toHaveBeenCalled();
         });
     });
 

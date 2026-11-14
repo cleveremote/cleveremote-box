@@ -6,11 +6,12 @@ import { ActuatorType } from '@process/domain/interfaces/actuator-module.interfa
 
 @Schema({ _id: false })
 export class ComActuatorActionConfig {
+    // DeviceCommand (register map)
     @Prop({ required: true })
-    public comRequestId: string;
+    public commandId: string;
 
-    @Prop({ required: true })
-    public portNumber: number;
+    @Prop()
+    public channel?: number;
 }
 export const ComActuatorActionConfigSchema = SchemaFactory.createForClass(ComActuatorActionConfig);
 
@@ -57,15 +58,6 @@ export class CtrlActuatorConfig {
     @Prop({ type: [ComActuatorActionConfigSchema], default: [] })
     public actions?: ComActuatorActionConfig[];
 
-    @Prop()
-    public flowMeterId?: string;
-
-    @Prop({ default: 100 })
-    public maxFlowRate?: number;
-
-    @Prop({ default: 5 })
-    public kP?: number;
-
     @Prop({ default: 0 })
     public minOpening?: number;
 
@@ -75,20 +67,17 @@ export class CtrlActuatorConfig {
     @Prop({ default: 0 })
     public openingPercent?: number;
 
-    @Prop({ default: 1 })
-    public tolerance?: number;
-
-    @Prop({ default: 20 })
-    public maxIterations?: number;
-
-    @Prop({ default: 500 })
-    public iterationDelayMs?: number;
-
     @Prop({ default: 7000 })
     public fullStrokeMs?: number;
 
     @Prop({ default: 'PROPORTIONAL' })
     public valveType?: string;
+
+    @Prop()
+    public minOutputValue?: number;
+
+    @Prop()
+    public maxOutputValue?: number;
 }
 export const CtrlActuatorConfigSchema = SchemaFactory.createForClass(CtrlActuatorConfig);
 

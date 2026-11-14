@@ -4,7 +4,7 @@ import { NotImplementedError } from '../errors/not-implemented.error';
 import { IActuatorModule, ActuatorType } from '../interfaces/actuator-module.interface';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
-import { ACTUATOR_STRATEGIES, ActuatorStrategy } from './actuator-strategies/actuator-strategy.interface';
+import { ACTUATOR_STRATEGIES, ActuatorSetOptions, ActuatorStrategy } from './actuator-strategies/actuator-strategy.interface';
 
 @Injectable()
 export class ActuatorService {
@@ -25,14 +25,15 @@ export class ActuatorService {
         return new Map(actuators.map((actuator) => [actuator._id, actuator]));
     }
 
-    public async execute(actuator: IActuatorModule, action: number): Promise<void> {
-        return this._resolveStrategy(actuator.type).execute(actuator as ActuatorModel, action);
+    public async execute(actuator: IActuatorModule, action: number, options?: ActuatorSetOptions): Promise<void> {
+        return this._resolveStrategy(actuator.type).set(actuator as ActuatorModel, action, options);
     }
 
+    // commandes reset propres à chaque actionneur (à défaut, set 0 : cf. stratégies)
     public async reset(actuators: IActuatorModule[]): Promise<void> {
         for (const actuator of actuators) {
             try {
-                await this.execute(actuator, 0);
+                await this._resolveStrategy(actuator.type).reset(actuator as ActuatorModel);
             } catch (error) {
                 this.logger.warn({ error, name: actuator.name }, 'reset actuator error');
             }

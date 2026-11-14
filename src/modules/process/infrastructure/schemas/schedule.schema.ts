@@ -31,6 +31,10 @@ export class Schedule {
     @Prop()
     public duration?: number;
 
+    // pas de default : un document existant sans ce champ est resolu dans le mapper (retro-compat)
+    @Prop({ type: Boolean })
+    public isInheritedDuration?: boolean;
+
     @Prop({ type: Date, default: null })
     public deletedAt: Date | null;
 }

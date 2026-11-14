@@ -1,62 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { NotImplementedError } from '../../errors/not-implemented.error';
 import { SensorType } from '../../interfaces/sensor.interface';
 import { ComSensorConfigModel, SensorModel } from '../../models/sensor.model';
 import { ReadResult, SensorStrategy } from './sensor-strategy.interface';
-import { ModbusService } from '../modbus.service';
-import { ComRequestRepository } from '@process/infrastructure/repositories/com-request.repository';
-import { ComRequestConfigModel, ComRequestModel, ModbusExecuteResult, ModbusFunctionName } from '@process/domain/models/com-request.model';
+import { DeviceCommandService } from '../device-command.service';
 
 @Injectable()
 export class ComSensorStrategy implements SensorStrategy {
     public readonly type = SensorType.COM;
 
-    public constructor(
-        private modbusService: ModbusService,
-        private comRequestRepository: ComRequestRepository
-    ) { }
+    public constructor(private deviceCommandService: DeviceCommandService) { }
 
+    // valeurs déjà décodées par la register map (formules, unités), limitées à config.field sinon aux champs de la commande ;
+    // name = champ, pour les sensors enfants (config.field)
     public async read(sensor: SensorModel): Promise<ReadResult> {
-        const { comRequestId } = sensor.config as ComSensorConfigModel;
-        const comRequestData: ComRequestModel = await this.comRequestRepository.get(comRequestId) as ComRequestModel;
-
-        const config = sensor.config as ComSensorConfigModel
-        if (config.code !== undefined && config.code !== null && !sensor.parentId) { // it is a parent sensor
-            const overrideParams: ComRequestConfigModel = { address: comRequestData.config.address + config.code, params: { length: 1 } }
-            const res = await this.modbusService.execute(comRequestData, overrideParams) as ModbusExecuteResult | undefined;
-            const unit = comRequestData.config.params?.unit ?? '';
-            return this._extractValues(res).map((value) => ({
-                value,
-                isFormated: true,
-                unit,
-                name: comRequestData.name
-            }));
+        const { commandId, deviceId, field } = sensor.config as ComSensorConfigModel;
+        if (!commandId || !deviceId) {
+            throw new Error(`ComSensorStrategy: sensor ${sensor._id} sans commandId ou deviceId`);
         }
-        const res = await this.modbusService.execute(comRequestData) as ModbusExecuteResult | undefined;
-        const unit = comRequestData.config.params?.unit ?? '';
-        return this._extractValues(res).map((value) => ({
-            value,
-            isFormated: false,
-            unit,
-            name: comRequestData.name
-        }));
-    }
-
-    private _extractValues(res: ModbusExecuteResult): number[] {
-        if (!res) {
-            throw new NotImplementedError('ComSensorStrategy: modbus execution returned no result');
-        }
-        switch (res.function) {
-            case ModbusFunctionName.READ_HOLDING_REGISTERS:
-            case ModbusFunctionName.READ_INPUT_REGISTERS:
-                // config.type défini côté ModbusService : la valeur décodée + formule (cf.
-                // ModbusService._evaluateReading) prime sur les registres bruts.
-                return res.result.evaluated ? [res.result.evaluated.value] : res.result.data;
-            case ModbusFunctionName.READ_COILS:
-            case ModbusFunctionName.READ_DISCRETE_INPUTS:
-                return res.result.data.map(Number);
-            default:
-                throw new NotImplementedError(`ComSensorStrategy: unsupported modbus function "${res.function}"`);
-        }
+        const values = await this.deviceCommandService.read(commandId, deviceId, field ? [field] : undefined);
+        return values.map(({ name, value, unit }) => ({ value, isFormated: true, unit: unit ?? '', name }));
     }
 }

@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
 import { TriggerService } from '@process/domain/services/trigger.service';
@@ -18,7 +19,7 @@ import { Sequence, SequenceSchema } from '@process/infrastructure/schemas/sequen
 import { Schedule, ScheduleSchema } from '@process/infrastructure/schemas/schedule.schema';
 import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.schema';
 import { TriggerModel } from '@process/domain/models/trigger.model';
-import { ConditionModel } from '@process/domain/models/condition.model';
+import { ConditionModel, ConditionOperator } from '@process/domain/models/condition.model';
 import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ElementType } from '@process/domain/models/event.model';
 import { SunState, TimeDirection } from '@process/domain/interfaces/schedule.interface';
@@ -28,10 +29,9 @@ import { CreateTriggerModel } from './trigger.spec-mock';
 
 function CreateConditionModel(overrides: Partial<ConditionModel> = {}): ConditionModel {
     const condition = new ConditionModel();
-    condition.name = 'condition';
     condition.elementId = 'sensor-1';
     condition.elementType = ElementType.SENSOR;
-    condition.operator = '>';
+    condition.operator = ConditionOperator.GT;
     condition.value = 5;
     return Object.assign(condition, overrides);
 }
@@ -65,10 +65,10 @@ describe('TriggerService', () => {
     let scheduleService: ScheduleService;
     let configurationService: { triggers: TriggerModel[]; schedules: unknown[]; structure: { cycles: unknown[] } };
     let valueRepository: { getDeviceValue: jest.Mock };
-    let eventRepository: { save: jest.Mock };
+    let eventRepository: { save: jest.Mock; getLast: jest.Mock };
     let sensorRepository: Record<string, never>;
     let processService: { execute: jest.Mock };
-    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined };
+    let globalSettingsService: { localCoordinates: { latitude: number; longitude: number } | undefined; timeZone: string; onLocationChanged: Subject<void> };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: TriggerService;
 
@@ -112,12 +112,12 @@ describe('TriggerService', () => {
 
         configurationService = { triggers: [], schedules: [], structure: { cycles: [] } };
         valueRepository = { getDeviceValue: jest.fn() };
-        eventRepository = { save: jest.fn().mockResolvedValue(undefined) };
+        eventRepository = { save: jest.fn().mockResolvedValue(undefined), getLast: jest.fn().mockResolvedValue(null) };
         sensorRepository = {};
         logger = CreateLoggerMock();
 
         processService = { execute: jest.fn().mockResolvedValue(undefined) };
-        globalSettingsService = { localCoordinates: undefined };
+        globalSettingsService = { localCoordinates: undefined, timeZone: 'UTC', onLocationChanged: new Subject<void>() };
         scheduleService = new ScheduleService(
             schedulerRegistry,
             configurationService as unknown as StructureService,
@@ -227,7 +227,7 @@ describe('TriggerService', () => {
 
     describe('reactive condition check (via onElementValueChanged)', () => {
         it('should schedule execution when a matching condition is verified', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
@@ -240,7 +240,7 @@ describe('TriggerService', () => {
         });
 
         it('should execute the planified process and re-open the trigger for checking once the cron tick fires', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 10 }));
@@ -257,7 +257,7 @@ describe('TriggerService', () => {
         });
 
         it('should not schedule execution when the condition is not verified', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(CreateSensorValue({ value: 2 }));
@@ -282,7 +282,7 @@ describe('TriggerService', () => {
         it('should skip a paused trigger', async () => {
             const trigger = CreateTriggerModel({
                 isPaused: true,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -298,7 +298,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(),
                 delay: 1000 * 60 * 60,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -313,7 +313,7 @@ describe('TriggerService', () => {
         it('should queue a check instead of re-running it when one is already in progress for that trigger', async () => {
             const trigger = CreateTriggerModel({
                 isCheckInProgress: true,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -326,7 +326,7 @@ describe('TriggerService', () => {
         });
 
         it('should re-run a queued check with its own queued data once the in-progress check completes', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             let resolveFirstCheck: (v: SensorValueModel) => void;
@@ -355,37 +355,17 @@ describe('TriggerService', () => {
             expect(trigger.isCheckInProgress).toBe(false);
         });
 
-        it('should tag a persisted event as a CYCLE element when the incoming value has no numeric `value` field', async () => {
-            // isPaused=true coupe le pipeline juste apres la sauvegarde de la valeur entrante :
-            // suffisant pour isoler cette assertion de l'evaluation mathjs des conditions,
-            // hors-perimetre de ce test.
+        it('should not persist a CYCLE/SEQUENCE value (already journaled by ProcessService)', async () => {
+            // isPaused=true coupe le pipeline juste apres la sauvegarde de la valeur entrante
             const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'process-1' })] });
             configurationService.triggers = [trigger];
             service.initilize();
 
             service.onElementValueChanged.next({ id: 'process-1', type: 'CYCLE', status: 'IN_PROCCESS' } as never);
-            await Flush();
-
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    elementId: 'process-1',
-                    elementType: 'CYCLE',
-                    additionalData: expect.objectContaining({ type: 'sensor', value: 'IN_PROCCESS' })
-                })
-            );
-        });
-
-        it('should tag a persisted event as a SEQUENCE element when the process value type is SEQUENCE', async () => {
-            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'seq-1' })] });
-            configurationService.triggers = [trigger];
-            service.initilize();
-
             service.onElementValueChanged.next({ id: 'seq-1', type: 'SEQUENCE', status: 'IN_PROCCESS' } as never);
             await Flush();
 
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({ elementId: 'seq-1', elementType: 'SEQUENCE' })
-            );
+            expect(eventRepository.save).not.toHaveBeenCalled();
         });
 
         it('should tolerate an undefined sensor value when saving the sensor event', async () => {
@@ -401,24 +381,11 @@ describe('TriggerService', () => {
             );
         });
 
-        it('should tolerate an undefined status when saving a CYCLE/SEQUENCE event', async () => {
-            const trigger = CreateTriggerModel({ isPaused: true, conditions: [CreateConditionModel({ elementId: 'process-1' })] });
-            configurationService.triggers = [trigger];
-            service.initilize();
-
-            service.onElementValueChanged.next({ id: 'process-1', type: 'CYCLE', status: undefined } as never);
-            await Flush();
-
-            expect(eventRepository.save).toHaveBeenCalledWith(
-                expect.objectContaining({ elementType: 'CYCLE', additionalData: { type: 'sensor', value: undefined } })
-            );
-        });
-
         it('should allow re-checking once the configured delay has elapsed since lastTriggeredAt', async () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(Date.now() - 2000),
                 delay: 1000,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -434,7 +401,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(Date.now() - 100000),
                 delay: 0,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -450,7 +417,7 @@ describe('TriggerService', () => {
             const trigger = CreateTriggerModel({
                 lastTriggeredAt: new Date(),
                 delay: undefined,
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -463,7 +430,7 @@ describe('TriggerService', () => {
         });
 
         it('should not verify the condition when the device value resolves to undefined', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue(undefined);
@@ -476,7 +443,7 @@ describe('TriggerService', () => {
 
         it('should read `.status` instead of `.value` for a non-SENSOR condition element type', async () => {
             const trigger = CreateTriggerModel({
-                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 1 })]
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: ConditionOperator.EQ, value: 'ON' })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -488,9 +455,9 @@ describe('TriggerService', () => {
             expect(schedulerRegistry.getCronJobs().size).toEqual(1);
         });
 
-        it('should compare a STOPPED status as 0 for a non-SENSOR condition element type', async () => {
+        it('should compare a STOPPED status as OFF for a non-SENSOR condition element type', async () => {
             const trigger = CreateTriggerModel({
-                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: '==', value: 0 })]
+                conditions: [CreateConditionModel({ elementId: 'cycle-x', elementType: ElementType.CYCLE, operator: ConditionOperator.EQ, value: 'OFF' })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -503,7 +470,7 @@ describe('TriggerService', () => {
         });
 
         it('should not verify the condition when the extracted value itself is undefined', async () => {
-            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })] });
+            const trigger = CreateTriggerModel({ conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })] });
             configurationService.triggers = [trigger];
             service.initilize();
             valueRepository.getDeviceValue.mockResolvedValue({ value: undefined } as never);
@@ -517,7 +484,7 @@ describe('TriggerService', () => {
         it('should compute the execution time from sunrise when sunBehavior.sunState is SUNRISE', async () => {
             const trigger = CreateTriggerModel({
                 trigger: { sunBehavior: { sunState: SunState.SUNRISE, timeDirection: TimeDirection.AFTER, time: 0 } },
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();
@@ -532,7 +499,7 @@ describe('TriggerService', () => {
         it('should compute the execution time from sunset when sunBehavior.sunState is not SUNRISE', async () => {
             const trigger = CreateTriggerModel({
                 trigger: { sunBehavior: { sunState: SunState.SUNSET, timeDirection: TimeDirection.AFTER, time: 0 } },
-                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: '>', value: 5 })]
+                conditions: [CreateConditionModel({ elementId: 'sensor-1', operator: ConditionOperator.GT, value: 5 })]
             });
             configurationService.triggers = [trigger];
             service.initilize();

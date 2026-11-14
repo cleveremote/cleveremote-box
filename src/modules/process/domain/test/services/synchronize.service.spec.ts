@@ -27,7 +27,7 @@ import { Trigger, TriggerSchema } from '@process/infrastructure/schemas/trigger.
 import { Device, DeviceSchema } from '@process/infrastructure/schemas/device.schema';
 import {
     SynchronizeActuatorModel,
-    SynchronizeComRequestModel,
+    SynchronizeDeviceCommandModel,
     SynchronizeCycleModel,
     SynchronizeDeviceModel,
     SynchronizeScheduleModel,
@@ -35,9 +35,9 @@ import {
     SynchronizeSequenceModel,
     SynchronizeTriggerModel
 } from '@process/domain/models/synchronize.model';
-import { ActuatorModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { ActuatorModel, ComActuatorConfigModel, CtrlActuatorConfigModel } from '@process/domain/models/actuator.model';
+import { CycleType } from '@process/domain/interfaces/executable.interface';
 import { DeviceModel, DeviceType, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
-import { ComRequestModel, ModbusFunctionName } from '@process/domain/models/com-request.model';
 import { ScheduleModel } from '@process/domain/models/schedule.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
 import { StructureModel } from '@process/domain/models/structure.model';
@@ -116,7 +116,8 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
     let triggerService: { initTrigger: jest.Mock };
     let sensorService: { initScheduledSensor: jest.Mock };
     let sensorRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
-    let modbusTaskRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
+    let deviceCommandRepository: ReturnType<typeof CreateReplaceAllRepositoryMock>;
+    let deviceCommandService: { withParams: jest.Mock };
     let logger: ReturnType<typeof CreateLoggerMock>;
     let service: SynchronizeService;
 
@@ -133,10 +134,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         const sequenceMongooseRepository = new SequenceMongooseRepository(sequenceModel as never);
         const scheduleMongooseRepository = new ScheduleMongooseRepository(scheduleModel as never);
         const triggerMongooseRepository = new TriggerMongooseRepository(triggerModel as never);
-        actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
-            actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
-            connection, CreateLoggerMock() as never
-        ));
         sequenceRepository = new SequenceRepository(sequenceMongooseRepository);
         scheduleRepository = new ScheduleRepository(scheduleMongooseRepository);
         triggerRepository = new TriggerRepository(triggerMongooseRepository);
@@ -146,7 +143,18 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             scheduleRepository,
             triggerRepository
         );
-        deviceRepository = new DeviceRepository(new DeviceMongooseRepository(deviceModel as never));
+        actuatorRepository = new ActuatorRepository(new ActuatorMongooseRepository(
+            actuatorModel as never, actuatorRpiModel as never, actuatorComModel as never, actuatorCtrlModel as never,
+            connection, CreateLoggerMock() as never
+        ), sequenceMongooseRepository, cycleRepository);
+        deviceRepository = new DeviceRepository(
+            new DeviceMongooseRepository(deviceModel as never),
+            actuatorRepository,
+            { deleteForDevice: jest.fn() } as never,
+            { deleteForDevice: jest.fn() } as never,
+            { resetSlaveAddress: jest.fn() } as never,
+            CreateLoggerMock() as never
+        );
 
         const testingModule = await Test.createTestingModule({ imports: [ScheduleModule.forRoot()] }).compile();
         schedulerRegistry = testingModule.get(SchedulerRegistry);
@@ -177,7 +185,8 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         triggerService = { initTrigger: jest.fn((trigger: unknown) => Promise.resolve(trigger)) };
         sensorService = { initScheduledSensor: jest.fn((sensor: unknown) => Promise.resolve(sensor)) };
         sensorRepository = CreateReplaceAllRepositoryMock();
-        modbusTaskRepository = CreateReplaceAllRepositoryMock();
+        deviceCommandRepository = CreateReplaceAllRepositoryMock();
+        deviceCommandService = { withParams: jest.fn((commands: unknown) => Promise.resolve(commands)) };
         logger = CreateLoggerMock();
 
         const processService = { execute: jest.fn().mockResolvedValue(undefined) };
@@ -194,7 +203,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
 
         service = new SynchronizeService(
             deviceRepository,
-            modbusTaskRepository as never,
             cycleRepository,
             sequenceRepository,
             triggerRepository,
@@ -205,7 +213,16 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             scheduleService,
             triggerService as unknown as TriggerService,
             sensorService as unknown as SensorService,
-            logger as never
+            logger as never,
+            deviceCommandRepository as never,
+            deviceCommandService as never,
+            {} as never,
+            { stopFollow: jest.fn() } as never,
+            { get: jest.fn(), save: jest.fn(), delete: jest.fn() } as never,
+            {
+                applyControlValues: jest.fn().mockResolvedValue(undefined),
+                resetControlLoopExecution: jest.fn().mockResolvedValue(undefined)
+            } as never
         );
     });
 
@@ -365,7 +382,7 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
         });
     });
 
-    describe('synchronizeDeviceList / synchronizeModbusTaskList', () => {
+    describe('synchronizeDeviceList / synchronizeDeviceCommandList', () => {
         it('should create a list of devices', async () => {
             const result = await service.synchronizeDeviceList([CreateMasterDeviceModel()]);
 
@@ -384,34 +401,65 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(await deviceRepository.get(created._id)).toBeNull();
         });
 
-        it('should delegate modbus task list save to the repository', async () => {
-            const modbusTask = new ComRequestModel();
-            modbusTask.deviceId = 'connection-1';
-            modbusTask.name = 'task';
-            modbusTask.config = { function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 0, params: {} };
+        it('should stop the cron jobs of the sensors soft deleted by a device deletion cascade', async () => {
+            const created = await deviceRepository.save(CreateMasterDeviceModel());
+            sensorRepository.get
+                .mockResolvedValueOnce([{ _id: 'sensor-ai1' }, { _id: 'sensor-ai2' }, { _id: 'sensor-other' }])
+                .mockResolvedValueOnce([{ _id: 'sensor-other' }]);
 
-            await service.synchronizeModbusTaskList([modbusTask]);
+            const deleteModel = Object.assign(new SynchronizeDeviceModel(), { _id: created._id, delete: true });
+            await service.synchronizeDeviceList([deleteModel]);
 
-            expect(modbusTaskRepository.saveMany).toHaveBeenCalledWith([modbusTask]);
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith({ _id: 'sensor-ai1' }, true);
+            expect(sensorService.initScheduledSensor).toHaveBeenCalledWith({ _id: 'sensor-ai2' }, true);
+            expect(sensorService.initScheduledSensor).not.toHaveBeenCalledWith({ _id: 'sensor-other' }, true);
         });
 
-        it('should delegate a delete-flagged modbus task to the repository via synchronizeModbusTaskList', async () => {
-            const modbusTask = new SynchronizeComRequestModel();
-            modbusTask._id = 'task-1';
-            modbusTask.delete = true;
+        it('should cascade a master deletion to its slaves, their actuators and their MODULE cycles only', async () => {
+            const master = Object.assign(new SynchronizeDeviceModel(), CreateMasterDeviceModel());
+            master.devices = [Object.assign(new SynchronizeDeviceModel(), CreateSlaveDeviceModel())];
+            const devices = await service.synchronizeDeviceList([master]);
+            const savedMaster = devices.find(device => device.type === DeviceType.MASTER);
+            const [slave] = await deviceRepository.getSlavesByMasterId(savedMaster._id);
+            const actuatorModel = CreateActuatorComModel();
+            (actuatorModel.config as ComActuatorConfigModel).deviceId = slave._id;
+            const actuator = await actuatorRepository.save(actuatorModel);
+            const withActuator = (type: CycleType): SynchronizeCycleModel => {
+                const sequence = new SynchronizeSequenceModel();
+                sequence.name = 'sequence';
+                sequence.securityConfig.maxDuration = 1000;
+                sequence.moduleConfigs = [{ moduleId: actuator._id, configTiming: { waitBeforeExec: 0, waitAfterExec: 0, waitBeforeExecOff: 0, waitAfterExecOff: 0 } }];
+                const cycleModel = Object.assign(new SynchronizeCycleModel(), CreateCycleModel({ name: type, type }));
+                cycleModel.sequences = [sequence];
+                return cycleModel;
+            };
+            const moduleCycle = await service.synchronizeCycle(withActuator(CycleType.MODULE));
+            const regularCycle = await service.synchronizeCycle(withActuator(CycleType.CYCLE));
 
-            await service.synchronizeModbusTaskList([modbusTask]);
+            const deleteModel = Object.assign(new SynchronizeDeviceModel(), { _id: savedMaster._id, delete: true });
+            await service.synchronizeDeviceList([deleteModel]);
 
-            expect(modbusTaskRepository.saveMany).toHaveBeenCalledWith([modbusTask]);
+            expect(await deviceRepository.get(slave._id)).toBeNull();
+            expect(await actuatorRepository.get(actuator._id)).toBeNull();
+            expect(await cycleRepository.get(moduleCycle._id)).toBeNull();
+            expect(await sequenceRepository.findByCycleId(moduleCycle._id)).toHaveLength(0);
+            expect(await cycleRepository.get(regularCycle._id)).not.toBeNull();
         });
 
-        it('should cascade nested slave devices, forcing masterDeviceId, and their nested comrequests', async () => {
-            const comRequest = new SynchronizeComRequestModel();
-            comRequest.name = 'temperature';
-            comRequest.config = { function: [ModbusFunctionName.READ_HOLDING_REGISTERS], address: 0, params: {} };
+        it('should save the device command list with its params and refresh the structure', async () => {
+            const command = Object.assign(new SynchronizeDeviceCommandModel(), { modelId: 'model-1', name: 'pv', blockId: 'pv', operationId: 'read' });
+            const params = { isConfirmRequired: false, isPersistable: false };
+            deviceCommandService.withParams.mockImplementationOnce((commands: SynchronizeDeviceCommandModel[]) => Promise.resolve(commands.map((c) => ({ ...c, params }))));
 
+            await service.synchronizeDeviceCommandList([command]);
+
+            expect(deviceCommandService.withParams).toHaveBeenCalledWith([command]);
+            expect(deviceCommandRepository.saveMany).toHaveBeenCalledWith([{ ...command, params }]);
+            expect(configurationService.getStructure).toHaveBeenCalled();
+        });
+
+        it('should cascade nested slave devices, forcing masterDeviceId', async () => {
             const slave = Object.assign(new SynchronizeDeviceModel(), CreateSlaveDeviceModel());
-            slave.comrequests = [comRequest];
 
             const master = Object.assign(new SynchronizeDeviceModel(), CreateMasterDeviceModel());
             master.devices = [slave];
@@ -422,7 +470,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
 
             expect(savedSlaves).toHaveLength(1);
             expect((savedSlaves[0].config as SlaveConfigModel).masterDeviceId).toBe(savedMaster._id);
-            expect(modbusTaskRepository.replaceForDevice).toHaveBeenCalledWith(savedSlaves[0]._id, [comRequest]);
         });
 
         it('should soft-delete an existing slave device absent from an explicit nested devices array', async () => {
@@ -446,12 +493,11 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             );
 
             const masterSync = Object.assign(new SynchronizeDeviceModel(), master);
-            // devices/comrequests volontairement non renseignes
+            // devices volontairement non renseigne
 
             await service.synchronizeDeviceList([masterSync]);
 
             expect(await deviceRepository.get(savedSlave._id)).not.toBeNull();
-            expect(modbusTaskRepository.replaceForDevice).not.toHaveBeenCalled();
         });
     });
 
@@ -558,7 +604,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
             structureModel.cycles = [cycleModel];
             structureModel.sensors = [{ _id: 'sensor-1', type: SensorType.FORCAST } as SensorModel];
-            structureModel.modbusTasks = [];
             const expectedSensors = structureModel.sensors;
 
             const result = await service.synchronize(structureModel);
@@ -568,18 +613,17 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             expect(configurationService.structure).toBe(result);
         });
 
-        it('should fall back to an empty array when sensors/modbusTasks are left undefined on the incoming structure', async () => {
+        it('should fall back to an empty array when sensors are left undefined, and reload the device commands', async () => {
             const structureModel = new StructureModel();
             const cycleModel = new SynchronizeCycleModel();
             Object.assign(cycleModel, CreateCycleModel({ name: 'Zone A' }));
             structureModel.cycles = [cycleModel];
             structureModel.sensors = undefined;
-            structureModel.modbusTasks = undefined;
 
             await service.synchronize(structureModel);
 
             expect(sensorRepository.replaceAll).toHaveBeenCalledWith([]);
-            expect(modbusTaskRepository.replaceAll).toHaveBeenCalledWith([]);
+            expect(deviceCommandRepository.get).toHaveBeenCalled();
         });
 
         it('should soft delete only the cycle flagged delete:true, leaving the other one untouched', async () => {
@@ -600,7 +644,6 @@ describe('SynchronizeService (integration mongodb-memory-server for cycle/valve/
             const structureModel = new StructureModel();
             structureModel.cycles = [keptAgain, removeAgain];
             structureModel.sensors = [];
-            structureModel.modbusTasks = [];
 
             await service.synchronize(structureModel);
 

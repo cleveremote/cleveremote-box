@@ -1,3 +1,4 @@
+import { SequenceCommand } from '@process/domain/interfaces/executable.interface';
 import { ProcessModel } from '@process/domain/models/process.model';
 import { ProcessService } from '@process/domain/services/execution.service';
 
@@ -14,5 +15,9 @@ export class ProcessExecuteUC {
 
     public execute(process: ProcessModel): Promise<void> {
         return this.executionService.execute(process);
+    }
+
+    public executeSequence(sequenceId: string, command: SequenceCommand): Promise<void> {
+        return this.executionService.executeSequenceCommand(sequenceId, command);
     }
 }

@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "numbers": "Adresses et valeurs en décimal ; le champ 'hex' n'est qu'affichage (valeur réellement émise sur le bus)",
+    "requestBuild": "operation -> ComRequestConfigModel : { function: [operation.function], address, params: { length, value } }",
+    "address": "scope 'channel' : block.address.start + index voie (0-based) × (address.stride ?? 1) ; scope 'range' et 'fixed' : block.address.start",
+    "length": "operation.params.length si présent, sinon 1",
+    "value": "input 'none' : input.fixedValue ; 'enum' : enum[].value ; 'number' : saisie brute ; 'enum[]' : tableau d'enum[].value ; 'composite' : input.encode",
+    "channelLabel": "libellé voie = hardware.channels.labelStart + index",
+    "inputUnit": "Unité de chaque voie selon son type de plage (registre 0x1000 + voie, lu via scopeFrom inputRanges.read), appliquée par unitFrom",
+    "versions": "Version (A) : 0-5 V / 1-5 V, défaut 0-20 mA ; version (B) : 0-10 V / 2-10 V, défaut 0-10 V (code 0). Code brut 0-4095 : V = code × 3300 / 4095 / ratio ampli (A : 32.4/49.9, B : 10/32.4), I = V / résistance (A : 249 Ω, B : 499 Ω)",
+    "jumpers": "Mode courant : cavalier de la voie fermé ; mode tension : cavalier ouvert (réglage matériel, non pilotable)",
+    "danger": "true : l'opération peut couper la communication avec le module (confirmation requise)"
+  },
+  "_id": "0b1954ed-d9ae-4b28-8414-867a7ef136ac",
+  "name": "WAVESHARE MODBUS RTU ANALOG INPUT 8CH",
+  "description": "Waveshare Modbus RTU Analog Input 8CH - 8 entrées analogiques 12 bits (tension / courant)",
+  "kind": "ANALOG_INPUT_8CH",
+  "hardware": {
+    "manufacturer": "Waveshare",
+    "model": "Modbus RTU Analog Input 8CH",
+    "documentation": "https://www.waveshare.com/wiki/Modbus_RTU_Analog_Input_8CH",
+    "channels": {
+      "inputs": 8,
+      "labelStart": 1
+    },
+    "serial": {
+      "baudRate": 9600,
+      "parity": "none",
+      "dataBits": 8,
+      "stopBits": 1
+    },
+    "unitId": {
+      "default": 1,
+      "min": 1,
+      "max": 255,
+      "broadcast": 0
+    },
+    "discoveryRegister": 16384,
+    "exceptionCodes": "modbusException",
+    "functionCodes": [3, 4, 6, 16]
+  },
+  "enums": {
+    "inputRange": [
+      { "value": 0, "hex": "0x0000", "label": "0-5 V", "description": "0-5000 mV (version B : 0-10 V, 0-10000 mV)" },
+      { "value": 1, "hex": "0x0001", "label": "1-5 V", "description": "1000-5000 mV (version B : 2-10 V, 2000-10000 mV)" },
+      { "value": 2, "hex": "0x0002", "label": "0-20 mA", "description": "0-20000 µA" },
+      { "value": 3, "hex": "0x0003", "label": "4-20 mA", "description": "4000-20000 µA" },
+      { "value": 4, "hex": "0x0004", "label": "Code brut", "description": "0-4095, à convertir selon la version (cf. conventions.versions)" }
+    ],
+    "inputRangeUnit": [
+      { "value": 0, "label": "mV" },
+      { "value": 1, "label": "mV" },
+      { "value": 2, "label": "µA" },
+      { "value": 3, "label": "µA" },
+      { "value": 4, "label": "code" }
+    ],
+    "baudRate": [
+      { "value": 0, "hex": "0x00", "label": "4800" },
+      { "value": 1, "hex": "0x01", "label": "9600" },
+      { "value": 2, "hex": "0x02", "label": "19200" },
+      { "value": 3, "hex": "0x03", "label": "38400" },
+      { "value": 4, "hex": "0x04", "label": "57600" },
+      { "value": 5, "hex": "0x05", "label": "115200" },
+      { "value": 6, "hex": "0x06", "label": "128000" },
+      { "value": 7, "hex": "0x07", "label": "256000" }
+    ],
+    "parity": [
+      { "value": 0, "hex": "0x00", "label": "None" },
+      { "value": 1, "hex": "0x01", "label": "Even", "description": "Doc Waveshare incohérente even/odd entre deux tableaux : à vérifier sur la carte" },
+      { "value": 2, "hex": "0x02", "label": "Odd", "description": "Doc Waveshare incohérente even/odd entre deux tableaux : à vérifier sur la carte" }
+    ],
+    "modbusException": [
+      { "value": 1, "hex": "0x01", "label": "Illegal function" },
+      { "value": 2, "hex": "0x02", "label": "Illegal data address" },
+      { "value": 3, "hex": "0x03", "label": "Illegal data value" },
+      { "value": 4, "hex": "0x04", "label": "Server failure" },
+      { "value": 5, "hex": "0x05", "label": "Acknowledge" },
+      { "value": 6, "hex": "0x06", "label": "Device busy" }
+    ]
+  },
+  "registerMap": [
+    {
+      "id": "inputs",
+      "label": "Entrées analogiques 1~8",
+      "description": "Valeur non signée ; unité selon le type de plage de la voie (mV, µA ou code brut)",
+      "area": "inputRegister",
+      "access": "r",
+      "address": { "start": 0, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les 8 entrées",
+          "function": "readInputRegisters",
+          "fc": 4,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "scopeFrom": ["inputRanges.read"],
+          "result": {
+            "type": "fields",
+            "fields": [
+              { "name": "ch1", "label": "Entrée 1", "offset": 0, "type": "uint16", "unitFrom": { "field": "rangeCh1", "enum": "inputRangeUnit" } },
+              { "name": "ch2", "label": "Entrée 2", "offset": 1, "type": "uint16", "unitFrom": { "field": "rangeCh2", "enum": "inputRangeUnit" } },
+              { "name": "ch3", "label": "Entrée 3", "offset": 2, "type": "uint16", "unitFrom": { "field": "rangeCh3", "enum": "inputRangeUnit" } },
+              { "name": "ch4", "label": "Entrée 4", "offset": 3, "type": "uint16", "unitFrom": { "field": "rangeCh4", "enum": "inputRangeUnit" } },
+              { "name": "ch5", "label": "Entrée 5", "offset": 4, "type": "uint16", "unitFrom": { "field": "rangeCh5", "enum": "inputRangeUnit" } },
+              { "name": "ch6", "label": "Entrée 6", "offset": 5, "type": "uint16", "unitFrom": { "field": "rangeCh6", "enum": "inputRangeUnit" } },
+              { "name": "ch7", "label": "Entrée 7", "offset": 6, "type": "uint16", "unitFrom": { "field": "rangeCh7", "enum": "inputRangeUnit" } },
+              { "name": "ch8", "label": "Entrée 8", "offset": 7, "type": "uint16", "unitFrom": { "field": "rangeCh8", "enum": "inputRangeUnit" } }
+            ]
+          }
+        },
+        {
+          "id": "readChannel",
+          "label": "Lire une entrée",
+          "function": "readInputRegisters",
+          "fc": 4,
+          "scope": "channel",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": { "type": "number" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire 8 entrées", "frame": "01 04 00 00 00 08 F1 CC" },
+        { "label": "Réponse 8 entrées à 0", "frame": "01 04 10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 55 2C" },
+        { "label": "Lire entrée 1", "frame": "01 04 00 00 00 01 31 CA" },
+        { "label": "Lire entrée 2", "frame": "01 04 00 01 00 01 60 0A" },
+        { "label": "Lire entrées 3-5", "frame": "01 04 00 02 00 03 11 CB" }
+      ]
+    },
+    {
+      "id": "inputRanges",
+      "label": "Type de plage des entrées 1~8",
+      "area": "holdingRegister",
+      "access": "rw",
+      "address": { "start": 4096, "count": 8 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire les types de plage",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "none" },
+          "result": {
+            "type": "fields",
+            "fields": [
+              { "name": "rangeCh1", "label": "Plage entrée 1", "offset": 0, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh2", "label": "Plage entrée 2", "offset": 1, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh3", "label": "Plage entrée 3", "offset": 2, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh4", "label": "Plage entrée 4", "offset": 3, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh5", "label": "Plage entrée 5", "offset": 4, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh6", "label": "Plage entrée 6", "offset": 5, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh7", "label": "Plage entrée 7", "offset": 6, "type": "uint16", "enum": "inputRange" },
+              { "name": "rangeCh8", "label": "Plage entrée 8", "offset": 7, "type": "uint16", "enum": "inputRange" }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Définir la plage d'une entrée",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "channel",
+          "input": { "type": "enum", "enum": "inputRange" },
+          "result": { "type": "echo" }
+        },
+        {
+          "id": "setAll",
+          "label": "Définir les plages des 8 entrées",
+          "function": "writeRegisters",
+          "fc": 16,
+          "scope": "range",
+          "params": { "length": 8 },
+          "input": { "type": "enum[]", "enum": "inputRange", "length": 8 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire plages CH1-8", "frame": "01 03 10 00 00 08 40 CC" },
+        { "label": "Réponse plages CH1-8 = 0-20 mA", "frame": "01 03 10 00 02 00 02 00 02 00 02 00 02 00 02 00 02 00 02 09 C3" },
+        { "label": "Lire plage CH1", "frame": "01 03 10 00 00 01 80 CA" },
+        { "label": "CH1 0-20 mA", "frame": "01 06 10 00 00 02 0C CB" },
+        { "label": "CH1 4-20 mA", "frame": "01 06 10 00 00 03 CD 0B" },
+        { "label": "CH2 4-20 mA", "frame": "01 06 10 01 00 03 9C CB" },
+        { "label": "CH1-8 4-20 mA", "frame": "01 10 10 00 00 08 10 00 03 00 03 00 03 00 03 00 03 00 03 00 03 00 03 91 2B" },
+        { "label": "Réponse CH1-8", "frame": "01 10 10 00 00 08 C5 0F" },
+        { "label": "CH3-5 1-5 V", "frame": "01 10 10 02 00 03 06 00 01 00 01 00 01 BE 4A" }
+      ]
+    },
+    {
+      "id": "uart",
+      "label": "Paramètres UART",
+      "description": "Octet haut : parité, octet bas : code vitesse",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 8192, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire vitesse et parité",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": {
+            "type": "fields",
+            "fields": [
+              { "name": "parity", "label": "Parité (code)", "offset": 0, "type": "uint16", "formula": "floor(raw / 256)", "description": "Octet haut, cf. enum parity" },
+              { "name": "baudRate", "label": "Vitesse (code)", "offset": 0, "type": "uint16", "formula": "mod(raw, 256)", "description": "Octet bas, cf. enum baudRate" }
+            ]
+          }
+        },
+        {
+          "id": "set",
+          "label": "Définir vitesse et parité",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": {
+            "type": "composite",
+            "encode": "(parity << 8) | baudRate",
+            "fields": [
+              { "name": "parity", "enum": "parity", "byte": "high", "default": 0 },
+              { "name": "baudRate", "enum": "baudRate", "byte": "low", "default": 1 }
+            ]
+          },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "4800 N (broadcast)", "frame": "00 06 20 00 00 00 83 DB" },
+        { "label": "9600 N (broadcast)", "frame": "00 06 20 00 00 01 42 1B" },
+        { "label": "115200 N (broadcast)", "frame": "00 06 20 00 00 05 43 D8" }
+      ]
+    },
+    {
+      "id": "deviceAddress",
+      "label": "Adresse du module",
+      "area": "holdingRegister",
+      "access": "rw",
+      "danger": true,
+      "address": { "start": 16384, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire l'adresse",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1 },
+          "input": { "type": "none" },
+          "result": { "type": "number" }
+        },
+        {
+          "id": "set",
+          "label": "Changer l'adresse",
+          "function": "writeRegister",
+          "fc": 6,
+          "scope": "fixed",
+          "input": { "type": "number", "min": 1, "max": 255, "default": 1 },
+          "result": { "type": "echo" }
+        }
+      ],
+      "examples": [
+        { "label": "Lire l'adresse (broadcast)", "frame": "00 03 40 00 00 01 90 1B" },
+        { "label": "Réponse adresse = 1", "frame": "01 03 02 00 01 79 84" },
+        { "label": "Réponse adresse = 2", "frame": "02 03 02 00 02 7D 85" },
+        { "label": "Adresse -> 1", "frame": "00 06 40 00 00 01 5C 1B" },
+        { "label": "Adresse -> 2", "frame": "00 06 40 00 00 02 1C 1A" },
+        { "label": "Adresse -> 3", "frame": "00 06 40 00 00 03 DD DA" }
+      ]
+    },
+    {
+      "id": "version",
+      "label": "Version logicielle",
+      "area": "holdingRegister",
+      "access": "r",
+      "address": { "start": 32768, "count": 1 },
+      "operations": [
+        {
+          "id": "read",
+          "label": "Lire la version",
+          "function": "readHoldingRegisters",
+          "fc": 3,
+          "scope": "fixed",
+          "params": { "length": 1, "formula": "raw / 100" },
+          "input": { "type": "none" },
+          "result": { "type": "version", "prefix": "V", "decimals": 2 }
+        }
+      ],
+      "examples": [
+        { "label": "Lire version (broadcast)", "frame": "00 03 80 00 00 01 AC 1B" },
+        { "label": "Réponse V1.00", "frame": "01 03 02 00 64 B9 AF" }
+      ]
+    }
+  ],
+  "device": {
+    "name": "8/AI ANALOG INPUTS",
+    "description": "8/AI ANALOG INPUTS",
+    "portConfig": {
+      "portNumStart": 0,
+      "portCount": 8
+    }
+  }
+}

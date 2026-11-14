@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Subject } from 'rxjs';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { NotImplementedError } from '@process/domain/errors/not-implemented.error';
 import { SensorService } from '@process/domain/services/sensor.service';
@@ -26,7 +27,7 @@ function CreateComSensorModel(overrides: Partial<SensorModel> = {}): SensorModel
     sensor.type = SensorType.COM;
     sensor.config = new ComSensorConfigModel();
     sensor.config.cronPattern = '*/30 * * * * *';
-    sensor.config.comRequestId = 'request-1';
+    sensor.config.commandId = 'command-1';
     return Object.assign(sensor, overrides);
 }
 
@@ -40,6 +41,7 @@ describe('SensorService', () => {
     let triggerService: { onElementValueChanged: { next: jest.Mock } };
     let wsService: { sendMessage: jest.Mock };
     let sensorRepository: { get: jest.Mock; getChildren: jest.Mock };
+    let deviceRepository: { get: jest.Mock; isPendingDeletion: jest.Mock };
     let forcastStrategy: SensorStrategy;
     let comStrategy: SensorStrategy;
     let logger: ReturnType<typeof CreateLoggerMock>;
@@ -62,6 +64,7 @@ describe('SensorService', () => {
         triggerService = { onElementValueChanged: { next: jest.fn() } };
         wsService = { sendMessage: jest.fn().mockResolvedValue('ok') };
         sensorRepository = { get: jest.fn().mockResolvedValue([]), getChildren: jest.fn().mockResolvedValue([]) };
+        deviceRepository = { get: jest.fn().mockResolvedValue(null), isPendingDeletion: jest.fn().mockReturnValue(false) };
         forcastStrategy = { type: SensorType.FORCAST, read: jest.fn().mockResolvedValue([{ value: 25, isFormated: true, unit: '°C', name: 'sensor' }]) };
         comStrategy = { type: SensorType.COM, read: jest.fn().mockRejectedValue(new NotImplementedError('not implemented')) };
         logger = CreateLoggerMock();
@@ -73,7 +76,10 @@ describe('SensorService', () => {
             wsService as never,
             sensorRepository as never,
             [forcastStrategy, comStrategy],
-            logger as never
+            { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
+            deviceRepository as never,
+            logger as never,
+            { sensorsCreated$: new Subject<unknown>() } as never
         );
     });
 
@@ -273,6 +279,32 @@ describe('SensorService', () => {
             schedulerRegistry.getCronJob('cron-sensor-5').stop();
         });
 
+        it('should not read a COM sensor whose device is marked disconnected', async () => {
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-offline' });
+            (sensor.config as ComSensorConfigModel).deviceId = 'slave-1';
+            deviceRepository.get.mockResolvedValue({ _id: 'slave-1', connectivity: { connected: false } });
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-offline').fireOnTick();
+
+            expect(deviceRepository.get).toHaveBeenCalledWith('slave-1');
+            expect(comStrategy.read).not.toHaveBeenCalled();
+            expect(triggerService.onElementValueChanged.next).not.toHaveBeenCalled();
+            schedulerRegistry.getCronJob('cron-sensor-offline').stop();
+        });
+
+        it('should not read a COM sensor whose device is being deleted', async () => {
+            const sensor = CreateComSensorModel({ _id: 'cron-sensor-deleting' });
+            (sensor.config as ComSensorConfigModel).deviceId = 'slave-2';
+            deviceRepository.isPendingDeletion.mockReturnValue(true);
+            await service.initScheduledSensor(sensor);
+
+            await schedulerRegistry.getCronJob('cron-sensor-deleting').fireOnTick();
+
+            expect(comStrategy.read).not.toHaveBeenCalled();
+            schedulerRegistry.getCronJob('cron-sensor-deleting').stop();
+        });
+
         it('should log and swallow a NotImplementedError when the sensor type has no registered strategy', async () => {
             const serviceWithoutComStrategy = new SensorService(
                 schedulerRegistry,
@@ -281,7 +313,10 @@ describe('SensorService', () => {
                 wsService as never,
                 sensorRepository as never,
                 [forcastStrategy],
-                logger as never
+                { timeZone: 'UTC', onLocationChanged: new Subject<void>() } as never,
+                deviceRepository as never,
+                logger as never,
+                { sensorsCreated$: new Subject<unknown>() } as never
             );
             const sensor = CreateComSensorModel({ _id: 'unsupported-type-sensor' });
             await serviceWithoutComStrategy.initScheduledSensor(sensor);
@@ -292,38 +327,23 @@ describe('SensorService', () => {
             schedulerRegistry.getCronJob('unsupported-type-sensor').stop();
         });
 
-        it('should compute a scaled value from the parent read results for each child sensor', async () => {
+        it('should emit for each child sensor the parent read result matching its field', async () => {
             const sensor = CreateComSensorModel({ _id: 'cron-sensor-6' });
             const child = CreateComSensorModel({ _id: 'child-a', parentId: 'cron-sensor-6' });
-            (child.config as ComSensorConfigModel).code = 0;
-            (child.config as ComSensorConfigModel).scale = 2;
+            (child.config as ComSensorConfigModel).field = 'temperature';
             sensorRepository.getChildren.mockResolvedValue([child]);
-            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
+            comStrategy.read = jest.fn().mockResolvedValue([
+                { value: 55, isFormated: true, unit: '%RH', name: 'humidity' },
+                { value: 21.5, isFormated: true, unit: '°C', name: 'temperature' }
+            ] as never);
             await service.initScheduledSensor(sensor);
 
             await schedulerRegistry.getCronJob('cron-sensor-6').fireOnTick();
 
             expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'child-a', value: 20 })
+                expect.objectContaining({ id: 'child-a', value: 21.5 })
             );
             schedulerRegistry.getCronJob('cron-sensor-6').stop();
-        });
-
-        it('should default the child scale to 1 when not configured', async () => {
-            const sensor = CreateComSensorModel({ _id: 'cron-sensor-7' });
-            const child = CreateComSensorModel({ _id: 'child-b', parentId: 'cron-sensor-7' });
-            (child.config as ComSensorConfigModel).code = 0;
-            (child.config as ComSensorConfigModel).scale = undefined;
-            sensorRepository.getChildren.mockResolvedValue([child]);
-            comStrategy.read = jest.fn().mockResolvedValue([{ value: 10, isFormated: false, unit: '', name: 'req' }] as never);
-            await service.initScheduledSensor(sensor);
-
-            await schedulerRegistry.getCronJob('cron-sensor-7').fireOnTick();
-
-            expect(triggerService.onElementValueChanged.next).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'child-b', value: 10 })
-            );
-            schedulerRegistry.getCronJob('cron-sensor-7').stop();
         });
     });
 
