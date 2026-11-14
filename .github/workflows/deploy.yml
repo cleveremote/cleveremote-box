@@ -93,58 +93,58 @@ jobs:
   # ─────────────────────────────────────────────
   # JOB 2 — Build & push image Docker vers ECR
   # ─────────────────────────────────────────────
-  deploy:
-    name: Build & Push ${{ needs.resolve.outputs.tag }} → ECR (${{ needs.resolve.outputs.env }})
-    needs: resolve
-    if: needs.resolve.outputs.skip != 'true'
-    runs-on: ubuntu-24.04-arm   # runner GitHub hébergé ARM64 : build natif pour la box (Raspberry Pi)
-    environment: ${{ needs.resolve.outputs.gh_env }}
-    concurrency:
-      group: deploy-${{ needs.resolve.outputs.env }}
-      cancel-in-progress: false
+  # deploy:
+  #   name: Build & Push ${{ needs.resolve.outputs.tag }} → ECR (${{ needs.resolve.outputs.env }})
+  #   needs: resolve
+  #   if: needs.resolve.outputs.skip != 'true'
+  #   runs-on: ubuntu-24.04-arm   # runner GitHub hébergé ARM64 : build natif pour la box (Raspberry Pi)
+  #   environment: ${{ needs.resolve.outputs.gh_env }}
+  #   concurrency:
+  #     group: deploy-${{ needs.resolve.outputs.env }}
+  #     cancel-in-progress: false
 
-    steps:
-      - name: Checkout tag
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.resolve.outputs.tag }}
+  #   steps:
+  #     - name: Checkout tag
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ needs.resolve.outputs.tag }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
-          echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+  #     - name: Login to Amazon ECR
+  #       id: login-ecr
+  #       run: |
+  #         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+  #         ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+  #         echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
 
-          TEMP_DOCKER_CONFIG=$(mktemp -d)
-          echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-            DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
-          echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
+  #         TEMP_DOCKER_CONFIG=$(mktemp -d)
+  #         echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
+  #         aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+  #           DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  #         echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
 
-      - name: Build, tag & push image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ needs.resolve.outputs.tag }}
-          ENV_TAG: ${{ needs.resolve.outputs.env }}
-        run: |
-          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+  #     - name: Build, tag & push image
+  #       env:
+  #         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+  #         IMAGE_TAG: ${{ needs.resolve.outputs.tag }}
+  #         ENV_TAG: ${{ needs.resolve.outputs.env }}
+  #       run: |
+  #         IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
 
-          # :vX.Y.Z[-dev.N|-rc.N] (version) + :dev|:test|:prd (repère d'environnement)
-          docker build -t "$IMAGE_BASE:$IMAGE_TAG" -t "$IMAGE_BASE:$ENV_TAG" .
-          docker push "$IMAGE_BASE:$IMAGE_TAG"
-          docker push "$IMAGE_BASE:$ENV_TAG"
+  #         # :vX.Y.Z[-dev.N|-rc.N] (version) + :dev|:test|:prd (repère d'environnement)
+  #         docker build -t "$IMAGE_BASE:$IMAGE_TAG" -t "$IMAGE_BASE:$ENV_TAG" .
+  #         docker push "$IMAGE_BASE:$IMAGE_TAG"
+  #         docker push "$IMAGE_BASE:$ENV_TAG"
 
-      - name: Cleanup Docker config
-        if: always()
-        run: rm -rf "$DOCKER_CONFIG"
+  #     - name: Cleanup Docker config
+  #       if: always()
+  #       run: rm -rf "$DOCKER_CONFIG"
 
   # ─────────────────────────────────────────────
   # JOB 3 — Build SEA (exécutable autonome) & upload S3
