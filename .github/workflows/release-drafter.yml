@@ -1,5 +1,9 @@
 name: Release Drafter
 
+# À chaque PR mergée sur main : calcule la prochaine version et met à jour la release DRAFT.
+# Aucun tag n'est créé ici : c'est la publication de la draft (bouton « Publish release »)
+# qui crée le tag vX.Y.Z et déclenche le déploiement prd (workflow Deploy).
+
 on:
   pull_request:
     types:
@@ -14,14 +18,13 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────
-  # JOB 1 — Bump version & create Git tag
+  # JOB 1 — Calcul de la prochaine version
   # ─────────────────────────────────────────────
   bump-version:
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.new_version.outputs.new_version }}
-      env_tags: ${{ steps.get_env.outputs.env_tags }}
 
     steps:
       - name: Checkout repository
@@ -29,16 +32,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get latest tag
+      - name: Get latest stable tag
         id: get_tag
+        # Ignore les tags -dev.N / -rc.N
         run: |
-          TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+          TAG=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          TAG=${TAG:-v0.0.0}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Latest stable tag: $TAG"
 
       - name: Determine bump type from source branch
         id: get_bump
+        env:
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
         run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           echo "Merged branch: $BRANCH_NAME"
 
           if [[ "$BRANCH_NAME" == fix/* ]]; then
@@ -51,14 +58,25 @@ jobs:
             echo "type=patch" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get current draft version
+        id: get_draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRAFT=$(gh release list --repo ${{ github.repository }} --limit 50 \
+            --json tagName,isDraft --jq '[.[] | select(.isDraft) | .tagName][0] // ""')
+          echo "draft=$DRAFT" >> $GITHUB_OUTPUT
+          echo "Current draft: ${DRAFT:-none}"
+
       - name: Calculate new version
         id: new_version
+        env:
+          OLD_VERSION: ${{ steps.get_tag.outputs.tag }}
+          TYPE: ${{ steps.get_bump.outputs.type }}
+          DRAFT: ${{ steps.get_draft.outputs.draft }}
         run: |
-          OLD_VERSION="${{ steps.get_tag.outputs.tag }}"
           VERSION=${OLD_VERSION#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-          TYPE="${{ steps.get_bump.outputs.type }}"
 
           case "$TYPE" in
             patch) PATCH=$((PATCH + 1)) ;;
@@ -67,29 +85,18 @@ jobs:
           esac
 
           NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+
+          # Plusieurs PR mergées avant publication : on garde le plus gros bump.
+          # Ex. draft v1.19.0 (feature) puis merge d'un fix → reste v1.19.0.
+          if [[ "$DRAFT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            NEW_VERSION=$(printf '%s\n%s\n' "$NEW_VERSION" "$DRAFT" | sort -V | tail -1)
+          fi
+
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Computed new version: $NEW_VERSION"
 
-      - name: Extract env labels from PR
-        id: get_env
-        # Reads all labels on the PR and keeps only env:* ones.
-        # Outputs a JSON array e.g. ["dev","prd","pprd"]
-        env:
-          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-        run: |
-          ENV_TAGS=$(echo "$LABELS" | jq -c '[.[] | select(startswith("env:")) | ltrimstr("env:")]')
-          echo "env_tags=$ENV_TAGS" >> $GITHUB_OUTPUT
-          echo "Detected env tags: $ENV_TAGS"
-
-      - name: Create and push Git tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ steps.new_version.outputs.new_version }}
-          git push origin ${{ steps.new_version.outputs.new_version }}
-
   # ─────────────────────────────────────────────
-  # JOB 2 — Create DRAFT release note
+  # JOB 2 — Création / mise à jour de la DRAFT
   # ─────────────────────────────────────────────
   create-draft-release:
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
@@ -101,9 +108,10 @@ jobs:
         with:
           config-name: release-drafter-config.yml
           disable-autolabeler: true
+          commitish: main
           name: ${{ needs.bump-version.outputs.new_version }}
           tag: ${{ needs.bump-version.outputs.new_version }}
           version: ${{ needs.bump-version.outputs.new_version }}
-          publish: false   # ← reste en DRAFT, éditable manuellement
+          publish: false   # ← reste en DRAFT ; « Publish release » = déploiement prd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

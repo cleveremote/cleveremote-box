@@ -4,9 +4,14 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Version tag utilisée comme chemin S3'
+        description: 'Version tag utilisée comme chemin S3 (et ref à builder)'
         required: true
         type: string
+      environment:
+        description: 'Environnement GitHub (porte les secrets AWS_S3_*)'
+        required: false
+        type: string
+        default: production
       aws-region:
         description: 'Région AWS'
         required: false
@@ -17,27 +22,30 @@ on:
         required: false
         type: string
         default: clv-box
+    # Secrets repo ou environnement (résolus dans le job via `environment`).
     secrets:
       AWS_S3_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_S3_SECRET_ACCESS_KEY:
-        required: true
+        required: false
 
 jobs:
   deploy-sea-s3:
     name: Build SEA & Upload to S3 (${{ matrix.name }})
     runs-on: ${{ matrix.runs-on }}
-    environment: production
+    environment: ${{ inputs.environment }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: raspberry-pi
+          - name: linux-arm64
             runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.version }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

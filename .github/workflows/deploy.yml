@@ -1,0 +1,162 @@
+name: Deploy
+
+# Le tag décide de l'environnement :
+#   vX.Y.Z-dev.N  → dev   (image ECR :dev)
+#   vX.Y.Z-rc.N   → test  (image ECR :test)
+#   vX.Y.Z        → prd   (image ECR :prd)
+#
+# dev / test : déclenchés par le push du tag.
+# prd        : déclenché par la publication de la release draft (qui crée le tag).
+# Manuel     : Run workflow avec un tag existant (redéploiement / rollback).
+#
+# Résultats :
+#   ECR : cleveremote/clv-box:<tag> + cleveremote/clv-box:<env>
+#   S3  : s3://cleveremote-bundles-.../clv-box/<tag>/linux-arm64.tar.gz
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-dev.*'
+      - 'v*.*.*-rc.*'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag à déployer (ex. v0.20.0-dev.2, v0.20.0-rc.1, v0.19.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-3
+  ECR_REPOSITORY: cleveremote/clv-box
+  CONTAINER_NAME: clv-box
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 — Tag → environnement cible
+  # ─────────────────────────────────────────────
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.resolve.outputs.skip }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      env: ${{ steps.resolve.outputs.env }}
+      gh_env: ${{ steps.resolve.outputs.gh_env }}
+
+    steps:
+      - name: Resolve tag & environment
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          case "$EVENT_NAME" in
+            workflow_dispatch) TAG="$INPUT_TAG" ;;
+            release)           TAG="$RELEASE_TAG" ;;
+            *)                 TAG="$REF_NAME" ;;
+          esac
+
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
+            ENV=dev;  GH_ENV=dev
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            ENV=test; GH_ENV=test
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            ENV=prd;  GH_ENV=production
+          else
+            echo "::error::Tag '$TAG' invalide. Formats attendus : vX.Y.Z-dev.N, vX.Y.Z-rc.N ou vX.Y.Z"
+            exit 1
+          fi
+
+          # Une release publiée sur un tag -dev/-rc est déjà déployée par le push du tag.
+          SKIP=false
+          if [[ "$EVENT_NAME" == "release" && "$ENV" != "prd" ]]; then
+            echo "::notice::Release $TAG non stable : déploiement déjà assuré par le push du tag."
+            SKIP=true
+          fi
+
+          {
+            echo "skip=$SKIP"
+            echo "tag=$TAG"
+            echo "env=$ENV"
+            echo "gh_env=$GH_ENV"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "### $TAG → $ENV (ECR $ECR_REPOSITORY:$TAG + :$ENV, SEA → S3 $CONTAINER_NAME/$TAG/)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # JOB 2 — Build & push image Docker vers ECR
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Build & Push ${{ needs.resolve.outputs.tag }} → ECR (${{ needs.resolve.outputs.env }})
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
+    runs-on: ubuntu-24.04-arm   # runner GitHub hébergé ARM64 : build natif pour la box (Raspberry Pi)
+    environment: ${{ needs.resolve.outputs.gh_env }}
+    concurrency:
+      group: deploy-${{ needs.resolve.outputs.env }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          echo "registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+
+          TEMP_DOCKER_CONFIG=$(mktemp -d)
+          echo '{}' > "$TEMP_DOCKER_CONFIG/config.json"
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            DOCKER_CONFIG="$TEMP_DOCKER_CONFIG" docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          echo "DOCKER_CONFIG=$TEMP_DOCKER_CONFIG" >> $GITHUB_ENV
+
+      - name: Build, tag & push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.tag }}
+          ENV_TAG: ${{ needs.resolve.outputs.env }}
+        run: |
+          IMAGE_BASE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          # :vX.Y.Z[-dev.N|-rc.N] (version) + :dev|:test|:prd (repère d'environnement)
+          docker build -t "$IMAGE_BASE:$IMAGE_TAG" -t "$IMAGE_BASE:$ENV_TAG" .
+          docker push "$IMAGE_BASE:$IMAGE_TAG"
+          docker push "$IMAGE_BASE:$ENV_TAG"
+
+      - name: Cleanup Docker config
+        if: always()
+        run: rm -rf "$DOCKER_CONFIG"
+
+  # ─────────────────────────────────────────────
+  # JOB 3 — Build SEA (exécutable autonome) & upload S3
+  # ─────────────────────────────────────────────
+  deploy-sea-s3:
+    name: Deploy SEA ${{ needs.resolve.outputs.tag }} → S3
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/deploy-sea-s3.yml
+    with:
+      version: ${{ needs.resolve.outputs.tag }}
+      environment: ${{ needs.resolve.outputs.gh_env }}
+      aws-region: eu-west-3
+      container-name: clv-box
+    secrets: inherit

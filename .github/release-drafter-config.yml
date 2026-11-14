@@ -28,17 +28,6 @@ categories:
 
 
 
-# ── Labels d'environnement (ignorés du changelog, utilisés par publish.yml) ──
-# Ces labels sont lus par publish.yml pour tagger l'image Docker.
-# Ils n'apparaissent pas dans les catégories ci-dessus intentionnellement.
-# Labels à créer sur le repo : env:dev, env:prd, env:pprd, env:test
-
-exclude-labels:
-  - 'env:dev'
-  - 'env:prd'
-  - 'env:pprd'
-  - 'env:test'
-
 # ── Résolution du bump via les labels ─────────────────────────────────────
 version-resolver:
   major:
