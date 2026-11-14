@@ -7,7 +7,7 @@ import { TriggerService } from './trigger.service';
 import { SensorService } from './sensor.service';
 import { AuthenticationService } from './authentication.service';
 import { isGpioAvailable, loadGpio } from '../utils/gpio.util';
-import { getGPIO } from 'src/common/tools/find_gipio';
+import { resolveGpioLine } from 'src/common/tools/gpio-line';
 import { ActuatorModel, CtrlActuatorConfigModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
@@ -178,7 +178,7 @@ export class InitService {
             return;
         }
         const Gpio = loadGpio();
-        const gpio = await getGPIO(21);
+        const gpio = await resolveGpioLine(21);
         const led = new Gpio(gpio, 'out', 'both', { reconfigureDirection: true, activeLow: false });
         led.writeSync(1);
         await new Promise(r => setTimeout(r, 10));
