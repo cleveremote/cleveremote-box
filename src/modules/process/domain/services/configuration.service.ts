@@ -22,7 +22,7 @@ import { EventRepository } from '@process/infrastructure/repositories/event.repo
 import { EventModel, ProcessEventData, SensorEventData } from '../models/event.model';
 import { CycleRunModel, RunOutcome } from '../models/cycle-history.model';
 import { BuildCycleRuns } from '../utils/cycle-history.util';
-import { TranslateEventMessages } from '../utils/process-event-message.util';
+import { ToProcessLastEvent, TranslateEventMessages } from '../utils/process-event-message.util';
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { DeviceKind, DeviceModel, DeviceType, DeviceWithCommands, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
@@ -153,15 +153,24 @@ export class StructureService {
         }
     }
 
-    // progression n'a de sens que pour IN_PROCCESS, meme convention que ProcessService._processProgress.
+    // deux lectures distinctes, comme en temps reel :
+    // - statut / progression : dernier event portant un statut (STATUSLESS_EVENT_KINDS ignores) ; progression
+    //   n'a de sens que pour IN_PROCCESS, meme convention que ProcessService._processProgress
+    // - lastEvent : dernier event du journal, quel qu'il soit (START_REFUSED compris) : confirmation en attente
+    //   (conflits), file, raison d'arret, demarrage refuse... et son message (popin du front)
     private async _rehydrateProcessStatus(executable: CycleModel | SequenceModel): Promise<void> {
-        const lastEvent = await this.eventRepository.getLastStatus(executable._id);
-        if (!lastEvent) { return; }
-        const data = lastEvent.additionalData as ProcessEventData;
-        executable.status = (data.status ?? data.value) as ExecutableStatus;
-        executable.progression = executable.status === ExecutableStatus.IN_PROCCESS
-            ? { startedAt: data.startedAt, duration: data.duration }
-            : null;
+        const [statusEvent, lastEvent] = await Promise.all([
+            this.eventRepository.getLastStatus(executable._id),
+            this.eventRepository.getLast(executable._id)
+        ]);
+        if (statusEvent) {
+            const data = statusEvent.additionalData as ProcessEventData;
+            executable.status = (data.status ?? data.value) as ExecutableStatus;
+            executable.progression = executable.status === ExecutableStatus.IN_PROCCESS
+                ? { startedAt: data.startedAt, duration: data.duration }
+                : null;
+        }
+        executable.lastEvent = ToProcessLastEvent(lastEvent, this.globalSettingsService.language);
     }
 
     public async getConfigurationWithStatus(): Promise<StructureModel> {
@@ -265,6 +274,7 @@ export class StructureService {
         value.id = executable._id;
         value.type = type;
         value.status = executable.status;
+        value.lastEvent = executable.lastEvent;
         if (executable.progression) {
             value.startedAt = executable.progression.startedAt;
             value.duration = executable.progression.duration;

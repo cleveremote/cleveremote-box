@@ -21,7 +21,8 @@ import { ProcessService } from './execution.service';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import { ElementType, EventSource, SensorEventData } from '../models/event.model';
-import { evaluateConditions } from '../utils/evaluate-conditions.util';
+import { evaluateConditions, isConditionElementPresent } from '../utils/evaluate-conditions.util';
+import { ConditionModel } from '../models/condition.model';
 import { SunBehavior } from '@process/infrastructure/dto/synchronize.dto';
 @Injectable()
 export class TriggerService {
@@ -139,13 +140,16 @@ export class TriggerService {
         trigger.isCheckInProgress = true;
 
         const getDeviceValue = (elementId: string) => this.valueRepository.getDeviceValue(elementId);
+        const isElementPresent = (condition: ConditionModel) =>
+            isConditionElementPresent(condition, this.configurationService.structure, this.configurationService.sequences);
         const isTriggerVerified = await evaluateConditions(trigger.conditions, getDeviceValue,
-            (detail) => this.logger.debug({ triggerId: trigger.id, ...detail }, 'trigger conditions not verified'));
+            (detail) => this.logger.debug({ triggerId: trigger.id, ...detail }, 'trigger conditions not verified'), isElementPresent);
         // conditions du cycle evaluees ici aussi : si elles sont fausses on ne consomme pas le
         // declenchement (lastTriggeredAt/delay), le trigger sera reevalue quand elles changeront
         // (cf. _getTriggerByElementId qui ecoute aussi les elements des conditions du cycle).
         const isVerified = isTriggerVerified && await evaluateConditions(this._getTriggerCycle(trigger)?.conditions, getDeviceValue,
-            (detail) => this.logger.debug({ triggerId: trigger.id, cycleId: trigger.cycleId, ...detail }, 'trigger: cycle conditions not verified, waiting'));
+            (detail) => this.logger.debug({ triggerId: trigger.id, cycleId: trigger.cycleId, ...detail }, 'trigger: cycle conditions not verified, waiting'),
+            isElementPresent);
 
         if (isVerified) {
             this.logger.log({ triggerId: trigger.id }, 'trigger conditions verified, planifying execution');

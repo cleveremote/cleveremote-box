@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, PipelineStage } from 'mongoose';
-import { ElementType, EventModel, ProcessEventKind } from '@process/domain/models/event.model';
+import { ElementType, EventModel, ProcessEventKind, STATUSLESS_EVENT_KINDS } from '@process/domain/models/event.model';
 import { RunIdsFilter, RunOutcome } from '@process/domain/models/cycle-history.model';
 import { RUN_OUTCOME_BY_KIND } from '@process/domain/utils/cycle-history.util';
 import { EventPurgeFilterModel } from '@process/domain/models/event-purge.model';
@@ -119,7 +119,7 @@ export class EventMongooseRepository {
 
     public async findLastStatusByDevice(elementId: string): Promise<EventModel> {
         const event = await this.eventModel
-            .findOne({ elementId, 'additionalData.kind': { $ne: ProcessEventKind.START_REFUSED } })
+            .findOne({ elementId, 'additionalData.kind': { $nin: STATUSLESS_EVENT_KINDS } })
             .sort({ date: -1 });
         return event ? EventMapper.mapToModel(event) : null;
     }

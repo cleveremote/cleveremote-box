@@ -38,11 +38,11 @@ import {
     ProcessEventKind, StopReason
 } from '../models/event.model';
 import { RunContextModel } from '../models/run-context.model';
-import { DescribeCondition, DescribeProcessEvent } from '../utils/process-event-message.util';
+import { DescribeCondition, DescribeProcessEvent, ToProcessLastEvent } from '../utils/process-event-message.util';
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { ConditionFailureReporter, evaluateConditions, sortConditions } from '../utils/evaluate-conditions.util';
+import { ConditionFailureReporter, evaluateConditions, isConditionElementPresent, sortConditions } from '../utils/evaluate-conditions.util';
 import { ConditionModel } from '../models/condition.model';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
@@ -230,7 +230,8 @@ export class ProcessService {
         return run && { run: [...run.sequences.run], skipped: [...run.sequences.skipped], forced: [...run.sequences.forced] };
     }
 
-    // journal : message lisible calcule ici, et champs principaux repris dans le statut envoye au front
+    // journal : message lisible calcule ici, et champs principaux repris dans le statut envoye au front ;
+    // cycle / sequence : retenu comme dernier event (lastEvent), rendu tel quel par le fetch (front reconnecte)
     private _publishStatusEvent(eventPayload: EventModel, wsData: object): Promise<string> {
         const journal = eventPayload.additionalData as ProcessEventData;
         let payload = wsData;
@@ -238,11 +239,23 @@ export class ProcessService {
             journal.message = DescribeProcessEvent(journal, this.globalSettingsService.language);
             const { kind, runId, origin, stop, message } = journal;
             payload = { ...wsData, kind, runId, origin, stop, message };
+            this._setLastEvent(eventPayload);
         }
         return this.eventRepository.save(eventPayload).then(() => {
             this._sendStatusSync(payload);
             return 'sent';
         });
+    }
+
+    private _setLastEvent(event: EventModel): void {
+        const element = event.elementType === ElementType.CYCLE
+            ? this.configurationService.structure?.cycles?.find((cyc) => cyc._id === event.elementId)
+            : event.elementType === ElementType.SEQUENCE
+                ? this.configurationService.sequences?.find((seq) => seq._id === event.elementId)
+                : undefined;
+        if (element) {
+            element.lastEvent = ToProcessLastEvent(event, this.globalSettingsService.language);
+        }
     }
 
     private _sendStatusSync(wsData: unknown): void {
@@ -769,9 +782,9 @@ export class ProcessService {
         return true;
     }
 
-    // demarrage refuse : trace sans statut (EventRepository.getLastStatus l'ignore a la rehydratation) ;
-    // le front est deja notifie par _notifyConditionsNotVerified. process.run n'est pas touche : le meme
-    // process de schedule peut porter le run d'une execution en cours.
+    // demarrage refuse : trace sans statut (cf. STATUSLESS_EVENT_KINDS), retenue comme lastEvent du cycle
+    // (popin du front au fetch) ; le front est deja notifie par _notifyConditionsNotVerified. process.run
+    // n'est pas touche : le meme process de schedule peut porter le run d'une execution en cours.
     private _journalStartRefused(process: ProcessModel, causes: ConditionReport): void {
         const additionalData: ProcessEventData = {
             type: process.mode,
@@ -782,7 +795,9 @@ export class ProcessService {
             conditionCauses: causes.map((x) => x.condition)
         };
         additionalData.message = DescribeProcessEvent(additionalData, this.globalSettingsService.language);
-        this.eventRepository.save({ elementId: process.cycle._id, date: new Date(), elementType: ElementType.CYCLE, additionalData })
+        const event: EventModel = { elementId: process.cycle._id, date: new Date(), elementType: ElementType.CYCLE, additionalData };
+        this._setLastEvent(event);
+        this.eventRepository.save(event)
             .catch((err) => this.logger.warn({ err }, 'failed to save start refused event'));
     }
 
@@ -819,14 +834,15 @@ export class ProcessService {
         }, (detail) => {
             failure = detail;
             onFailure(detail);
-        });
+        }, (condition) => isConditionElementPresent(condition, this.configurationService.structure, this.configurationService.sequences));
         if (isVerified) { return null; }
         if (!failure?.results) {
             const reason = failure?.reason ?? 'conditions not verified';
             return [{ id: null, type: 'CONDITION', cause: reason, condition: { elementId: null, error: reason } }];
         }
         return sortConditions(conditions)
-            .filter((_, i) => !failure.results[i])
+            // null = condition ignoree (element inexistant), jamais une cause
+            .filter((_, i) => failure.results[i] === false)
             .map((condition) => {
                 const cause = this._toConditionCause(condition, values.get(condition.elementId));
                 return { id: condition.elementId, type: 'CONDITION', cause: this._describeCondition(cause), condition: cause };
@@ -1807,7 +1823,8 @@ export class ProcessService {
                 confirmation: confirmation ?? (processModel.run?.confirmation && { ...processModel.run.confirmation }),
                 kind: status === ExecutableStatus.QUEUED ? ProcessEventKind.CYCLE_QUEUED : ProcessEventKind.CONFIRMATION_REQUESTED,
                 name: processModel.cycle.name,
-                waitingFor
+                waitingFor,
+                requestedDuration: data.requestedDuration
             }
         }, data);
     }

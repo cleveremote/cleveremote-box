@@ -1,5 +1,7 @@
 import { Language } from '@framework/i18n/language';
-import { ConditionCauseModel, EventModel, EventOriginModel, EventStopModel, ProcessEventData } from '@process/domain/models/event.model';
+import {
+    ConditionCauseModel, EventModel, EventOriginModel, EventStopModel, ProcessEventData, ProcessLastEventModel
+} from '@process/domain/models/event.model';
 import { EventTexts, FormatDuration } from './event-texts/event-texts';
 import { AR_EVENT_TEXTS } from './event-texts/event-texts.ar';
 import { EN_EVENT_TEXTS } from './event-texts/event-texts.en';
@@ -46,4 +48,17 @@ export function TranslateEventMessages(events: EventModel[], lang: string | unde
         }
     }
     return events;
+}
+
+// dernier event de statut d'un element (cf. ProcessLastEventModel) ; event anterieur au journal (sans kind) : aucun
+export function ToProcessLastEvent(event: EventModel | undefined, lang: string | undefined): ProcessLastEventModel | undefined {
+    const data = event?.additionalData as ProcessEventData | undefined;
+    if (!data?.kind) {
+        return undefined;
+    }
+    const { kind, runId, origin, stop, causes, confirmation, waitingFor, requestedDuration } = data;
+    return {
+        kind, date: event.date, runId, origin, stop, causes, confirmation, waitingFor, requestedDuration,
+        message: DescribeProcessEvent(data, lang)
+    };
 }

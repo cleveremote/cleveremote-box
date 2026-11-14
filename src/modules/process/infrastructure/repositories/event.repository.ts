@@ -27,6 +27,7 @@ export class EventRepository {
         return this.eventMongooseRepository.deleteMany(filter);
     }
 
+    // dernier event, quel qu'il soit (capteur : derniere valeur ; cycle / sequence : lastEvent)
     public async getLast(elementId: string): Promise<EventModel> {
         return this.eventMongooseRepository.findLastByDevice(elementId);
     }
@@ -40,7 +41,7 @@ export class EventRepository {
         return this.eventMongooseRepository.findLatestByDevice(elementId, limit);
     }
 
-    // dernier event portant un statut (ignore les traces START_REFUSED) : rehydratation au boot
+    // dernier event portant un statut (ignore STATUSLESS_EVENT_KINDS) : rehydratation statut / progression
     public async getLastStatus(elementId: string): Promise<EventModel> {
         return this.eventMongooseRepository.findLastStatusByDevice(elementId);
     }

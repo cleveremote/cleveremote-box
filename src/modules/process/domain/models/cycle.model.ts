@@ -10,6 +10,7 @@ import { IActuatorModule } from '../interfaces/actuator-module.interface';
 import { ScheduleModel } from './schedule.model';
 import { ModuleTimingConfig, SequenceModel } from './sequence.model';
 import { TriggerModel } from './trigger.model';
+import { ProcessLastEventModel } from './event.model';
 
 export interface ChildCycleConfig {
     order: number;
@@ -36,6 +37,8 @@ export class CycleModel implements IExecutable {
     public autoCreated?: boolean = false;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
     public progression?: { startedAt: Date; duration: number };
+    // dernier event de statut (non persiste sur l'element : relu du journal, tenu a jour par ProcessService)
+    public lastEvent?: ProcessLastEventModel;
     public sequences?: SequenceModel[] = [];
     public schedules?: ScheduleModel[] = [];
     public triggers?: TriggerModel[] = [];

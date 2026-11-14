@@ -2,6 +2,7 @@ import { ExecutableStatus } from '../interfaces/executable.interface';
 import { ConditionModel } from './condition.model';
 import { DeviceCommandOverride } from './device-command.model';
 import { SequenceInverterDirective } from './inverter.model';
+import { ProcessLastEventModel } from './event.model';
 
 export interface ModuleTimingConfig {
     waitBeforeExec: number;
@@ -37,6 +38,8 @@ export class SequenceModel {
     public name: string;
     public description: string;
     public progression: { startedAt: Date; duration: number };
+    // dernier event de statut (non persiste sur l'element : relu du journal, tenu a jour par ProcessService)
+    public lastEvent?: ProcessLastEventModel;
     public status: ExecutableStatus = ExecutableStatus.STOPPED;
 
     // determine l'ordre d'execution des sequences d'un meme cycle (croissant)

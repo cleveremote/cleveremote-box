@@ -10,7 +10,7 @@ export enum ElementType {
 
 // etape du journal d'execution d'un cycle (cf. RunContextModel : tous les events d'un run partagent son runId)
 export enum ProcessEventKind {
-    START_REFUSED = 'START_REFUSED', // conditions du cycle fausses : pas de statut porte (ignore par la rehydratation)
+    START_REFUSED = 'START_REFUSED', // conditions du cycle fausses : pas de statut porte (cf. STATUSLESS_EVENT_KINDS)
     CONFIRMATION_REQUESTED = 'CONFIRMATION_REQUESTED',
     CYCLE_QUEUED = 'CYCLE_QUEUED',
     CYCLE_CANCELLED = 'CYCLE_CANCELLED', // jamais demarre (confirmation refusee, OFF pendant l'attente / la file)
@@ -25,6 +25,10 @@ export enum ProcessEventKind {
     INVERTER_MANUAL_RELEASED = 'INVERTER_MANUAL_RELEASED', // switchs rouverts : retour au mode auto
     INVERTER_DIRECTIVE_IGNORED = 'INVERTER_DIRECTIVE_IGNORED' // directive d'une sequence (forcee) non ecrite : variateur en manuel
 }
+
+// events du journal qui ne portent pas de statut (simple notification) : ignores pour rehydrater statut /
+// progression (EventRepository.getLastStatus), mais retenus comme lastEvent (popin du front)
+export const STATUSLESS_EVENT_KINDS: readonly ProcessEventKind[] = [ProcessEventKind.START_REFUSED];
 
 // detail d'un event variateur
 export class InverterEventDetail {
@@ -139,12 +143,29 @@ export class ProcessEventData {
     public conditionCauses?: ConditionCauseModel[]; // idem, structurees
     public preempted?: string[]; // CYCLE_STARTED : cycles stoppes par ce demarrage
     public waitingFor?: string[]; // CYCLE_QUEUED : cycles dont la fin est attendue
+    public requestedDuration?: number; // attente (confirmation / file) : surcharge de duree de l'ordre (absente = heritee)
     public runStartedAt?: Date;
     public endedAt?: Date;
     public realDuration?: number;
     public plannedDuration?: number;
     public sequences?: EventSequencesSummary;
     public inverter?: InverterEventDetail; // events INVERTER_*
+    public message?: string;
+}
+
+// dernier event de statut d'un cycle / d'une sequence (meme contenu que le statut envoye au front en temps
+// reel) : rendu par le fetch de la configuration / des valeurs pour retrouver la confirmation en attente et
+// ses conflits, la file d'attente ou la raison d'arret apres une deconnexion du front
+export class ProcessLastEventModel {
+    public kind: ProcessEventKind;
+    public date: Date;
+    public runId?: string;
+    public origin?: EventOriginModel;
+    public stop?: EventStopModel;
+    public causes?: { type: string; cause: string }[];
+    public confirmation?: EventConfirmationModel;
+    public waitingFor?: string[];
+    public requestedDuration?: number;
     public message?: string;
 }
 
