@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { NotSwitchError } from '../../errors/not-switch.error';
@@ -7,18 +6,11 @@ import { ActuatorType } from '../../interfaces/actuator-module.interface';
 import { FakeGpio, ActuatorModel, RpiActuatorConfigModel } from '../../models/actuator.model';
 import { ActuatorStrategy } from './actuator-strategy.interface';
 import { GpioBinaryValue, isGpioAvailable, loadGpio } from '../../utils/gpio.util';
-
-const GPIO_ROOT_PATH = '/sys/class/gpio/';
+import { resolveGpioLine } from 'src/common/tools/gpio-line';
 
 @Injectable()
 export class RpiActuatorStrategy implements ActuatorStrategy {
     public readonly type = ActuatorType.RPI;
-
-    // Sur Raspberry Pi 5, les GPIO du connecteur 40 broches sont exposees par le controleur RP1
-    // sous un gpiochip dont la base sysfs n'est plus 0 (contrairement aux Pi < 5). Le numero BCM
-    // stocke dans rpiPin doit donc etre decale de cette base pour cibler la bonne ligne sysfs,
-    // sous peine d'un EINVAL a l'export.
-    private static _rp1GpioBase: number = undefined;
 
     public constructor(private readonly logger: Logger) { }
 
@@ -48,7 +40,8 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
                 reconfigureDirection: config.reconfigureDirection
             };
             try {
-                const gpioLine = this._resolveGpioLine(config.rpiPin);
+                // rpiPin est un numero BCM : onoff attend le numero sysfs (base du gpiochip non nulle sur Pi 5 / noyaux recents)
+                const gpioLine = await resolveGpioLine(config.rpiPin);
                 config.instance = new Gpio(gpioLine, config.direction, config.edge, gpioOptions);
             } catch (error) {
                 this.logger.warn({ error, name: actuator.name, rpiPin: config.rpiPin }, 'GPIO init failed, using fake instance');
@@ -75,29 +68,6 @@ export class RpiActuatorStrategy implements ActuatorStrategy {
 
     public async read(actuator: ActuatorModel): Promise<number> {
         return (actuator.config as RpiActuatorConfigModel).instance.readSync();
-    }
-
-    private _resolveGpioLine(rpiPin: number): number {
-        if (RpiActuatorStrategy._rp1GpioBase === undefined) {
-            RpiActuatorStrategy._rp1GpioBase = this._detectRp1GpioBase();
-        }
-        return RpiActuatorStrategy._rp1GpioBase + rpiPin;
-    }
-
-    /* istanbul ignore next */
-    private _detectRp1GpioBase(): number {
-        try {
-            const chips = fs.readdirSync(GPIO_ROOT_PATH).filter((entry) => entry.startsWith('gpiochip'));
-            for (const chip of chips) {
-                const label = fs.readFileSync(`${GPIO_ROOT_PATH}${chip}/label`, 'utf8').trim();
-                if (label === 'pinctrl-rp1') {
-                    return Number(fs.readFileSync(`${GPIO_ROOT_PATH}${chip}/base`, 'utf8').trim());
-                }
-            }
-        } catch (error) {
-            this.logger.warn({ error }, 'failed to detect RP1 gpiochip base, defaulting to 0');
-        }
-        return 0;
     }
 
     private _getFakeInstance(actuator: ActuatorModel, config: RpiActuatorConfigModel): FakeGpio {
