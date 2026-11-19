@@ -59,6 +59,7 @@ export function BuildCycleRuns(events: EventModel[]): CycleRunModel[] {
             runs.set(data.runId, run);
         }
         run.cycleId ??= isCycleEvent ? event.elementId : data.cycleId;
+        run.lastEventAt = event.date; // events tries par date croissante
         run.timeline.push({
             date: event.date, elementId: event.elementId, elementType: event.elementType,
             kind: data.kind, name: data.name, message: data.message, data
@@ -67,6 +68,5 @@ export function BuildCycleRuns(events: EventModel[]): CycleRunModel[] {
             ApplyCycleEvent(run, event, data);
         }
     }
-   const t = [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-   return t;
+    return [...runs.values()].sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
 }

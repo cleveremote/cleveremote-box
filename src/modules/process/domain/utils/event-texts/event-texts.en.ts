@@ -1,5 +1,5 @@
 import {
-    ConfirmationAnswer, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
+    ConfirmationAnswer, ControlValueMode, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
 } from '@process/domain/models/event.model';
 import { ConditionTexts, EventTexts, FormatDuration, LostConflicts, ProportionalOverrides } from './event-texts';
 
@@ -84,6 +84,24 @@ function DescribeConfirmationRequest(data: ProcessEventData): string {
     return reasons.length ? ` — ${reasons.join(', ')}` : '';
 }
 
+const CONTROL_MODE_LABELS: Record<ControlValueMode, string> = {
+    [ControlValueMode.DIRECT]: 'setpoint',
+    [ControlValueMode.REGULATION]: 'regulation',
+    [ControlValueMode.FOLLOW]: 'follow'
+};
+
+// variation agregee de l'ouverture d'une vanne (CONTROL_VALUE_CHANGED)
+function DescribeControlValue(data: ProcessEventData): string {
+    const control = data.control;
+    if (!control) { return ''; }
+    return `Opening of ${Quote(control.actuatorName)}: ${control.previousValue ?? '?'}% → ${control.value}%` +
+        ` (${CONTROL_MODE_LABELS[control.mode] ?? control.mode}` +
+        (control.steps > 1 ? `, ${Plural(control.steps, 'write')} in ${FormatDuration(control.durationMs)}` : '') +
+        (control.setpoint !== undefined
+            ? `, setpoint ${control.setpoint} ${control.isStabilized ? 'reached' : 'not reached'} (measured ${control.measured})`
+            : '') + ')';
+}
+
 function DescribeSummary(data: ProcessEventData): string {
     const sequences = data.sequences;
     if (!sequences || (!sequences.run.length && !sequences.skipped.length)) { return ''; }
@@ -130,6 +148,7 @@ export const EN_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `Inverter ${name} switched to manual: sequence directives ignored`,
         [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `Inverter ${name} back to auto mode`,
         [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `Directive of sequence ${Quote(data.inverter?.sequenceName ?? '')}` +
-            ` ignored: inverter ${name} in manual mode`
+            ` ignored: inverter ${name} in manual mode`,
+        [ProcessEventKind.CONTROL_VALUE_CHANGED]: (data) => DescribeControlValue(data)
     }
 };

@@ -1,17 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import ModbusRTU from 'modbus-serial';
+import { Observable } from 'rxjs';
 import { DeviceRepository } from '@process/infrastructure/repositories/device.repository';
 import { DeviceModel, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { ActuatorModel, CtrlActuatorConfigModel, CtrlOpeningBounds } from '@process/domain/models/actuator.model';
 import { ActuatorType } from '../../interfaces/actuator-module.interface';
-import { ActuatorSetOptions, ActuatorStrategy } from './actuator-strategy.interface';
+import { ActuatorSetOptions, ActuatorStrategy, ActuatorValueChange } from './actuator-strategy.interface';
 import { AO8CH_DEVICE_ADDRESS_REGISTER, BROADCAST_UNIT_ID } from '@process/domain/utils/modbus-registers.util';
 import { UNREACHABLE_NETWORK_CODES, WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
 import { DeviceCommandService } from '../device-command.service';
 import { RegulationService } from '../regulation.service';
 import { ControlLoopMode } from '../../models/control-loop.model';
+import { ControlValueMode } from '../../models/event.model';
+import { CtrlOpeningAggregator } from './ctrl-opening.aggregator';
 
 type ValveActuatorModel = ActuatorModel & { config: CtrlActuatorConfigModel };
 
@@ -30,6 +33,9 @@ const MAX_OUTPUT_UA = MAX_OUTPUT_MA * 1000;
 @Injectable()
 export class CtrlActuatorStrategy implements ActuatorStrategy {
     public readonly type = ActuatorType.CTRL;
+    // variations de l'ouverture, agregees puis publiees a leur fin
+    private readonly _openings = new CtrlOpeningAggregator();
+    public readonly valueChanged$: Observable<ActuatorValueChange> = this._openings.valueChanged$;
 
     public constructor(
         private deviceRepository: DeviceRepository,
@@ -45,9 +51,11 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         await this.deviceCommandService.runActions(deviceId, actions, DeviceCommandType.INIT);
     }
 
-    // commandes reset de la vanne ; à défaut, position de repos : fermée (set 0 -> 4mA), ouverte en sens inversé
+    // commandes reset de la vanne ; à défaut, position de repos : fermée (set 0 -> 4mA), ouverte en sens inversé ;
+    // la variation en cours est publiée avant (la position de repos n'en est pas une)
     public async reset(actuator: ActuatorModel): Promise<void> {
         this.regulationService.stopFollow(actuator._id);
+        this._openings.forget(actuator._id);
         const { deviceId, actions } = actuator.config as CtrlActuatorConfigModel;
         if (!(await this.deviceCommandService.actionsOfType(actions, DeviceCommandType.RESET)).length) {
             const { isInverted } = CtrlOpeningBounds(actuator.config as CtrlActuatorConfigModel);
@@ -66,11 +74,14 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
      * Sinon `action` est l'ouverture cible en % (positionnement direct) ; 0 ne lance pas de régulation.
      * options.isDirect (consigne explicite d'un cycle prioritaire sur le cycle PROPORTIONAL de la vanne) :
      * positionnement direct même sous ControlLoop, un suivi en cours est arrêté.
+     * Chaque variation de l'ouverture est publiée agrégée (valueChanged$) : un positionnement, une régulation
+     * (de son lancement à sa stabilisation), un mouvement suivi (jusqu'à stabilisation de la mesure).
      */
     public async set(actuator: ActuatorModel, action: number, options?: ActuatorSetOptions): Promise<void> {
         if (options?.isDirect) {
             this.regulationService.stopFollow(actuator._id);
-            return this.position(actuator, action);
+            this._openings.stopFollow(actuator._id);
+            return this._openings.track(actuator, ControlValueMode.DIRECT, () => this.position(actuator, action));
         }
         const loop = await this.regulationService.findLoop(actuator);
         const port = {
@@ -78,12 +89,13 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
             settleMs: (delta: number) => this.positioningDelayMs(actuator, delta)
         };
         if (loop?.mode === ControlLoopMode.FOLLOW) {
+            this._openings.startFollow(actuator._id, loop.params.iterationDelayMs);
             return this.regulationService.follow(actuator, loop, port);
         }
         if (!loop || action === 0) {
-            return this.position(actuator, action);
+            return this._openings.track(actuator, ControlValueMode.DIRECT, () => this.position(actuator, action));
         }
-        await this.regulationService.regulate(actuator, loop, port);
+        await this._openings.track(actuator, ControlValueMode.REGULATION, () => this.regulationService.regulate(actuator, loop, port));
     }
 
     // positionnement direct, commande bornée à [minOpening, maxOpening] ; sens inversé (minOpening > maxOpening) :
@@ -96,6 +108,7 @@ export class CtrlActuatorStrategy implements ActuatorStrategy {
         const outputValue = await this._writeOpening(config, physicalOpening);
         config.openingPercent = clamped;
         this.logger.debug({ valveId: actuator._id, openingPercent: clamped, physicalOpening, outputValue }, 'valve opening written');
+        this._openings.record(actuator, clamped);
     }
 
     public async read(actuator: ActuatorModel): Promise<number> {

@@ -1,5 +1,5 @@
 import {
-    ConfirmationAnswer, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
+    ConfirmationAnswer, ControlValueMode, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
 } from '@process/domain/models/event.model';
 import { ConditionTexts, EventTexts, FormatDuration, LostConflicts, ProportionalOverrides } from './event-texts';
 
@@ -85,6 +85,24 @@ function DescribeConfirmationRequest(data: ProcessEventData): string {
     return reasons.length ? ` — ${reasons.join('، ')}` : '';
 }
 
+const CONTROL_MODE_LABELS: Record<ControlValueMode, string> = {
+    [ControlValueMode.DIRECT]: 'قيمة مباشرة',
+    [ControlValueMode.REGULATION]: 'تنظيم',
+    [ControlValueMode.FOLLOW]: 'تتبّع'
+};
+
+// variation agregee de l'ouverture d'une vanne (CONTROL_VALUE_CHANGED)
+function DescribeControlValue(data: ProcessEventData): string {
+    const control = data.control;
+    if (!control) { return ''; }
+    return `فتحة ${Quote(control.actuatorName)}: ${control.previousValue ?? '?'}% ← ${control.value}%` +
+        ` (${CONTROL_MODE_LABELS[control.mode] ?? control.mode}` +
+        (control.steps > 1 ? `، ${control.steps} عمليات كتابة خلال ${FormatDuration(control.durationMs)}` : '') +
+        (control.setpoint !== undefined
+            ? `، القيمة المرجعية ${control.setpoint} ${control.isStabilized ? 'تم بلوغها' : 'لم يتم بلوغها'} (القياس ${control.measured})`
+            : '') + ')';
+}
+
 function DescribeSummary(data: ProcessEventData): string {
     const sequences = data.sequences;
     if (!sequences || (!sequences.run.length && !sequences.skipped.length)) { return ''; }
@@ -131,6 +149,7 @@ export const AR_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `المحول ${name} في الوضع اليدوي: تم تجاهل توجيهات التسلسلات`,
         [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `عاد المحول ${name} إلى الوضع التلقائي`,
         [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `تم تجاهل توجيه التسلسل ${Quote(data.inverter?.sequenceName ?? '')}` +
-            `: المحول ${name} في الوضع اليدوي`
+            `: المحول ${name} في الوضع اليدوي`,
+        [ProcessEventKind.CONTROL_VALUE_CHANGED]: (data) => DescribeControlValue(data)
     }
 };

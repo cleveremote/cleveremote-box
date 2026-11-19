@@ -1,15 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { merge, Observable } from 'rxjs';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import { IActuatorModule, ActuatorType } from '../interfaces/actuator-module.interface';
 import { ActuatorModel } from '../models/actuator.model';
 import { ActuatorRepository } from '@process/infrastructure/repositories/actuator.repository';
-import { ACTUATOR_STRATEGIES, ActuatorSetOptions, ActuatorStrategy } from './actuator-strategies/actuator-strategy.interface';
+import { ACTUATOR_STRATEGIES, ActuatorSetOptions, ActuatorStrategy, ActuatorValueChange } from './actuator-strategies/actuator-strategy.interface';
 
 @Injectable()
 export class ActuatorService {
 
     private readonly _strategies: Map<ActuatorType, ActuatorStrategy>;
+    // variations de commande publiees par les strategies (cf. ActuatorStrategy.valueChanged$)
+    public readonly valueChanged$: Observable<ActuatorValueChange>;
 
     public constructor(
         private readonly logger: Logger,
@@ -17,6 +20,7 @@ export class ActuatorService {
         @Inject(ACTUATOR_STRATEGIES) strategies: ActuatorStrategy[]
     ) {
         this._strategies = new Map(strategies.map((strategy) => [strategy.type, strategy]));
+        this.valueChanged$ = merge(...strategies.filter((strategy) => strategy.valueChanged$).map((strategy) => strategy.valueChanged$));
     }
 
     public async resolve(moduleIds: string[]): Promise<Map<string, IActuatorModule>> {

@@ -38,6 +38,9 @@ export class CycleRunModel {
     public confirmation?: EventConfirmationModel;
     public stop?: EventStopModel;
     public requestedAt: Date; // premier event du run
+    // dernier event de la timeline : un cycle PROPORTIONAL (demarrage / arret non journalises) date son run par sa
+    // derniere variation de commande (CONTROL_VALUE_CHANGED)
+    public lastEventAt: Date;
     public startedAt?: Date;
     public endedAt?: Date;
     public realDuration?: number;

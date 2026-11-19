@@ -23,10 +23,16 @@ const WAVESHARE_DISCOVERY_PAYLOAD = Buffer.from(
 /** Erreurs de connexion indiquant que l'IP du master n'est plus joignable (bail DHCP changé) */
 export const UNREACHABLE_NETWORK_CODES = ['EHOSTUNREACH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENETUNREACH'];
 
+// Résultat d'une découverte réutilisé pendant ce délai : un master injoignable ne relance pas un scan de 5 s
+// (sous le verrou du bus, cf. ModbusBusService) à chacune de ses opérations
+const DISCOVERY_CACHE_MS = 60000;
+
 @Injectable()
 export class WaveshareDiscoveryService {
     // une seule découverte UDP à la fois : les connexions concurrentes en échec la partagent
     private _pendingDiscovery: Promise<WaveshareDiscoveryResult[]> | null = null;
+    // dernière découverte réussie
+    private _lastDiscovery: { at: number; results: WaveshareDiscoveryResult[] } | null = null;
 
     public constructor(
         @Inject(forwardRef(() => DeviceRepository)) private deviceRepository: DeviceRepository,
@@ -90,8 +96,7 @@ export class WaveshareDiscoveryService {
     public async refreshMasterAddress(masterConfig: MasterConfigModel): Promise<boolean> {
         if (masterConfig.protocol !== MasterProtocol.TCP || !masterConfig.deviceId) return false;
 
-        this._pendingDiscovery ??= this.scanNetwork().finally(() => { this._pendingDiscovery = null; });
-        const results = await this._pendingDiscovery;
+        const results = await this._discover();
         const match = results.find((result) => result.deviceId?.toUpperCase() === masterConfig.deviceId.toUpperCase());
         if (!match) {
             this.logger.warn({ deviceId: masterConfig.deviceId }, 'master not found by waveshare discovery');
@@ -116,8 +121,7 @@ export class WaveshareDiscoveryService {
      * un master déjà connu (même deviceId) voit seulement son IP mise à jour. Renvoie les masters créés.
      */
     public async discover(): Promise<DeviceModel[]> {
-        this._pendingDiscovery ??= this.scanNetwork().finally(() => { this._pendingDiscovery = null; });
-        const results = (await this._pendingDiscovery).filter((result) => result.deviceId);
+        const results = (await this._discover(true)).filter((result) => result.deviceId);
         const masters = await this.deviceRepository.getByType(DeviceType.MASTER);
         const created: DeviceModel[] = [];
 
@@ -146,6 +150,23 @@ export class WaveshareDiscoveryService {
             this.logger.log({ masterId: saved._id, deviceId: result.deviceId, ip: result.ip }, 'discovered master registered');
         }
         return created;
+    }
+
+    // scan en cours partagé ; sinon dernière découverte réutilisée tant qu'elle est récente (sauf `force`)
+    private _discover(force = false): Promise<WaveshareDiscoveryResult[]> {
+        if (this._pendingDiscovery) {
+            return this._pendingDiscovery;
+        }
+        if (!force && this._lastDiscovery && Date.now() - this._lastDiscovery.at < DISCOVERY_CACHE_MS) {
+            return Promise.resolve(this._lastDiscovery.results);
+        }
+        this._pendingDiscovery = this.scanNetwork()
+            .then((results) => {
+                this._lastDiscovery = { at: Date.now(), results };
+                return results;
+            })
+            .finally(() => { this._pendingDiscovery = null; });
+        return this._pendingDiscovery;
     }
 
     private _findMasterByDeviceId(masters: DeviceModel[], deviceId: string): DeviceModel | undefined {

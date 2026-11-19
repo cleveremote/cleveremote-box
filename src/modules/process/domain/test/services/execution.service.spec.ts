@@ -1,4 +1,4 @@
-import { BehaviorSubject, filter } from 'rxjs';
+import { BehaviorSubject, filter, Subject } from 'rxjs';
 import { Connection } from 'mongoose';
 import { SchedulerRegistry, ScheduleModule } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
@@ -127,7 +127,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let scheduleMongooseRepository: ScheduleMongooseRepository;
     let triggerMongooseRepository: TriggerMongooseRepository;
     let structureService: StructureService;
-    let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock };
+    let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock; valueChanged$: Subject<unknown> };
     let deviceCommandService: { execute: jest.Mock; executeOnDevice: jest.Mock; isDigitalOutput: jest.Mock };
     let wsService: { sendMessage: jest.Mock };
     let valueRepository: { getDeviceValue: jest.Mock };
@@ -201,7 +201,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         actuatorService = {
             resolve: jest.fn((moduleIds: string[]) => Promise.resolve(new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i)])))),
             execute: jest.fn().mockResolvedValue(undefined),
-            reset: jest.fn().mockResolvedValue(undefined)
+            reset: jest.fn().mockResolvedValue(undefined),
+            valueChanged$: new Subject()
         };
         // permet a certains tests de forcer le type (COM/RPI/CTRL) d'un actuator donne, sans
         // perdre le comportement par defaut (RPI) pour tous les autres.

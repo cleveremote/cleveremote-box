@@ -25,7 +25,7 @@ import { ModuleTimingConfig, SequenceModel } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
 import { ActuatorService } from './actuator.service';
-import { ActuatorSetOptions } from './actuator-strategies/actuator-strategy.interface';
+import { ActuatorSetOptions, ActuatorValueChange } from './actuator-strategies/actuator-strategy.interface';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
 import { ChildCycleRef, CycleModel } from '../models/cycle.model';
@@ -34,7 +34,7 @@ import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import {
-    ConditionCauseModel, ConfirmationAnswer, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData,
+    ConditionCauseModel, ConfirmationAnswer, ControlValueEventDetail, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData,
     ProcessEventKind, StopReason
 } from '../models/event.model';
 import { RunContextModel } from '../models/run-context.model';
@@ -64,6 +64,12 @@ const STOP_REASON_BY_SOURCE: Record<EventSource, StopReason> = {
     [EventSource.CYCLE]: StopReason.DRIVEN,
     [EventSource.SYSTEM]: StopReason.SYSTEM_RESET
 };
+
+// regle PROPORTIONAL : demarrage / arret d'un cycle PROPORTIONAL et de ses sequences non journalises (cycle relance
+// automatiquement hors conflit), seules les variations de commande de sa vanne le sont (CONTROL_VALUE_CHANGED)
+const PROPORTIONAL_SILENT_KINDS: readonly ProcessEventKind[] = [
+    ProcessEventKind.CYCLE_STARTED, ProcessEventKind.CYCLE_ENDED, ProcessEventKind.SEQUENCE_STARTED, ProcessEventKind.SEQUENCE_ENDED
+];
 
 const SOURCE_BY_MODE: Record<ProcessMode, EventSource> = {
     [ProcessMode.MANUAL]: EventSource.MANUAL,
@@ -116,6 +122,10 @@ export class ProcessService {
     ) {
         this.inverterControlService.events$.subscribe((event) => {
             this._onInverterEvent(event).catch((error) => this.logger.warn({ error, kind: event.kind }, 'inverter event handling failed'));
+        });
+        this.actuatorService.valueChanged$.subscribe((change) => {
+            this._journalControlValue(change)
+                .catch((error) => this.logger.warn({ error, actuatorId: change.actuatorId }, 'control value journal failed'));
         });
         // nouveau slave créé par un scan : ses cycles PROPORTIONAL (vannes CTRL) démarrent tout de suite
         this.configurationService.slavesCreated$.subscribe(() => {
@@ -232,18 +242,70 @@ export class ProcessService {
 
     // journal : message lisible calcule ici, et champs principaux repris dans le statut envoye au front ;
     // cycle / sequence : retenu comme dernier event (lastEvent), rendu tel quel par le fetch (front reconnecte)
+    // demarrage / arret d'un cycle PROPORTIONAL (cf. _isSilentProportionalEvent) : statut envoye au front et
+    // lastEvent en memoire, sans event persiste ni champs du journal
     private _publishStatusEvent(eventPayload: EventModel, wsData: object): Promise<string> {
         const journal = eventPayload.additionalData as ProcessEventData;
         let payload = wsData;
         if (journal.kind) {
             journal.message = DescribeProcessEvent(journal, this.globalSettingsService.language);
+            this._setLastEvent(eventPayload);
+            if (this._isSilentProportionalEvent(eventPayload)) {
+                this._sendStatusSync(wsData);
+                return Promise.resolve('sent');
+            }
             const { kind, runId, origin, stop, message } = journal;
             payload = { ...wsData, kind, runId, origin, stop, message };
-            this._setLastEvent(eventPayload);
         }
         return this.eventRepository.save(eventPayload).then(() => {
             this._sendStatusSync(payload);
             return 'sent';
+        });
+    }
+
+    // regle PROPORTIONAL : demarrage / arret (PROPORTIONAL_SILENT_KINDS) d'un cycle PROPORTIONAL ou d'une de ses
+    // sequences ; un arret sur erreur reste journalise
+    private _isSilentProportionalEvent(event: EventModel): boolean {
+        const journal = event.additionalData as ProcessEventData;
+        if (!PROPORTIONAL_SILENT_KINDS.includes(journal.kind) || journal.stop?.reason === StopReason.ERROR) {
+            return false;
+        }
+        const cycles = this.configurationService.structure?.cycles ?? [];
+        const cycle = event.elementType === ElementType.CYCLE
+            ? cycles.find((cyc) => cyc._id === event.elementId)
+            : event.elementType === ElementType.SEQUENCE
+                ? cycles.find((cyc) => cyc.sequences?.some((seq) => seq._id === event.elementId))
+                : undefined;
+        return cycle?.type === CycleType.PROPORTIONAL;
+    }
+
+    // regle PROPORTIONAL : variation agregee de la commande de la vanne pilotee par un cycle PROPORTIONAL (regulation,
+    // suivi, consigne). Le cycle est encore dans processList quand sa vanne est remise au repos a son arret
+    // (cf. reset) : la variation en cours y est publiee. Hors de son cycle PROPORTIONAL (cycle prioritaire), non journalisee.
+    private async _journalControlValue(change: ActuatorValueChange): Promise<void> {
+        const process = this.processList.find((proc) => proc.cycle.type === CycleType.PROPORTIONAL
+            && proc.cycle.sequences?.some((seq) => seq.moduleConfigs?.some((ref) => ref.moduleId === change.actuatorId)));
+        if (!process) {
+            return;
+        }
+        const { cycle } = process;
+        const { name, ...detail } = change;
+        const control: ControlValueEventDetail = { ...detail, actuatorName: name };
+        this.logger.log({ cycleId: cycle._id, ...control }, 'proportional cycle control value changed');
+        await this._publishStatusEvent({
+            elementId: cycle._id,
+            date: change.endedAt,
+            elementType: ElementType.CYCLE,
+            additionalData: {
+                type: process.mode,
+                ...ProcessService._runJournal(process.run),
+                kind: ProcessEventKind.CONTROL_VALUE_CHANGED,
+                name: cycle.name,
+                control
+            }
+        }, {
+            type: ExecutableType.CYCLE, id: cycle._id, status: cycle.status,
+            startedAt: cycle.progression?.startedAt, duration: cycle.progression?.duration, control
         });
     }
 
