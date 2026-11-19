@@ -30,7 +30,12 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'Code de vérification valide',
         [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `Code de vérification incorrect. Encore ${r.attemptsRemaining} tentative(s)`,
         [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'Code de vérification expiré ou inexistant, demandez un nouveau code',
-        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Trop de tentatives : le code a été invalidé, demandez un nouveau code'
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Trop de tentatives : le code a été invalidé, demandez un nouveau code',
+        [AuthenticationStatus.ACCOUNT_RESET]: () => 'Compte réinitialisé : les identifiants d\'usine sont restaurés',
+        [AuthenticationStatus.DATA_RESET]: () => 'Données de la box effacées, redémarrage en cours',
+        [AuthenticationStatus.FACTORY_RESET]: () => 'Box réinitialisée aux réglages d\'usine, redémarrage en cours',
+        [AuthenticationStatus.RESET_SCOPE_MISSING]: () => 'Aucune réinitialisation demandée : choisissez le compte et/ou les données',
+        [AuthenticationStatus.RESET_FAILED]: () => 'La réinitialisation a échoué'
     },
     [Language.EN]: {
         [AuthenticationStatus.SUCCESS]: () => 'Login successful',
@@ -56,7 +61,12 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'Verification code valid',
         [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `Incorrect verification code. ${r.attemptsRemaining} attempt(s) left`,
         [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'Verification code expired or missing, please request a new code',
-        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Too many attempts: the code has been invalidated, please request a new code'
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'Too many attempts: the code has been invalidated, please request a new code',
+        [AuthenticationStatus.ACCOUNT_RESET]: () => 'Account reset: factory credentials restored',
+        [AuthenticationStatus.DATA_RESET]: () => 'Box data erased, restarting',
+        [AuthenticationStatus.FACTORY_RESET]: () => 'Box reset to factory settings, restarting',
+        [AuthenticationStatus.RESET_SCOPE_MISSING]: () => 'No reset requested: select the account and/or the data',
+        [AuthenticationStatus.RESET_FAILED]: () => 'Reset failed'
     },
     [Language.AR]: {
         [AuthenticationStatus.SUCCESS]: () => 'تم تسجيل الدخول بنجاح',
@@ -82,7 +92,12 @@ export const AUTHENTICATION_MESSAGES: Record<Language, Record<AuthenticationStat
         [AuthenticationStatus.VERIFICATION_CODE_VALID]: () => 'رمز التحقق صالح',
         [AuthenticationStatus.VERIFICATION_CODE_INVALID]: (r) => `رمز التحقق غير صحيح. المحاولات المتبقية: ${r.attemptsRemaining}`,
         [AuthenticationStatus.VERIFICATION_CODE_EXPIRED]: () => 'رمز التحقق منتهي الصلاحية أو غير موجود، يرجى طلب رمز جديد',
-        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'محاولات كثيرة جدًا: تم إلغاء الرمز، يرجى طلب رمز جديد'
+        [AuthenticationStatus.VERIFICATION_CODE_TOO_MANY_ATTEMPTS]: () => 'محاولات كثيرة جدًا: تم إلغاء الرمز، يرجى طلب رمز جديد',
+        [AuthenticationStatus.ACCOUNT_RESET]: () => 'تمت إعادة تعيين الحساب: تمت استعادة بيانات الاعتماد الافتراضية',
+        [AuthenticationStatus.DATA_RESET]: () => 'تم مسح بيانات الجهاز، جارٍ إعادة التشغيل',
+        [AuthenticationStatus.FACTORY_RESET]: () => 'تمت إعادة الجهاز إلى إعدادات المصنع، جارٍ إعادة التشغيل',
+        [AuthenticationStatus.RESET_SCOPE_MISSING]: () => 'لم يتم طلب أي إعادة تعيين: اختر الحساب و/أو البيانات',
+        [AuthenticationStatus.RESET_FAILED]: () => 'فشلت إعادة التعيين'
     }
 };
 

@@ -25,7 +25,12 @@ export enum AuthenticationStatus {
     VERIFICATION_CODE_VALID = 'VERIFICATION_CODE_VALID', // box/check/verificationcode : code consommé
     VERIFICATION_CODE_INVALID = 'VERIFICATION_CODE_INVALID',
     VERIFICATION_CODE_EXPIRED = 'VERIFICATION_CODE_EXPIRED', // absent ou expiré
-    VERIFICATION_CODE_TOO_MANY_ATTEMPTS = 'VERIFICATION_CODE_TOO_MANY_ATTEMPTS' // code invalidé
+    VERIFICATION_CODE_TOO_MANY_ATTEMPTS = 'VERIFICATION_CODE_TOO_MANY_ATTEMPTS', // code invalidé
+    ACCOUNT_RESET = 'ACCOUNT_RESET', // box/reset/account account seul : compte recréé avec les identifiants d'usine
+    DATA_RESET = 'DATA_RESET', // data seul : toute la BD hormis le compte effacée, la box redémarre
+    FACTORY_RESET = 'FACTORY_RESET', // account + data : BD entière effacée, la box redémarre
+    RESET_SCOPE_MISSING = 'RESET_SCOPE_MISSING', // ni account ni data demandé
+    RESET_FAILED = 'RESET_FAILED'
 }
 
 // statuts considérés comme une réussite ; tout autre statut est une erreur à afficher
@@ -36,7 +41,10 @@ export const AUTHENTICATION_SUCCESS_STATUSES: ReadonlySet<AuthenticationStatus> 
     AuthenticationStatus.PASSWORD_RESET,
     AuthenticationStatus.ACCOUNT_UPDATED,
     AuthenticationStatus.VERIFICATION_CODE_SENT,
-    AuthenticationStatus.VERIFICATION_CODE_VALID
+    AuthenticationStatus.VERIFICATION_CODE_VALID,
+    AuthenticationStatus.ACCOUNT_RESET,
+    AuthenticationStatus.DATA_RESET,
+    AuthenticationStatus.FACTORY_RESET
 ]);
 
 export class AuthenticationResultModel {

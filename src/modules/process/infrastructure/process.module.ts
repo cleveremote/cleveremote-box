@@ -9,6 +9,8 @@ import { RecoveryCode, RecoveryCodeSchema } from './schemas/recovery-code.schema
 import { RecoveryCodeRepository } from './repositories/recovery-code.repository';
 import { VerificationCode, VerificationCodeSchema } from './schemas/verification-code.schema';
 import { VerificationCodeRepository } from './repositories/verification-code.repository';
+import { BoxResetRepository } from './repositories/box-reset.repository';
+import { BoxResetService } from '@process/domain/services/box-reset.service';
 import { MailService } from '@process/domain/services/mail.service';
 import { SocketIoClientProxyService } from '../../../common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { SocketIoClientProvider } from '../../../common/websocket/socket-io-client.provider';
@@ -92,11 +94,13 @@ import { InverterControlService } from '@process/domain/services/inverter/invert
         AuthenticationRepository,
         RecoveryCodeRepository,
         VerificationCodeRepository,
+        BoxResetRepository,
         ValueRepository,
         EventRepository,
         EventMongooseRepository,
         //---------------------//
         AuthenticationService,
+        BoxResetService,
         MailService,
         // GlobalSettingsService : fourni par ActuatorModule (instance unique)
         SlaveTemplateService,

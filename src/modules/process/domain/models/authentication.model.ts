@@ -50,3 +50,15 @@ export function ToAccountModel(authentication: AuthenticationModel): AccountMode
         lockedUntil: authentication.lockedUntil ?? null
     };
 }
+
+// box/reset/account : identité confirmée par login/password ; account et data combinables (les deux = BD entière)
+export class BoxResetModel {
+    public login: string;
+    // mot de passe actuel en clair
+    public password: string;
+    // true : compte effacé puis recréé avec les identifiants d'usine (login = numéro de série, INITIAL_PASSWORD)
+    public account: boolean;
+    // true : toutes les collections hormis celles du compte effacées, puis redémarrage de la box
+    public data: boolean;
+    public boxId?: string;
+}
