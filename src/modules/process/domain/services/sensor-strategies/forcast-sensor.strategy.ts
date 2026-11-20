@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { SensorType } from '../../interfaces/sensor.interface';
-import { ForcastSensorConfigModel, IsCurrentForcastData, SensorModel } from '../../models/sensor.model';
+import { ForcastDataUnit, ForcastSensorConfigModel, IsCurrentForcastData, SensorModel } from '../../models/sensor.model';
 import { ReadResult, SensorStrategy } from './sensor-strategy.interface';
 import { GlobalSettingsService } from '../global-settings.service';
 import { ResolveCoordinates } from '../sun-event.util';
@@ -32,6 +32,6 @@ export class ForcastSensorStrategy implements SensorStrategy {
         const value = IsCurrentForcastData(forcastData)
             ? Number(response.data.current[forcastData])
             : Number(response.data.daily[forcastData][1]);
-        return [{ value, isFormated: true, unit: '°C', name: sensor.name }];
+        return [{ value, isFormated: true, unit: ForcastDataUnit(forcastData), name: sensor.name }];
     }
 }

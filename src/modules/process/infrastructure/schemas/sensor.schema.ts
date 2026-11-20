@@ -42,6 +42,10 @@ export class SensorConfig {
     @Prop({ enum: forcastDataName })
     public forcastData?: forcastDataName;
 
+    // FORCAST : unité de la donnée météo, déduite de forcastData
+    @Prop()
+    public unit?: string;
+
     // COM : DeviceCommand (register map)
     @Prop()
     public commandId?: string;

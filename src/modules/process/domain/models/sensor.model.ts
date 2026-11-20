@@ -55,10 +55,21 @@ export enum forcastDataName {
 // donnée FORCAST lue sur l'instant (open-meteo `current`) plutôt qu'en prévision J+1
 export const IsCurrentForcastData = (data: forcastDataName): boolean => data === forcastDataName.TEMPERATURE_2M;
 
+// unité de chaque donnée FORCAST, fixée par open-meteo (pas de conversion côté box)
+export const FORCAST_DATA_UNITS: Record<forcastDataName, string> = {
+  [forcastDataName.TEMPERATURE_2M]: '°C',
+  [forcastDataName.TEMPERATURE_2M_MAX]: '°C',
+  [forcastDataName.TEMPERATURE_2M_MIN]: '°C'
+};
+
+export const ForcastDataUnit = (data: forcastDataName): string | undefined => FORCAST_DATA_UNITS[data];
+
 
 export class ForcastSensorConfigModel {
     public cronPattern: string;
     public forcastData: forcastDataName;
+    // déduite de forcastData (cf. ForcastDataUnit), jamais saisie par le front
+    public unit?: string;
 }
 
 // Resume du modele (SlaveTemplate) proprietaire de la DeviceCommand d'un sensor COM
