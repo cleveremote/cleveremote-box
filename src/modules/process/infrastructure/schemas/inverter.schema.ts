@@ -2,7 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { DeviceKind } from '@process/domain/models/device.model';
-import { InverterMode, InverterRole } from '@process/domain/models/inverter.model';
+import { AnalogSignalType } from '@process/domain/models/sensor.model';
+import { InverterAnalogSignalType, InverterMode, InverterRole } from '@process/domain/models/inverter.model';
 
 @Schema({ _id: false })
 export class InverterParameter {
@@ -25,6 +26,39 @@ export class InverterParameter {
     public isPersistent: boolean;
 }
 export const InverterParameterSchema = SchemaFactory.createForClass(InverterParameter);
+
+// caractéristique du capteur d'une entrée analogique (cf. InverterAnalogSensorModel)
+@Schema({ _id: false })
+export class InverterAnalogSensor {
+    @Prop({ type: String, required: true, enum: [AnalogSignalType.VOLTAGE, AnalogSignalType.CURRENT] })
+    public signalType: InverterAnalogSignalType;
+
+    @Prop({ type: Number, required: true })
+    public inputMin: number;
+
+    @Prop({ type: Number, required: true })
+    public inputMax: number;
+
+    @Prop({ type: Number, required: true })
+    public outputMin: number;
+
+    @Prop({ type: Number, required: true })
+    public outputMax: number;
+
+    @Prop({ type: String, required: true })
+    public unit: string;
+}
+export const InverterAnalogSensorSchema = SchemaFactory.createForClass(InverterAnalogSensor);
+
+@Schema({ _id: false })
+export class InverterAnalogInputs {
+    @Prop({ type: InverterAnalogSensorSchema, default: undefined })
+    public AI1?: InverterAnalogSensor;
+
+    @Prop({ type: InverterAnalogSensorSchema, default: undefined })
+    public AI2?: InverterAnalogSensor;
+}
+export const InverterAnalogInputsSchema = SchemaFactory.createForClass(InverterAnalogInputs);
 
 export type InverterDocument = Inverter & Document;
 
@@ -51,6 +85,9 @@ export class Inverter {
 
     @Prop({ type: [InverterParameterSchema], default: [] })
     public parameters: InverterParameter[];
+
+    @Prop({ type: InverterAnalogInputsSchema, default: () => ({}) })
+    public analogInputs: InverterAnalogInputs;
 
     @Prop()
     public manualSensorId?: string;

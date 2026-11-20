@@ -6,7 +6,7 @@ import { InverterChange, InverterRepository } from '@process/infrastructure/repo
 import { InverterConfigParam } from '../../models/device-command.model';
 import { InverterEventDetail, ProcessEventKind } from '../../models/event.model';
 import {
-    InverterDirective, InverterMode, InverterModel, InverterRole, InverterRuntimeState
+    InverterAnalogSensorModel, InverterDirective, InverterMode, InverterModel, InverterRole, InverterRuntimeState
 } from '../../models/inverter.model';
 import { SensorValueModel } from '../../models/sensor-value.model';
 import { ProcessValueModel } from '../../models/proccess-value.model';
@@ -14,6 +14,7 @@ import { DeviceCommandService } from '../device-command.service';
 import { TriggerService } from '../trigger.service';
 import { InverterProfile, InverterModeWrite } from './profiles/inverter-profile.interface';
 import { ResolveInverterProfile } from './profiles/inverter-profile.resolver';
+import { PidFeedbackSensorOf, TargetToPercent } from './inverter-analog.util';
 
 // lectures identiques consécutives de l'état des entrées X avant de changer d'état manuel / auto
 const MANUAL_DEBOUNCE_READINGS = 2;
@@ -144,7 +145,7 @@ export class InverterControlService implements OnModuleDestroy {
         state.directive = { ...directive };
         state.ownerSequenceName = sequenceName;
         if (state.isManual) {
-            this._emit(ProcessEventKind.INVERTER_DIRECTIVE_IGNORED, inverter, this._detail(directive, sequenceId, sequenceName));
+            this._emit(ProcessEventKind.INVERTER_DIRECTIVE_IGNORED, inverter, this._detail(inverter, directive, sequenceId, sequenceName));
             return;
         }
         await this._reconcile(inverterId);
@@ -281,7 +282,8 @@ export class InverterControlService implements OnModuleDestroy {
             isChanged = (await this._write(inverter, state, write)) || isChanged;
         }
         if (isChanged) {
-            this._emit(ProcessEventKind.INVERTER_MODE_CHANGED, inverter, this._detail(directive, state.ownerSequenceId, state.ownerSequenceName));
+            this._emit(ProcessEventKind.INVERTER_MODE_CHANGED, inverter,
+                this._detail(inverter, directive, state.ownerSequenceId, state.ownerSequenceName));
         }
     }
 
@@ -297,20 +299,44 @@ export class InverterControlService implements OnModuleDestroy {
         } else if (directive.mode === InverterMode.RS485) {
             this.logger.warn({ inverterId: inverter._id }, 'RS485 directive without frequency, setpoint unchanged');
         }
-        if (directive.mode === InverterMode.PID && directive.pidSetpoint !== undefined) {
-            writes.push({ role: InverterRole.PID_SETPOINT, value: this._toRaw(profile, InverterRole.PID_SETPOINT, directive.pidSetpoint) });
+        const pidSetpoint = directive.mode === InverterMode.PID ? this._pidSetpointOf(inverter, profile, directive) : undefined;
+        if (pidSetpoint !== undefined) {
+            writes.push({ role: InverterRole.PID_SETPOINT, value: this._toRaw(profile, InverterRole.PID_SETPOINT, pidSetpoint) });
         }
         return [...writes, ...(profile.modes[directive.mode] ?? [])];
     }
 
+    // consigne PID (%) : pidTarget (unité du capteur de retour) convertie par sa caractéristique, sinon pidSetpoint
+    private _pidSetpointOf(inverter: InverterModel, profile: InverterProfile, directive: InverterDirective): number | undefined {
+        if (directive.pidTarget === undefined) return directive.pidSetpoint;
+        const sensor = PidFeedbackSensorOf(profile, inverter);
+        const percent = sensor && this._tryTargetToPercent(sensor, directive.pidTarget);
+        if (percent === undefined) {
+            this.logger.warn({ inverterId: inverter._id, pidTarget: directive.pidTarget },
+                'PID target not converted (no valid feedback sensor characteristic), fallback on pidSetpoint');
+            return directive.pidSetpoint;
+        }
+        return percent;
+    }
+
+    private _tryTargetToPercent(sensor: InverterAnalogSensorModel, target: number): number | undefined {
+        try {
+            return TargetToPercent(sensor, target);
+        } catch {
+            return undefined;
+        }
+    }
+
+    // capteur du retour PID d'une directive en unité capteur (undefined sans pidTarget ou sans caractéristique)
+    private _pidTargetSensorOf(inverter: InverterModel, directive: InverterDirective): InverterAnalogSensorModel | undefined {
+        const profile = ResolveInverterProfile(inverter.profile);
+        return profile && directive.mode === InverterMode.PID && directive.pidTarget !== undefined
+            ? PidFeedbackSensorOf(profile, inverter) : undefined;
+    }
+
     // valeur physique (Hz, %) -> valeur brute de la saisie du set (échelle de la register map)
     private _toRaw(profile: InverterProfile, role: InverterRole, value: number): number {
-        const ref = profile.roles[role];
-        const template = this.deviceCommandService.getTemplate(profile.kind);
-        const input = template.registerMap.find((block) => block.id === ref.blockId)
-            ?.operations.find((operation) => operation.id === ref.operationId)?.input;
-        const scale = input?.type === 'number' ? input.scale ?? 1 : 1;
-        return Math.round(value / scale);
+        return this.deviceCommandService.toRawInputOf(profile.kind, profile.roles[role], value);
     }
 
     // écriture RAM d'un rôle ; true si écrite
@@ -351,11 +377,14 @@ export class InverterControlService implements OnModuleDestroy {
         }
     }
 
-    private _detail(directive: InverterDirective, sequenceId?: string, sequenceName?: string): InverterEventDetail {
+    private _detail(inverter: InverterModel, directive: InverterDirective, sequenceId?: string, sequenceName?: string): InverterEventDetail {
+        const sensor = this._pidTargetSensorOf(inverter, directive);
+        const pidSetpoint = sensor ? this._tryTargetToPercent(sensor, directive.pidTarget) ?? directive.pidSetpoint : directive.pidSetpoint;
         return {
             mode: directive.mode,
             ...(directive.frequency !== undefined && { frequency: directive.frequency }),
-            ...(directive.pidSetpoint !== undefined && { pidSetpoint: directive.pidSetpoint }),
+            ...(pidSetpoint !== undefined && { pidSetpoint: Math.round(pidSetpoint * 10) / 10 }),
+            ...(sensor && { pidTarget: directive.pidTarget, pidUnit: sensor.unit }),
             ...(sequenceId && { sequenceId }),
             ...(sequenceName && { sequenceName })
         };

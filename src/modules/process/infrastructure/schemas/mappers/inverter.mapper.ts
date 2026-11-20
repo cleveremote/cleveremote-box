@@ -1,4 +1,6 @@
-import { InverterMode, InverterModel, InverterParameterModel } from '@process/domain/models/inverter.model';
+import {
+    InverterAnalogInput, InverterAnalogSensorModel, InverterMode, InverterModel, InverterParameterModel
+} from '@process/domain/models/inverter.model';
 import { Inverter, InverterDocument } from '../inverter.schema';
 
 export class InverterMapper {
@@ -19,6 +21,7 @@ export class InverterMapper {
             ...(parameter.value !== undefined && parameter.value !== null && { value: parameter.value }),
             isPersistent: parameter.isPersistent ?? true
         }));
+        model.analogInputs = InverterMapper._analogInputs(inverter.analogInputs);
         model.manualSensorId = inverter.manualSensorId;
         model.defaultMode = inverter.defaultMode ?? InverterMode.PID;
         model.releaseGraceMs = inverter.releaseGraceMs ?? 3000;
@@ -43,10 +46,23 @@ export class InverterMapper {
                 ...(parameter.value !== undefined && { value: parameter.value }),
                 isPersistent: parameter.isPersistent ?? true
             })),
+            analogInputs: InverterMapper._analogInputs(model.analogInputs),
             manualSensorId: model.manualSensorId,
             defaultMode: model.defaultMode ?? InverterMode.PID,
             releaseGraceMs: model.releaseGraceMs ?? 3000
         };
+    }
+
+    // entrées sans caractéristique : clés absentes (pas undefined / null)
+    private static _analogInputs(analogInputs?: Partial<Record<InverterAnalogInput, InverterAnalogSensorModel>>): InverterModel['analogInputs'] {
+        const result: InverterModel['analogInputs'] = {};
+        for (const input of Object.values(InverterAnalogInput)) {
+            const sensor = analogInputs?.[input];
+            if (!sensor) continue;
+            const { signalType, inputMin, inputMax, outputMin, outputMax, unit } = sensor;
+            result[input] = Object.assign(new InverterAnalogSensorModel(), { signalType, inputMin, inputMax, outputMin, outputMax, unit });
+        }
+        return result;
     }
 
 }

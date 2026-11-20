@@ -37,7 +37,9 @@ import { ActuatorRepository } from '@process/infrastructure/repositories/actuato
 import { ControlLoopMode, ControlLoopModel } from '../models/control-loop.model';
 import { ControlLoopRepository } from '@process/infrastructure/repositories/control-loop.repository';
 import { RegulationService } from './regulation.service';
-import { InverterModel } from '../models/inverter.model';
+import { InverterAnalogInput, InverterAnalogSensorModel, InverterModel } from '../models/inverter.model';
+import { AnalogCurveValuesOf, AssertAnalogSensor } from './inverter/inverter-analog.util';
+import { ResolveInverterProfile } from './inverter/profiles/inverter-profile.resolver';
 import { InverterRepository } from '@process/infrastructure/repositories/inverter.repository';
 import { ElementNotFoundExeception } from '../errors/db-errors';
 import { AUTO_CREATED_ONLY_CYCLE_TYPES } from '../interfaces/executable.interface';
@@ -197,6 +199,7 @@ export class SynchronizeService {
         for (const update of model.parameters ?? []) {
             this._updateInverterParameter(inverter, update);
         }
+        this._updateInverterAnalogInputs(inverter, model.analogInputs);
         const saved = await this.inverterRepository.save(inverter);
         await this.configurationService.refreshInverters();
         return saved;
@@ -214,6 +217,32 @@ export class SynchronizeService {
             parameter.value = update.value ?? undefined;
         }
         parameter.isPersistent = update.isPersistent ?? parameter.isPersistent;
+    }
+
+    /**
+     * Caractéristiques des capteurs AI1 / AI2 (null : supprimée) ; chacune est reportée dans la courbe de son entrée
+     * (tension basse / haute ↔ 0 % / 100 %, valeurs imposées des paramètres, prioritaires sur une saisie directe).
+     * Caractéristique invalide ou tension hors de la saisie du variateur : erreur codée, rien n'est enregistré.
+     */
+    private _updateInverterAnalogInputs(inverter: InverterModel, analogInputs: SynchronizeInverterModel['analogInputs']): void {
+        if (!analogInputs) return;
+        const profile = ResolveInverterProfile(inverter.profile);
+        inverter.analogInputs = { ...(inverter.analogInputs ?? {}) };
+        for (const [input, sensor] of Object.entries(analogInputs) as [InverterAnalogInput, InverterAnalogSensorModel | null][]) {
+            if (sensor === undefined) continue;
+            if (sensor === null) {
+                delete inverter.analogInputs[input];
+                continue;
+            }
+            AssertAnalogSensor(sensor);
+            if (profile) {
+                for (const [blockId, value] of Object.entries(AnalogCurveValuesOf(profile, input, sensor))) {
+                    const raw = this.deviceCommandService.toRawInputOf(inverter.profile, { blockId, operationId: 'set' }, value);
+                    this._updateInverterParameter(inverter, { blockId, value: raw });
+                }
+            }
+            inverter.analogInputs[input] = sensor;
+        }
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {

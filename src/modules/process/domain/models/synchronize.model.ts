@@ -4,7 +4,7 @@ import { DeviceModel } from './device.model';
 import { DeviceCommandModel } from './device-command.model';
 import { ActuatorModel } from './actuator.model';
 import { ControlLoopModel } from './control-loop.model';
-import { InverterMode } from './inverter.model';
+import { InverterAnalogInput, InverterAnalogSensorModel, InverterMode } from './inverter.model';
 import { ScheduleModel } from './schedule.model';
 import { SensorModel } from './sensor.model';
 import { SequenceModel } from './sequence.model';
@@ -64,5 +64,7 @@ export class SynchronizeInverterModel {
     public releaseGraceMs?: number;
     // valeur imposée par paramètre (null : plus imposée) ; paramètres inconnus ignorés
     public parameters?: { blockId: string; value?: number | null; isPersistent?: boolean }[];
+    // caractéristique par entrée (null : supprimée) ; entrées absentes inchangées
+    public analogInputs?: Partial<Record<InverterAnalogInput, InverterAnalogSensorModel | null>>;
     public delete?: boolean = false;
 }

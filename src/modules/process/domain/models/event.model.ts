@@ -37,7 +37,11 @@ export const STATUSLESS_EVENT_KINDS: readonly ProcessEventKind[] = [ProcessEvent
 export class InverterEventDetail {
     public mode?: string;
     public frequency?: number;
+    // consigne PID en % (écrite dans F11.01)
     public pidSetpoint?: number;
+    // consigne dans l'unité du capteur de retour (pidUnit), quand la directive en porte une
+    public pidTarget?: number;
+    public pidUnit?: string;
     public sequenceId?: string;
     public sequenceName?: string;
 }

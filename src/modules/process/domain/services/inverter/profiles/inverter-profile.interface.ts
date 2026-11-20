@@ -1,5 +1,5 @@
 import { DeviceKind } from '@process/domain/models/device.model';
-import { InverterMode, InverterRole } from '@process/domain/models/inverter.model';
+import { InverterAnalogInput, InverterMode, InverterRole } from '@process/domain/models/inverter.model';
 
 // Bloc / opération de la register map tenant un rôle
 export interface InverterRoleRef {
@@ -11,6 +11,21 @@ export interface InverterRoleRef {
 export interface InverterModeWrite {
     role: InverterRole;
     value: number;
+}
+
+// Blocs de la courbe d'une entrée analogique : tension basse / haute ↔ consigne (%) basse / haute
+export interface InverterAnalogCurve {
+    lowVoltage: string;
+    lowPercent: string;
+    highVoltage: string;
+    highPercent: string;
+}
+
+// Source du retour PID : bloc qui la choisit, entrée analogique par valeur, valeur d'usine (bloc non imposé)
+export interface InverterPidSource {
+    blockId: string;
+    inputs: Record<number, InverterAnalogInput>;
+    defaultValue: number;
 }
 
 /**
@@ -30,4 +45,9 @@ export interface InverterProfile {
     inputsField: string;
     // bits de inputsField signifiant le mode manuel (au moins un actif)
     manualInputMask: number;
+    // courbe de chaque entrée analogique (caractéristique du capteur reportée)
+    analogCurves: Record<InverterAnalogInput, InverterAnalogCurve>;
+    pidSource: InverterPidSource;
+    // tension équivalente d'1 mA sur une entrée en courant (bornes de la courbe toujours exprimées en V)
+    voltsPerMilliAmp: number;
 }

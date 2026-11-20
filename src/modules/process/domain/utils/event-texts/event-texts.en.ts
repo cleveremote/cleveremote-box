@@ -143,7 +143,10 @@ export const EN_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Sequence ${name} skipped: conditions not met${ConditionList(data)}`,
         [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `Inverter ${name} set to ${data.inverter?.mode ?? ''}` +
             (data.inverter?.frequency !== undefined ? ` at ${data.inverter.frequency} Hz` : '') +
-            (data.inverter?.pidSetpoint !== undefined ? `, setpoint ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.pidTarget !== undefined
+                ? `, setpoint ${data.inverter.pidTarget} ${data.inverter.pidUnit ?? ''}`.trimEnd()
+                    + (data.inverter.pidSetpoint !== undefined ? ` (${data.inverter.pidSetpoint} %)` : '')
+                : data.inverter?.pidSetpoint !== undefined ? `, setpoint ${data.inverter.pidSetpoint}` : '') +
             (data.inverter?.sequenceName ? ` (sequence ${Quote(data.inverter.sequenceName)})` : ' (default mode)'),
         [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `Inverter ${name} switched to manual: sequence directives ignored`,
         [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `Inverter ${name} back to auto mode`,

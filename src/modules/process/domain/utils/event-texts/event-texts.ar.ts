@@ -144,7 +144,10 @@ export const AR_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `تم تخطي التسلسل ${name}: الشروط غير مستوفاة${ConditionList(data)}`,
         [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `المحول ${name} في وضع ${data.inverter?.mode ?? ''}` +
             (data.inverter?.frequency !== undefined ? ` بتردد ${data.inverter.frequency} هرتز` : '') +
-            (data.inverter?.pidSetpoint !== undefined ? `، القيمة المرجعية ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.pidTarget !== undefined
+                ? `، القيمة المرجعية ${data.inverter.pidTarget} ${data.inverter.pidUnit ?? ''}`.trimEnd()
+                    + (data.inverter.pidSetpoint !== undefined ? ` (${data.inverter.pidSetpoint} %)` : '')
+                : data.inverter?.pidSetpoint !== undefined ? `، القيمة المرجعية ${data.inverter.pidSetpoint}` : '') +
             (data.inverter?.sequenceName ? ` (التسلسل ${Quote(data.inverter.sequenceName)})` : ' (الوضع الافتراضي)'),
         [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `المحول ${name} في الوضع اليدوي: تم تجاهل توجيهات التسلسلات`,
         [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `عاد المحول ${name} إلى الوضع التلقائي`,

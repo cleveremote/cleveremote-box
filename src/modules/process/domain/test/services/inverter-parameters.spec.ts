@@ -6,7 +6,12 @@ import { SynchronizeService } from '@process/domain/services/synchronize.service
 import { BuildInverterParameters } from '@process/domain/services/slave-provisioning/auto-creation/strategies/inverter-auto-creation.strategy';
 import { VEICHI_SI23_PROFILE } from '@process/domain/services/inverter/profiles/veichi-si23.profile';
 import { DeviceKind, DeviceModel, DeviceType, SlaveTemplate } from '@process/domain/models/device.model';
-import { InverterModel, InverterParameterModel } from '@process/domain/models/inverter.model';
+import {
+    InverterAnalogInput, InverterAnalogSensorModel, InverterMode, InverterModel, InverterParameterModel, InverterRole
+} from '@process/domain/models/inverter.model';
+import { AnalogSignalType } from '@process/domain/models/sensor.model';
+import { InverterControlService } from '@process/domain/services/inverter/inverter-control.service';
+import { InverterModeWrite } from '@process/domain/services/inverter/profiles/inverter-profile.interface';
 import { BoxErrorCode } from '@framework/errors/box-error';
 import { RegisterMapTemplate } from '@register-map/domain/models/register-map.model';
 import { RegisterMapService } from '@register-map/domain/services/register-map.service';
@@ -46,6 +51,11 @@ function CreateInverter(parameters: InverterParameterModel[]): InverterModel {
         _id: 'inverter-1', name: 'SI23', deviceId: DEVICE_ID, profile: DeviceKind.INVERTER_VEICHI_SI23_V1, parameters
     });
 }
+
+// capteur de pression 0,5..4,5 V ↔ 0..10 bar
+const PRESSURE_SENSOR: InverterAnalogSensorModel = Object.assign(new InverterAnalogSensorModel(), {
+    signalType: AnalogSignalType.VOLTAGE, inputMin: 0.5, inputMax: 4.5, outputMin: 0, outputMax: 10, unit: 'bar'
+});
 
 describe('Inverter parameters', () => {
     let deviceCommandService: DeviceCommandService;
@@ -170,10 +180,83 @@ describe('Inverter parameters', () => {
             expect(saved.parameters.find((p) => p.blockId === 'F00.09').value).toBeUndefined();
         });
 
+        it('should store the AI1 sensor and impose its curve (0,5 V ↔ 0 %, 4,5 V ↔ 100 %)', async () => {
+            const saved = await service.synchronizeInverter({ _id: 'inverter-1', analogInputs: { [InverterAnalogInput.AI1]: PRESSURE_SENSOR } });
+
+            expect(saved.analogInputs.AI1).toEqual(PRESSURE_SENSOR);
+            const value = (blockId: string): number => saved.parameters.find((p) => p.blockId === blockId).value;
+            expect([value('F03.00'), value('F03.01'), value('F03.02'), value('F03.03')]).toEqual([50, 0, 450, 10000]);
+            expect(value('F03.06')).toBeUndefined();
+        });
+
+        it('should report a 4-20 mA sensor on AI2 as 2-10 V', async () => {
+            const sensor = { ...PRESSURE_SENSOR, signalType: AnalogSignalType.CURRENT as const, inputMin: 4, inputMax: 20 };
+            const saved = await service.synchronizeInverter({ _id: 'inverter-1', analogInputs: { [InverterAnalogInput.AI2]: sensor } });
+
+            const value = (blockId: string): number => saved.parameters.find((p) => p.blockId === blockId).value;
+            expect([value('F03.06'), value('F03.07'), value('F03.08'), value('F03.09')]).toEqual([200, 0, 1000, 10000]);
+        });
+
+        it('should remove a sensor with null and keep the others', async () => {
+            inverterRepository.get.mockResolvedValue(Object.assign(CreateInverter(parameters.map((p) => ({ ...p }))),
+                { analogInputs: { AI1: PRESSURE_SENSOR, AI2: PRESSURE_SENSOR } }));
+
+            const saved = await service.synchronizeInverter({ _id: 'inverter-1', analogInputs: { [InverterAnalogInput.AI2]: null } });
+
+            expect(saved.analogInputs).toEqual({ AI1: PRESSURE_SENSOR });
+        });
+
+        it('should reject a sensor whose voltage exceeds the AI range without saving', async () => {
+            const sensor = { ...PRESSURE_SENSOR, inputMax: 24 };
+            await expect(service.synchronizeInverter({ _id: 'inverter-1', analogInputs: { [InverterAnalogInput.AI1]: sensor } }))
+                .rejects.toMatchObject({ code: BoxErrorCode.VALUE_OUT_OF_RANGE });
+            expect(inverterRepository.save).not.toHaveBeenCalled();
+        });
+
+        it('should reject a degenerate sensor range', async () => {
+            const sensor = { ...PRESSURE_SENSOR, inputMax: 0.5 };
+            await expect(service.synchronizeInverter({ _id: 'inverter-1', analogInputs: { [InverterAnalogInput.AI1]: sensor } }))
+                .rejects.toMatchObject({ code: BoxErrorCode.ANALOG_RANGE_DEGENERATE });
+        });
+
         it('should reject an out of range value without saving', async () => {
             await expect(service.synchronizeInverter({ _id: 'inverter-1', parameters: [{ blockId: 'F03.02', value: 5000 }] }))
                 .rejects.toMatchObject({ code: BoxErrorCode.VALUE_OUT_OF_RANGE });
             expect(inverterRepository.save).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('InverterControlService PID target', () => {
+        let logger: { warn: jest.Mock; log: jest.Mock };
+        let service: InverterControlService;
+        const writesFor = (inverter: InverterModel, directive: object): InverterModeWrite[] =>
+            (service as unknown as { _writesFor: (...a: unknown[]) => InverterModeWrite[] })._writesFor(inverter, VEICHI_SI23_PROFILE, directive);
+        const pidWrite = (writes: InverterModeWrite[]): number | undefined => writes.find((w) => w.role === InverterRole.PID_SETPOINT)?.value;
+
+        beforeEach(() => {
+            logger = { warn: jest.fn(), log: jest.fn() };
+            service = new InverterControlService(deviceCommandService, {} as never, {} as never, logger as never);
+        });
+
+        it('should convert a target in sensor unit to the PID setpoint (3 bar -> 30,0 %)', () => {
+            const inverter = Object.assign(CreateInverter(parameters.map((p) => ({ ...p }))), { analogInputs: { AI1: PRESSURE_SENSOR } });
+
+            expect(pidWrite(writesFor(inverter, { mode: InverterMode.PID, pidTarget: 3 }))).toBe(300);
+        });
+
+        it('should use the AI2 sensor when F11.03 selects AI2 and clamp to the sensor range', () => {
+            const inverter = Object.assign(CreateInverter(parameters.map((p) => (p.blockId === 'F11.03' ? { ...p, value: 3 } : { ...p }))),
+                { analogInputs: { AI1: PRESSURE_SENSOR, AI2: { ...PRESSURE_SENSOR, outputMax: 6 } } });
+
+            expect(pidWrite(writesFor(inverter, { mode: InverterMode.PID, pidTarget: 3 }))).toBe(500);
+            expect(pidWrite(writesFor(inverter, { mode: InverterMode.PID, pidTarget: 12 }))).toBe(1000);
+        });
+
+        it('should fall back on pidSetpoint without sensor characteristic', () => {
+            const inverter = CreateInverter(parameters.map((p) => ({ ...p })));
+
+            expect(pidWrite(writesFor(inverter, { mode: InverterMode.PID, pidTarget: 3, pidSetpoint: 40 }))).toBe(400);
+            expect(logger.warn).toHaveBeenCalled();
         });
     });
 });

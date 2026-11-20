@@ -77,6 +77,10 @@ export class SequenceInverterDirective {
 
     @Prop({ type: Number, default: undefined })
     public pidSetpoint?: number;
+
+    // consigne dans l'unité du capteur de retour PID
+    @Prop({ type: Number, default: undefined })
+    public pidTarget?: number;
 }
 export const SequenceInverterDirectiveSchema = SchemaFactory.createForClass(SequenceInverterDirective);
 

@@ -190,6 +190,16 @@ export class DeviceCommandService {
         RegisterValueEncoder.encode(template, operation, value);
     }
 
+    /**
+     * Valeur physique (unité de la saisie, ex: Hz, V, %) -> valeur brute de la saisie numérique de l'opération
+     * (échelle de la register map, ex: scale 0.01 : 4,5 V -> 450) ; saisie non numérique : valeur arrondie telle quelle.
+     */
+    public toRawInputOf(kind: string, command: Pick<DeviceCommandModel, 'blockId' | 'operationId'>, value: number): number {
+        const { operation } = this.registerMapService.findOperation(this.getTemplate(kind), command.blockId, command.operationId);
+        const scale = operation.input?.type === 'number' ? operation.input.scale ?? 1 : 1;
+        return Math.round(value / scale);
+    }
+
     /** Plage [min, max] de la saisie numérique de l'opération (ex: consigne analogique en mV) ; undefined si non numérique */
     public async numberRange(commandId: string, deviceId: string): Promise<{ min: number; max: number } | undefined> {
         const { command, template } = await this._resolve(commandId, deviceId);
