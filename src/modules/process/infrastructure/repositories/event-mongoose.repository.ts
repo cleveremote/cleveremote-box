@@ -54,8 +54,11 @@ export class EventMongooseRepository {
         return event ? EventMapper.mapToModel(event) : null;
     }
 
-    // runIds des runs ayant au moins un event correspondant au filtre, du plus recent au plus ancien ;
-    // outcomes : filtre applique avant le $limit, sur l'etat calcule a partir de tous les events du run
+    // runIds des runs ayant au moins un event correspondant au filtre, du plus recent au plus ancien
+    // (requestedAt = premier event du run dans le filtre, puis runId decroissant a date egale : ordre total) ;
+    // outcomes : filtre applique avant le $limit, sur l'etat calcule a partir de tous les events du run ;
+    // afterRunId : page suivante, runs situes apres ce run dans cet ordre. Sa cle de tri est recalculee
+    // ici avec le meme filtre (le requestedAt du CycleRunModel, tout le run, peut differer)
     public async findRunIds(filter: RunIdsFilter): Promise<string[]> {
         const match: FilterQuery<EventDocument> = { 'additionalData.runId': { $exists: true, $ne: null } };
         if (filter.elementIds) {
@@ -64,11 +67,32 @@ export class EventMongooseRepository {
         if (filter.startDate && filter.endDate) {
             match.date = { $gte: filter.startDate, $lte: filter.endDate };
         }
+        const group: PipelineStage = { $group: { _id: '$additionalData.runId', requestedAt: { $min: '$date' } } };
+        let afterStages: PipelineStage[] = [];
+        if (filter.afterRunId) {
+            const [cursor] = await this.eventModel.aggregate<{ requestedAt: Date }>([
+                { $match: { ...match, 'additionalData.runId': filter.afterRunId } },
+                group
+            ]);
+            // run du curseur absent (purge entre deux pages) : fin de liste
+            if (!cursor) {
+                return [];
+            }
+            afterStages = [{
+                $match: {
+                    $or: [
+                        { requestedAt: { $lt: cursor.requestedAt } },
+                        { requestedAt: cursor.requestedAt, _id: { $lt: filter.afterRunId } }
+                    ]
+                }
+            }];
+        }
         const pipeline: PipelineStage[] = [
             { $match: match },
-            { $group: { _id: '$additionalData.runId', requestedAt: { $min: '$date' } } },
+            group,
+            ...afterStages,
             ...(filter.outcomes?.length ? this._outcomeStages(filter.outcomes) : []),
-            { $sort: { requestedAt: -1 } },
+            { $sort: { requestedAt: -1, _id: -1 } },
             ...(filter.limit ? [{ $limit: filter.limit }] : [])
         ];
         const runs = await this.eventModel.aggregate<{ _id: string }>(pipeline);

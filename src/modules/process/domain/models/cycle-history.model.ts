@@ -14,7 +14,10 @@ export enum RunOutcome {
 }
 
 // selection des runs (box/fetch/events) ; elementIds absent : tous les cycles ; outcomes absent : tous les etats
-export type RunIdsFilter = { elementIds?: string[]; startDate?: Date; endDate?: Date; outcomes?: RunOutcome[]; limit?: number };
+// afterRunId : pagination, runs suivant ce run (dernier recu par le front) dans l'ordre de tri
+export type RunIdsFilter = {
+    elementIds?: string[]; startDate?: Date; endDate?: Date; outcomes?: RunOutcome[]; limit?: number; afterRunId?: string;
+};
 
 export class RunTimelineEntryModel {
     public date: Date;

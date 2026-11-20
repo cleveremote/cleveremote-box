@@ -204,9 +204,11 @@ export class StructureService {
     // cycle ou deviceId absent (tous cycles) : runs (events du cycle et de ses sequences) ; capteur / sequence : events bruts
     // startDate + endDate : filtre de periode ; outcomes : filtre d'etat des runs (absent / vide = tous)
     // limit : nombre max de runs / events (defaut : LAST_EVENTS_LIMIT sans periode, aucune limite avec une periode)
+    // afterRunId : page suivante des runs (runs plus anciens que ce run) ; ignore pour un capteur / une sequence
     // messages du journal recalcules dans query.lang (historique compris)
     public async getEvents(query: {
-        deviceId?: string; startDate?: string; endDate?: string; outcomes?: RunOutcome[]; limit?: number; lang?: string;
+        deviceId?: string; startDate?: string; endDate?: string; outcomes?: RunOutcome[]; limit?: number; afterRunId?: string;
+        lang?: string;
     }): Promise<EventModel[] | CycleRunModel[]> {
         const range = query.startDate && query.endDate
             ? { startDate: new Date(query.startDate), endDate: new Date(query.endDate) }
@@ -221,7 +223,9 @@ export class StructureService {
         }
         const elementIds = cycle ? [cycle._id, ...(cycle.sequences ?? []).map((seq) => seq._id)] : undefined;
         const outcomes = query.outcomes?.length ? query.outcomes : undefined;
-        const runIds = await this.eventRepository.getRunIds({ elementIds, ...range, outcomes, limit });
+        const runIds = await this.eventRepository.getRunIds({
+            elementIds, ...range, outcomes, limit, ...(query.afterRunId && { afterRunId: query.afterRunId })
+        });
         return this._getRuns(runIds, query.lang);
     }
 

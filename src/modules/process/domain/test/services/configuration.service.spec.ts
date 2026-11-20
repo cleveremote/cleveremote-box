@@ -368,6 +368,14 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             });
         });
 
+        it('should forward afterRunId to fetch the next page of runs', async () => {
+            await service.getEvents({ startDate: '2024-01-01', endDate: '2024-01-31', limit: 20, afterRunId: 'run-9' });
+
+            expect(eventRepository.getRunIds).toHaveBeenCalledWith({
+                elementIds: undefined, startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), limit: 20, afterRunId: 'run-9'
+            });
+        });
+
         it('should return the last runs of all cycles when no parameter is given', async () => {
             const started = { _id: 'e1', elementId: 'cycle-2', elementType: 'CYCLE', date: new Date('2024-01-01T00:00:00Z'),
                 additionalData: { type: 'MANUAL', kind: 'CYCLE_STARTED', runId: 'run-2' } };

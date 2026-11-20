@@ -3,7 +3,7 @@ import { CycleRunModel, RunOutcome } from '@process/domain/models/cycle-history.
 import { StructureService } from '@process/domain/services/configuration.service';
 
 export type EventFetchQuery = {
-    deviceId?: string; startDate?: string; endDate?: string; outcomes?: RunOutcome[]; limit?: number; lang?: string;
+    deviceId?: string; startDate?: string; endDate?: string; outcomes?: RunOutcome[]; limit?: number; afterRunId?: string; lang?: string;
 };
 
 export class EventFetchUC {
