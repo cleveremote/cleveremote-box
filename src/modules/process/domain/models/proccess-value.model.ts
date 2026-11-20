@@ -10,4 +10,7 @@ export class ProcessValueModel {
     public duration?: number;
     public causes?: { type: CauseType; cause: string }[];
     public lastEvent?: ProcessLastEventModel;
+    // cycle PROPORTIONAL uniquement : ouverture (%) commandee par le cycle a sa vanne, 0 a l'arret ; compare par
+    // les conditions numeriques (cf. evaluateConditions). Pas `value` : reserve aux SensorValueModel (detection capteur)
+    public percent?: number;
 }

@@ -68,6 +68,10 @@ export class StructureService {
     }
 
     public async getStructure(): Promise<StructureModel> {
+        // etat d'execution en memoire avant rechargement (absent au boot) : cf. _restoreProcessStatus
+        const previousExecutables = new Map<string, CycleModel | SequenceModel>(
+            [...(this.structure?.cycles ?? []), ...(this.sequences ?? [])].map((executable) => [executable._id, executable])
+        );
         const structureModel = new StructureModel();
         // toute la structure (cycles, tasks, sensors, modbus, inverters, valves) est
         // persistee dans Mongo via les repositories dedies ci-dessous (DbService/json-db
@@ -103,7 +107,7 @@ export class StructureService {
         // un SEQUENCE par sequence) a STOPPED au boot (cf. ProcessService._initialReset), donc getLast()
         // reflete toujours l'etat reel meme apres un crash en pleine execution.
         for (const cycle of this.structure.cycles) {
-            await this._rehydrateProcessStatus(cycle);
+            await this._restoreProcessStatus(cycle, previousExecutables);
         }
 
         let sequences: SequenceModel[] = [];
@@ -121,7 +125,7 @@ export class StructureService {
         });
 
         for (const sequence of sequences) {
-            await this._rehydrateProcessStatus(sequence);
+            await this._restoreProcessStatus(sequence, previousExecutables);
         }
 
         this.sequences = sequences;
@@ -150,6 +154,24 @@ export class StructureService {
             if (template) {
                 sensor.model = { _id: template._id, name: template.name, description: template.description, kind: template.kind };
             }
+        }
+    }
+
+    // rechargement en cours d'execution (synchro, fetch du front, scan) : l'etat en memoire, tenu a jour par
+    // ProcessService, est repris tel quel. Le journal ne suffit pas : le demarrage / l'arret d'un cycle PROPORTIONAL
+    // n'y est pas persiste (cf. ProcessService._isSilentProportionalEvent), il repasserait a STOPPED a chaque
+    // rechargement. Element nouveau ou boot : statut relu du journal.
+    private async _restoreProcessStatus(executable: CycleModel | SequenceModel,
+        previousExecutables: Map<string, CycleModel | SequenceModel>): Promise<void> {
+        const previous = previousExecutables.get(executable._id);
+        if (!previous) {
+            return this._rehydrateProcessStatus(executable);
+        }
+        executable.status = previous.status;
+        executable.progression = previous.progression;
+        executable.lastEvent = previous.lastEvent;
+        if ('controlValue' in previous) {
+            (executable as CycleModel).controlValue = previous.controlValue;
         }
     }
 

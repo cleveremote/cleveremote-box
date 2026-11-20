@@ -154,6 +154,24 @@ describe('StructureService (integration mongodb-memory-server for cycles)', () =
             expect(eventRepository.getLastStatus).toHaveBeenCalledWith(cycle._id);
         });
 
+        // demarrage d'un cycle PROPORTIONAL non persiste : le journal le donnerait STOPPED
+        it('should keep the in-memory status of an already loaded cycle on reload instead of the journal', async () => {
+            await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
+            const first = await service.getStructure();
+            const startedAt = new Date('2026-07-30T10:00:00.000Z');
+            first.cycles[0].status = ExecutableStatus.IN_PROCCESS;
+            first.cycles[0].progression = { startedAt, duration: 300 };
+            first.cycles[0].controlValue = 42;
+            eventRepository.getLastStatus.mockClear();
+
+            const structure = await service.getStructure();
+
+            expect(structure.cycles[0].status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(structure.cycles[0].progression).toEqual({ startedAt, duration: 300 });
+            expect(structure.cycles[0].controlValue).toEqual(42);
+            expect(eventRepository.getLastStatus).not.toHaveBeenCalledWith(first.cycles[0]._id);
+        });
+
         it('should not set progression when the last known cycle event is STOPPED', async () => {
             const cycle = await cycleRepository.save(CreateCycleModel({ name: 'Zone A' }));
             eventRepository.getLastStatus.mockImplementation((id: string) => Promise.resolve(

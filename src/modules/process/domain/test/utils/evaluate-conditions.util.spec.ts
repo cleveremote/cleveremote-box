@@ -55,6 +55,22 @@ describe('evaluateConditions', () => {
         const conditions = [C({ elementType: ElementType.CYCLE, elementId: 'pompe', operator: ConditionOperator.GT, value: 'ON', order: 1 })];
         expect(await evaluateConditions(conditions, Resolver(0, ExecutableStatus.IN_PROCCESS, ExecutableStatus.STOPPED))).toBe(false);
     });
+
+    it.each([
+        [ConditionOperator.GT, '40', 50, true],
+        [ConditionOperator.LTE, 40, 50, false],
+        [ConditionOperator.EQ, '50', 50, true],
+        [ConditionOperator.NEQ, 50, 0, true]
+    ])('should compare the percent of a PROPORTIONAL cycle: %s %s (actuel %s) -> %s', async (operator, value, percent, expected) => {
+        const conditions = [C({ elementType: ElementType.CYCLE, elementId: 'vanne', operator, value, order: 1 })];
+        const resolver = () => Promise.resolve({ status: ExecutableStatus.IN_PROCCESS, percent } as never);
+        expect(await evaluateConditions(conditions, resolver)).toBe(expected);
+    });
+
+    it('should return false for a numeric condition on a cycle without percent', async () => {
+        const conditions = [C({ elementType: ElementType.CYCLE, elementId: 'pompe', operator: ConditionOperator.GTE, value: 0, order: 1 })];
+        expect(await evaluateConditions(conditions, Resolver(0, ExecutableStatus.IN_PROCCESS, ExecutableStatus.STOPPED))).toBe(false);
+    });
 });
 
 describe('validateConditionStructure', () => {

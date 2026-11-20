@@ -28,7 +28,7 @@ import { ActuatorService } from './actuator.service';
 import { ActuatorSetOptions, ActuatorValueChange } from './actuator-strategies/actuator-strategy.interface';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
-import { ChildCycleRef, CycleModel } from '../models/cycle.model';
+import { ChildCycleRef, CycleModel, ProportionalPercent } from '../models/cycle.model';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
@@ -42,7 +42,10 @@ import { DescribeCondition, DescribeProcessEvent, ToProcessLastEvent } from '../
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { ConditionFailureReporter, evaluateConditions, isConditionElementPresent, sortConditions } from '../utils/evaluate-conditions.util';
+import {
+    ConditionFailureReporter, evaluateConditions, getConditionCurrentValue, isConditionElementPresent, isStatusConditionValue,
+    sortConditions
+} from '../utils/evaluate-conditions.util';
 import { ConditionModel } from '../models/condition.model';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
@@ -292,6 +295,14 @@ export class ProcessService {
         const { name, ...detail } = change;
         const control: ControlValueEventDetail = { ...detail, actuatorName: name };
         this.logger.log({ cycleId: cycle._id, ...control }, 'proportional cycle control value changed');
+        // pourcentage du cycle (conditions numeriques) : triggers dont une condition porte sur ce cycle reevalues
+        const structureCycle = this.configurationService.structure?.cycles?.find((cyc) => cyc._id === cycle._id);
+        if (structureCycle) {
+            structureCycle.controlValue = change.value;
+            this.triggerService.onElementValueChanged.next({
+                type: ExecutableType.CYCLE, id: structureCycle._id, status: structureCycle.status, percent: ProportionalPercent(structureCycle)
+            });
+        }
         await this._publishStatusEvent({
             elementId: cycle._id,
             date: change.endedAt,
@@ -918,7 +929,10 @@ export class ProcessService {
         return {
             elementId: condition.elementId, elementType: condition.elementType, elementName,
             operator: condition.operator, expected: condition.value,
-            current: (current as SensorValueModel)?.value ?? (current as ProcessValueModel)?.status
+            // statut brut pour une condition ON / OFF, sinon la valeur comparee (mesure, ouverture % d'un cycle PROPORTIONAL)
+            current: condition.elementType !== ElementType.SENSOR && isStatusConditionValue(condition.value)
+                ? (current as ProcessValueModel)?.status
+                : getConditionCurrentValue(condition, current)
         };
     }
 
@@ -1812,8 +1826,11 @@ export class ProcessService {
                 ?? (status === ExecutableStatus.STOPPED ? cycFound.progression?.duration : undefined)
                 ?? cycFound.getPlannedDuration();
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
+            // PROPORTIONAL : nouveau run, l'ouverture du precedent n'est plus celle du cycle (0 a l'arret)
+            cycFound.controlValue = undefined;
             data = { type, id, status, startedAt, duration: cycleDuration };
-            this.triggerService.onElementValueChanged.next(data);
+            const percent = ProportionalPercent(cycFound);
+            this.triggerService.onElementValueChanged.next(percent === undefined ? data : { ...data, percent });
         }
         const journalData = journal &&
             this._buildProgressJournal(journal, cycFound ?? seqFound, !!cycFound, status, data.duration, previousStartedAt);

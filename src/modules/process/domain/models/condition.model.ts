@@ -35,7 +35,8 @@ export class ConditionModel {
     public elementId: string;
     public elementType: ElementType;
     public operator: ConditionOperator;
-    // 'ON' | 'OFF' pour CYCLE/SEQUENCE, valeur numerique (string ou number) pour SENSOR
+    // 'ON' | 'OFF' pour CYCLE/SEQUENCE (operateurs = / != uniquement), valeur numerique (string ou number) pour SENSOR
+    // et pour un cycle PROPORTIONAL (ouverture de sa vanne en %, tous operateurs)
     public value: string | number;
     public order: number;
     public connector?: ConditionConnector;

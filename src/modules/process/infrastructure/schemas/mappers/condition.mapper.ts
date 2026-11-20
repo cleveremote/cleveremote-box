@@ -48,9 +48,11 @@ export class ConditionMapper {
         return (operator === '==' ? ConditionOperator.EQ : operator) as ConditionOperator;
     }
 
-    // ancien format : statut CYCLE/SEQUENCE compare en 0/1 au lieu de OFF/ON
+    // ancien format : statut CYCLE/SEQUENCE compare en 0/1 au lieu de OFF/ON (operateur '==' de mathjs) ; une condition
+    // CYCLE au format courant ('=') garde sa valeur numerique : ouverture (%) d'un cycle PROPORTIONAL
     private static _normalizeValue(condition: Condition): string | number {
         if (condition.elementType === ElementType.SENSOR) { return condition.value; }
+        if (condition.elementType === ElementType.CYCLE && (condition.operator as string) !== '==') { return condition.value; }
         if (condition.value === 0 || condition.value === '0') { return ExecutableAction.OFF; }
         if (condition.value === 1 || condition.value === '1') { return ExecutableAction.ON; }
         return condition.value;
