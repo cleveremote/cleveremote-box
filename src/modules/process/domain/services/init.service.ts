@@ -77,6 +77,8 @@ export class InitService {
 
     private async _initInverters(): Promise<void> {
         await this.configurationService.completeInverterSlaves();
+        // avant load() : les paramètres ajoutés sont vérifiés par la baseline du chargement
+        await this.configurationService.completeInverterParameters();
         await this.inverterControlService.load();
     }
 

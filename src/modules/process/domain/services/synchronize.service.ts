@@ -195,16 +195,25 @@ export class SynchronizeService {
         inverter.defaultMode = model.defaultMode ?? inverter.defaultMode;
         inverter.releaseGraceMs = model.releaseGraceMs ?? inverter.releaseGraceMs;
         for (const update of model.parameters ?? []) {
-            const parameter = inverter.parameters.find((p) => p.blockId === update.blockId);
-            if (!parameter) continue;
-            if (update.value !== undefined) {
-                parameter.value = update.value ?? undefined;
-            }
-            parameter.isPersistent = update.isPersistent ?? parameter.isPersistent;
+            this._updateInverterParameter(inverter, update);
         }
         const saved = await this.inverterRepository.save(inverter);
         await this.configurationService.refreshInverters();
         return saved;
+    }
+
+    // valeur imposée d'un paramètre (null : plus imposée) ; hors de la saisie du set (plage, enum) : erreur codée de la
+    // register map, rien n'est enregistré ; paramètre inconnu ignoré
+    private _updateInverterParameter(inverter: InverterModel, update: SynchronizeInverterModel['parameters'][number]): void {
+        const parameter = inverter.parameters.find((p) => p.blockId === update.blockId);
+        if (!parameter) return;
+        if (update.value !== undefined && update.value !== null) {
+            this.deviceCommandService.checkValueOf(inverter.profile, { blockId: parameter.blockId, operationId: 'set' }, update.value);
+        }
+        if (update.value !== undefined) {
+            parameter.value = update.value ?? undefined;
+        }
+        parameter.isPersistent = update.isPersistent ?? parameter.isPersistent;
     }
 
     public async synchronizeActuatorList(actuatorModels: SynchronizeActuatorModel[]): Promise<ActuatorModel[]> {

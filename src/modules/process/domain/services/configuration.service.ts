@@ -26,8 +26,9 @@ import { ToProcessLastEvent, TranslateEventMessages } from '../utils/process-eve
 import { EventPurgeResultModel, EventPurgeSkipReason } from '../models/event-purge.model';
 import { ExecutableStatus } from '../interfaces/executable.interface';
 import { DeviceKind, DeviceModel, DeviceType, DeviceWithCommands, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
-import { InverterModel } from '../models/inverter.model';
+import { InverterModel, InverterParameterModel } from '../models/inverter.model';
 import { ResolveInverterProfile } from './inverter/profiles/inverter-profile.resolver';
+import { BuildInverterParameters } from './slave-provisioning/auto-creation/strategies/inverter-auto-creation.strategy';
 import { DeviceCommandModel } from '../models/device-command.model';
 import { ComSensorConfigModel, SensorModel } from '../models/sensor.model';
 import { SensorType } from '../interfaces/sensor.interface';
@@ -361,6 +362,53 @@ export class StructureService {
         }
         await this.refreshInverters();
         return created;
+    }
+
+    /**
+     * Rattrapage des paramètres des variateurs existants quand la register map expose de nouveaux champs
+     * autoCreateType=inverter : paramètres manquants ajoutés (valeur de la baseline du profil s'il y en a une),
+     * commandes des existants réalignées ; les valeurs déjà enregistrées ne sont jamais modifiées.
+     * Renvoie les variateurs mis à jour.
+     */
+    public async completeInverterParameters(): Promise<InverterModel[]> {
+        const inverters = await this.inverterRepository.get() as InverterModel[];
+        if (!inverters.length) return [];
+        const devices = await this.deviceRepository.get() as DeviceModel[];
+        const templates = await this.slaveTemplateRepository.get();
+        const updated: InverterModel[] = [];
+        for (const inverter of inverters) {
+            const profile = ResolveInverterProfile(inverter.profile);
+            const device = devices.find((d) => d._id === inverter.deviceId && !d.deletedAt);
+            const template = device && templates.find((t) => t._id === (device.config as SlaveConfigModel)?.modelId);
+            if (!profile || !template) continue;
+            const expected = BuildInverterParameters(profile, this.deviceCommandService.withTemplateParams(template).deviceCommands);
+            if (this._mergeInverterParameters(inverter, expected)) {
+                updated.push(await this.inverterRepository.save(inverter));
+            }
+        }
+        if (updated.length) {
+            await this.refreshInverters();
+        }
+        return updated;
+    }
+
+    // ajoute les paramètres absents et réaligne les commandes des existants (valeurs conservées) ; true si modifié
+    private _mergeInverterParameters(inverter: InverterModel, expected: InverterParameterModel[]): boolean {
+        let isChanged = false;
+        for (const parameter of expected) {
+            const current = inverter.parameters.find((p) => p.blockId === parameter.blockId);
+            if (!current) {
+                inverter.parameters.push(parameter);
+                isChanged = true;
+                continue;
+            }
+            const { field, readCommandId, setCommandId } = parameter;
+            if (current.field !== field || current.readCommandId !== readCommandId || current.setCommandId !== setCommandId) {
+                Object.assign(current, { field, readCommandId, setCommandId });
+                isChanged = true;
+            }
+        }
+        return isChanged;
     }
 
     // éléments variateur de la structure relus (créés par un scan ou un rattrapage)
