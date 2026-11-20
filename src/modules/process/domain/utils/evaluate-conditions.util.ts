@@ -148,8 +148,8 @@ function compareNumbers(current: unknown, operator: ConditionOperator, expectedR
 // statut ON / OFF d'un cycle / d'une sequence : = / != uniquement. Une condition numerique sur un element sans
 // pourcentage (cycle non PROPORTIONAL, sequence) est fausse.
 async function evaluateCondition(condition: ConditionModel, getDeviceValue: DeviceValueResolver): Promise<boolean> {
-    const current = getConditionCurrentValue(condition, extractedVal);
     const extractedVal = await getDeviceValue(condition.elementId);
+    const current = getConditionCurrentValue(condition, extractedVal);
     if (condition.elementType === ElementType.SENSOR || !isStatusConditionValue(condition.value)) {
         return compareNumbers(current, condition.operator, condition.value);
     }
