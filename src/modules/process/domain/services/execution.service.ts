@@ -92,6 +92,9 @@ export class ProcessService {
     // Group ids dont _startGroupChildren est actuellement en train de derouler sa sequence
     // (delayBefore/waitForCompletion/delayAfter) : voir le commentaire sur _startGroupChildren.
     private groupStartsInProgress = new Set<string>();
+    // Group ids dont la synchro "tous les enfants stoppes -> OFF" a ete ignoree pendant la sequence
+    // de demarrage : rejouee a la fin de _startGroupChildren.
+    private groupSyncDeferred = new Set<string>();
     // cycle id -> sequences forcees par le front (ordre des demandes), consommees par _runSequences
     // a la fin de la sequence en cours ; entree presente uniquement pendant que _runSequences tourne.
     private forcedSequences = new Map<string, string[]>();
@@ -378,7 +381,9 @@ export class ProcessService {
 
             const actuators = await this._resolveActuators();
             const modules = process.cycle.getModules(actuators);
-            const modulesToStop = modules
+            // un cycle en file jamais demarre n'a pilote aucun actuator : un arret SYSTEM (ex: OFF de son
+            // Group) couperait sinon ceux du cycle en conflit dont il attendait la fin
+            const modulesToStop = isCancelled ? [] : modules
                 .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
             if (index > -1) {
@@ -536,7 +541,14 @@ export class ProcessService {
 
     // refus d'une confirmation (IGNORE) ou OFF sur un cycle en attente : abandonne l'attente sans
     // toucher aux actuators, le cycle n'a jamais demarre.
-    private _cancelPendingConfirmation(process: ProcessModel): Promise<string> {
+    // enfant de Group : un refus peut laisser tous les enfants stoppes -> le Group doit repasser OFF
+    // (reset, qui porte habituellement cette synchro, n'est pas appele pour un cycle jamais demarre).
+    private async _cancelPendingConfirmation(process: ProcessModel): Promise<void> {
+        await this._publishCancelledConfirmation(process);
+        await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
+    }
+
+    private _publishCancelledConfirmation(process: ProcessModel): Promise<string> {
         const stop = this._stopOf(process, StopReason.CANCELLED_WHILE_WAITING);
         const run = this._adoptRun(process, this.pendingConfirmations.get(process.cycle._id),
             stop.reason === StopReason.CONFIRMATION_REFUSED ? ConfirmationAnswer.IGNORE : undefined);
@@ -838,6 +850,11 @@ export class ProcessService {
         if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             return false;
         }
+        // enfant demarre par son Group : seul l'arbitrage des conflits s'applique, ses conditions
+        // sont traitees comme pour un demarrage FORCE (pas de refus au demarrage)
+        if (ProcessService._isDriven(process)) {
+            return true;
+        }
         const cycleCauses = await this._getCycleConditionCauses(process);
         if (cycleCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
@@ -1019,6 +1036,11 @@ export class ProcessService {
         } finally {
             this.groupStartsInProgress.delete(groupCycle._id);
         }
+        // un enfant stoppe pendant la sequence (ex: dernier enfant waitForCompletion termine ou dont la
+        // confirmation est refusee) : la synchro ignoree a ce moment est rejouee maintenant
+        if (this.groupSyncDeferred.delete(groupCycle._id) && this.groupRunTokens.get(groupCycle._id) === token) {
+            await this._syncGroupOffIfAllChildrenStopped(groupCycle);
+        }
     }
 
     // parcourt les enfants dans l'ordre (config.order), en respectant isSkipped/delayBefore/
@@ -1072,7 +1094,8 @@ export class ProcessService {
             if (!child) {
                 continue;
             }
-            if (child.status === ExecutableStatus.IN_PROCCESS) {
+            // en cours, en attente de confirmation ou en file : l'attente est annulee avec le Group
+            if (child.status !== ExecutableStatus.STOPPED) {
                 await this._stopChildCycle(child, groupCycle._id);
             }
             await this._setChildTriggersAndSchedulesPaused(child._id, true);
@@ -1124,7 +1147,16 @@ export class ProcessService {
         }
         if (this.groupStartsInProgress.has(group._id)) {
             // _startGroupChildren deroule encore sa sequence (ex: attend qu'un enfant
-            // waitForCompletion se termine avant de demarrer le suivant) - ne pas l'interrompre.
+            // waitForCompletion se termine avant de demarrer le suivant) - ne pas l'interrompre ;
+            // la verification est rejouee a la fin de la sequence (cf. _startGroupChildren).
+            this.groupSyncDeferred.add(group._id);
+            return;
+        }
+        await this._syncGroupOffIfAllChildrenStopped(group);
+    }
+
+    private async _syncGroupOffIfAllChildrenStopped(group: CycleModel): Promise<void> {
+        if (group.status !== ExecutableStatus.IN_PROCCESS) {
             return;
         }
         const isEveryChildStopped = this._getOrderedChildRefs(group)
@@ -1145,14 +1177,17 @@ export class ProcessService {
         await this.execute(groupOffProcess);
     }
 
+    // ARBITRATE : un enfant en conflit avec un cycle en cours suit les memes regles qu'un demarrage
+    // schedule (rang, alerte, confirmation) au lieu de le preempter en silence. Deja en cours, en
+    // attente de confirmation ou en file : rien a refaire.
     private async _startChildCycle(child: CycleModel, sourceCycleId: string, mode: ProcessMode): Promise<void> {
-        if (child.status === ExecutableStatus.IN_PROCCESS) {
+        if (child.status !== ExecutableStatus.STOPPED) {
             return;
         }
         const childProcess = new ProcessModel();
         childProcess.cycle = child;
         childProcess.action = ExecutableAction.ON;
-        childProcess.policy = StartPolicy.FORCE;
+        childProcess.policy = StartPolicy.ARBITRATE;
         childProcess.mode = mode;
         childProcess.sourceCycleId = sourceCycleId;
         childProcess.origin = this._cycleOrigin(EventSource.GROUP, sourceCycleId);
@@ -1170,13 +1205,14 @@ export class ProcessService {
         await this.execute(childProcess);
     }
 
+    // STOPPED uniquement : un enfant en attente de confirmation ou en file n'est pas termine
     private _waitForCycleStopped(cycle: CycleModel, pollIntervalMs = 250): Promise<void> {
-        if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+        if (cycle.status === ExecutableStatus.STOPPED) {
             return Promise.resolve();
         }
         return new Promise((resolve) => {
             const interval = setInterval(() => {
-                if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+                if (cycle.status === ExecutableStatus.STOPPED) {
                     clearInterval(interval);
                     resolve();
                 }
