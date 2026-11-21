@@ -29,6 +29,9 @@
       "@register-map/*": [
         "src/modules/register-map/*"
       ],
+      "@synoptic/*": [
+        "src/modules/synoptic/*"
+      ],
       "@control/*": [
         "src/modules/control/*"
       ],

@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { InitService } from '@process/domain/services/init.service';
 import { ProcessModule } from '@process/infrastructure/process.module';
 import { SimulatorModule } from '@simulator/infrastructure/simulator.module';
+import { SynopticModule } from '@synoptic/infrastructure/synoptic.module';
 
 // In the packaged SEA binary, process.execPath is the executable itself, so this
 // resolves .env next to it regardless of the caller's cwd. In dev (`nest start`),
@@ -32,7 +33,9 @@ const execDirEnvPath = join(dirname(process.execPath), '.env');
         }),
         ProcessModule,
         // Équipements Modbus simulés (SIMULATOR_ENABLED=true), cf. SimulatorService
-        SimulatorModule
+        SimulatorModule,
+        // synoptiques SVG importes depuis l'app (cf. SynopticService)
+        SynopticModule
     ],
     controllers: [],
     providers: []

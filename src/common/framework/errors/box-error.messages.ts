@@ -32,7 +32,14 @@ export const BOX_ERROR_MESSAGES: Record<Language, Partial<Record<BoxErrorCode, E
         [BoxErrorCode.ANALOG_VALUE_OUT_OF_RANGE]: (p) => `Valeur ${p.value} hors de la plage d'entrée [${p.min}, ${p.max}]`,
         [BoxErrorCode.ANALOG_SIGNAL_UNKNOWN]: (p) => `Type de signal inconnu (${p.signalType})`,
         [BoxErrorCode.ANALOG_UNIT_INCOMPATIBLE]: (p) => `Unité ${p.unit} incompatible avec un signal ${p.signalType} (attendu : ${List(p.allowed)})`,
-        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'Mise à l\'échelle absente'
+        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'Mise à l\'échelle absente',
+        [BoxErrorCode.SYNOPTIC_NOT_FOUND]: (p) => `Synoptique ${p.synopticId} introuvable`,
+        [BoxErrorCode.SYNOPTIC_NAME_ALREADY_USED]: (p) => `Un synoptique nommé « ${p.name} » existe déjà`,
+        [BoxErrorCode.SYNOPTIC_SVG_INVALID]: (p) => `Fichier SVG invalide${p.reason ? ` (${p.reason})` : ''}`,
+        [BoxErrorCode.SYNOPTIC_SVG_TOO_LARGE]: (p) => `Fichier SVG trop volumineux (${p.size} octets, maximum ${p.max})`,
+        [BoxErrorCode.SYNOPTIC_ELEMENT_NOT_FOUND]: (p) => `Élément s_element_${p.key} absent du synoptique`,
+        [BoxErrorCode.SYNOPTIC_TARGET_NOT_FOUND]: (p) => `Cible ${p.type} ${p.targetId} introuvable`,
+        [BoxErrorCode.SYNOPTIC_SAVE_FAILED]: () => 'Échec de l\'enregistrement du synoptique'
     },
     [Language.EN]: {
         [BoxErrorCode.VALIDATION]: (p) => `Invalid data (${List(p.fields)})`,
@@ -59,7 +66,14 @@ export const BOX_ERROR_MESSAGES: Record<Language, Partial<Record<BoxErrorCode, E
         [BoxErrorCode.ANALOG_VALUE_OUT_OF_RANGE]: (p) => `Value ${p.value} outside the input range [${p.min}, ${p.max}]`,
         [BoxErrorCode.ANALOG_SIGNAL_UNKNOWN]: (p) => `Unknown signal type (${p.signalType})`,
         [BoxErrorCode.ANALOG_UNIT_INCOMPATIBLE]: (p) => `Unit ${p.unit} incompatible with a ${p.signalType} signal (expected: ${List(p.allowed)})`,
-        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'Scaling missing'
+        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'Scaling missing',
+        [BoxErrorCode.SYNOPTIC_NOT_FOUND]: (p) => `Synoptic ${p.synopticId} not found`,
+        [BoxErrorCode.SYNOPTIC_NAME_ALREADY_USED]: (p) => `A synoptic named "${p.name}" already exists`,
+        [BoxErrorCode.SYNOPTIC_SVG_INVALID]: (p) => `Invalid SVG file${p.reason ? ` (${p.reason})` : ''}`,
+        [BoxErrorCode.SYNOPTIC_SVG_TOO_LARGE]: (p) => `SVG file too large (${p.size} bytes, maximum ${p.max})`,
+        [BoxErrorCode.SYNOPTIC_ELEMENT_NOT_FOUND]: (p) => `Element s_element_${p.key} not found in the synoptic`,
+        [BoxErrorCode.SYNOPTIC_TARGET_NOT_FOUND]: (p) => `Target ${p.type} ${p.targetId} not found`,
+        [BoxErrorCode.SYNOPTIC_SAVE_FAILED]: () => 'Failed to save the synoptic'
     },
     [Language.AR]: {
         [BoxErrorCode.VALIDATION]: (p) => `بيانات غير صالحة (${List(p.fields, '، ')})`,
@@ -86,7 +100,14 @@ export const BOX_ERROR_MESSAGES: Record<Language, Partial<Record<BoxErrorCode, E
         [BoxErrorCode.ANALOG_VALUE_OUT_OF_RANGE]: (p) => `القيمة ${p.value} خارج نطاق الدخل [${p.min}, ${p.max}]`,
         [BoxErrorCode.ANALOG_SIGNAL_UNKNOWN]: (p) => `نوع إشارة غير معروف (${p.signalType})`,
         [BoxErrorCode.ANALOG_UNIT_INCOMPATIBLE]: (p) => `الوحدة ${p.unit} غير متوافقة مع إشارة ${p.signalType} (المتوقع: ${List(p.allowed, '، ')})`,
-        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'التقييس غير موجود'
+        [BoxErrorCode.ANALOG_SCALING_MISSING]: () => 'التقييس غير موجود',
+        [BoxErrorCode.SYNOPTIC_NOT_FOUND]: (p) => `المخطط ${p.synopticId} غير موجود`,
+        [BoxErrorCode.SYNOPTIC_NAME_ALREADY_USED]: (p) => `يوجد مخطط باسم «${p.name}» بالفعل`,
+        [BoxErrorCode.SYNOPTIC_SVG_INVALID]: (p) => `ملف SVG غير صالح${p.reason ? ` (${p.reason})` : ''}`,
+        [BoxErrorCode.SYNOPTIC_SVG_TOO_LARGE]: (p) => `ملف SVG كبير جدًا (${p.size} بايت، الحد الأقصى ${p.max})`,
+        [BoxErrorCode.SYNOPTIC_ELEMENT_NOT_FOUND]: (p) => `العنصر s_element_${p.key} غير موجود في المخطط`,
+        [BoxErrorCode.SYNOPTIC_TARGET_NOT_FOUND]: (p) => `الهدف ${p.type} ${p.targetId} غير موجود`,
+        [BoxErrorCode.SYNOPTIC_SAVE_FAILED]: () => 'فشل حفظ المخطط'
     }
 };
 

@@ -187,12 +187,6 @@ describe('ConfigurationController', () => {
         });
     });
 
-    describe('getPlan', () => {
-        it('should return the literal "svg" placeholder', async () => {
-            await expect(controller.getPlan()).resolves.toEqual('svg');
-        });
-    });
-
     describe('getStatus', () => {
         it('should delegate to ValuesFetchUC with the given type and strip "instance"', async () => {
             configurationService.getStatus.mockResolvedValue([{ id: 'p1', instance: {} }]);
