@@ -17,7 +17,9 @@ import { ComActuatorConfigModel, RpiActuatorConfigModel, CtrlActuatorConfigModel
 import { ControlAlgorithm, ControlLoopMode, FollowParamsModel, PidParamsModel } from '@process/domain/models/control-loop.model';
 import { DeviceType, DeviceKind, MasterConfigModel, MasterProtocol, SlaveConfigModel } from '@process/domain/models/device.model';
 import { DeviceCommandType } from '@process/domain/models/device-command.model';
-import { InverterMode } from '@process/domain/models/inverter.model';
+import {
+    INVERTER_ANALOG_SIGNAL_TYPES, InverterAnalogInput, InverterAnalogSensorModel, InverterAnalogSignalType, InverterMode
+} from '@process/domain/models/inverter.model';
 import {
     SynchronizeConditionModel,
     SynchronizeCycleModel,
@@ -42,14 +44,21 @@ import { RegisterOperationParams, RegisterOperationValue } from '@register-map/d
 export class IsConditionValue implements ValidatorConstraintInterface {
     public validate(value: unknown, args: ValidationArguments) {
         const condition = args.object as ConditionSync;
+        const isNumeric = (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && !Number.isNaN(Number(value));
         if (condition.elementType === ConditionElementType.SENSOR) {
-            return (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && !Number.isNaN(Number(value));
+            return isNumeric;
         }
-        return value === ExecutableAction.ON || value === ExecutableAction.OFF;
+        // CYCLE : valeur numerique = ouverture (%) d'un cycle PROPORTIONAL, tous operateurs (comme un capteur)
+        if (condition.elementType === ConditionElementType.CYCLE && isNumeric) {
+            return true;
+        }
+        // statut ON / OFF : egalite uniquement
+        return (value === ExecutableAction.ON || value === ExecutableAction.OFF)
+            && (condition.operator === ConditionOperator.EQ || condition.operator === ConditionOperator.NEQ);
     }
 
     public defaultMessage(args: ValidationArguments) {
-        return '($value) must be numeric for a SENSOR condition, ON or OFF for a CYCLE/SEQUENCE condition';
+        return '($value) must be numeric for a SENSOR or PROPORTIONAL CYCLE condition, ON or OFF (operator = or !=) for a CYCLE/SEQUENCE condition';
     }
 }
 
@@ -114,7 +123,8 @@ export class SecurityConfigSync {
     public customStacks?: CustomStackSync[];
 }
 
-// directive donnée à un variateur pendant la séquence : RS485 (frequency, Hz) ou PID (pidSetpoint optionnel)
+// directive donnée à un variateur pendant la séquence : RS485 (frequency, Hz) ou PID (pidTarget en unité du capteur de
+// retour et / ou pidSetpoint en %, optionnels)
 export class SequenceInverterDirectiveSync {
     @IsString()
     @IsNotEmpty()
@@ -127,6 +137,9 @@ export class SequenceInverterDirectiveSync {
     @IsOptional()
     @IsNumber()
     public pidSetpoint?: number;
+    @IsOptional()
+    @IsNumber()
+    public pidTarget?: number;
 }
 
 export class SequenceSync {
@@ -321,7 +334,9 @@ export class CycleSynchronizeDTO {
                     inverterId: directiveSync.inverterId,
                     mode: directiveSync.mode,
                     ...(directiveSync.mode === InverterMode.RS485 && { frequency: directiveSync.frequency }),
-                    ...(directiveSync.mode === InverterMode.PID && directiveSync.pidSetpoint !== undefined && { pidSetpoint: directiveSync.pidSetpoint })
+                    ...(directiveSync.mode === InverterMode.PID && directiveSync.pidSetpoint !== undefined
+                        && { pidSetpoint: directiveSync.pidSetpoint }),
+                    ...(directiveSync.mode === InverterMode.PID && directiveSync.pidTarget !== undefined && { pidTarget: directiveSync.pidTarget })
                 }));
             }
             sequence.delete = sequenceSync.delete ?? false;
@@ -836,6 +851,44 @@ export class InverterParameterSyncDTO {
     public isPersistent?: boolean;
 }
 
+// caractéristique du capteur branché sur une entrée analogique du variateur (cf. InverterAnalogSensorModel)
+export class InverterAnalogSensorDTO {
+    @IsIn(INVERTER_ANALOG_SIGNAL_TYPES)
+    public signalType: InverterAnalogSignalType;
+    // bornes électriques en V (VOLTAGE) ou mA (CURRENT)
+    @IsNumber()
+    public inputMin: number;
+    @IsNumber()
+    @Validate(IsDistinctInputBounds)
+    public inputMax: number;
+    @IsNumber()
+    public outputMin: number;
+    @IsNumber()
+    public outputMax: number;
+    @IsString()
+    @IsNotEmpty()
+    public unit: string;
+
+    public static toModel(dto: InverterAnalogSensorDTO): InverterAnalogSensorModel {
+        const { signalType, inputMin, inputMax, outputMin, outputMax, unit } = dto;
+        return Object.assign(new InverterAnalogSensorModel(), { signalType, inputMin, inputMax, outputMin, outputMax, unit });
+    }
+}
+
+// capteurs des entrées analogiques ; null : caractéristique supprimée (la courbe AI déjà imposée reste en l'état)
+export class InverterAnalogInputsDTO {
+    @IsOptional()
+    @ValidateIf((_o, value) => value !== null)
+    @ValidateNested()
+    @Type(() => InverterAnalogSensorDTO)
+    public AI1?: InverterAnalogSensorDTO | null;
+    @IsOptional()
+    @ValidateIf((_o, value) => value !== null)
+    @ValidateNested()
+    @Type(() => InverterAnalogSensorDTO)
+    public AI2?: InverterAnalogSensorDTO | null;
+}
+
 // réglages d'un élément variateur existant (créé par l'auto-création du slave)
 export class InverterSynchronizeDTO {
     @IsString()
@@ -859,6 +912,10 @@ export class InverterSynchronizeDTO {
     @Type(() => InverterParameterSyncDTO)
     public parameters?: InverterParameterSyncDTO[];
     @IsOptional()
+    @ValidateNested()
+    @Type(() => InverterAnalogInputsDTO)
+    public analogInputs?: InverterAnalogInputsDTO;
+    @IsOptional()
     @IsBoolean()
     public delete?: boolean = false;
 
@@ -870,6 +927,15 @@ export class InverterSynchronizeDTO {
         model.defaultMode = dto.defaultMode;
         model.releaseGraceMs = dto.releaseGraceMs;
         model.parameters = dto.parameters?.map(({ blockId, value, isPersistent }) => ({ blockId, value, isPersistent }));
+        if (dto.analogInputs) {
+            model.analogInputs = {};
+            for (const input of Object.values(InverterAnalogInput)) {
+                const sensor = dto.analogInputs[input];
+                if (sensor !== undefined) {
+                    model.analogInputs[input] = sensor === null ? null : InverterAnalogSensorDTO.toModel(sensor);
+                }
+            }
+        }
         model.delete = dto.delete ?? false;
         return model;
     }

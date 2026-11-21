@@ -1,6 +1,7 @@
 import { ModbusExceptionCode, ModbusExceptionError, ModbusTable } from '../models/simulated-device.model';
 import { SimulatedDevice } from '../services/simulated-device';
 import { SimulationBehavior } from './behavior.interface';
+import { InverterPid, PidProcess } from './inverter-pid';
 
 // Adresses de veichi-si23-inverter.json
 const FREQUENCY_COMMAND = 0x2000;
@@ -11,7 +12,6 @@ const MONITORING_COUNT = 20;
 // (X1) et les switchs S1..S3 (X3..X5) ; conservé à l'arrêt du simulateur (câblage physique)
 const INPUTS_REGISTER = MONITORING_START + 14;
 const INPUTS_OFFSET = 14;
-const PID_REFERENCE_OFFSET = 8;
 // Paramètres Fgg.ii (gg × 256 + ii)
 const RUN_CHANNEL = 0x002; // F00.02 : 1 = bornier
 const FREQUENCY_SOURCE_SELECTION = 0x006; // F00.06 : 0 = voie A (PID), 1 = voie B (RS485)
@@ -19,7 +19,6 @@ const MAX_FREQUENCY = 0x009; // F00.09
 const UPPER_LIMIT = 0x00B; // F00.11
 const LOWER_LIMIT = 0x00C; // F00.12
 const INPUT_FUNCTIONS = 0x200; // F02.00 (X1) .. F02.04 (X5)
-const PID_KEYPAD_REFERENCE = 0xB01; // F11.01 (0.1 %)
 const MULTI_SPEEDS = 0xC00; // F12.00 .. F12.06
 const COMM_TIMEOUT = 0xD06; // F13.06 (0.1 s)
 const COMM_FAULT_ACTION = 0xD07; // F13.07 : 1 = défaut E.CE et arrêt roue libre
@@ -66,7 +65,7 @@ const IsRam = (address: number): boolean => RAM_RANGES.some(([min, max]) => addr
  *   l'EEPROM à la mise sous tension (redémarrage du simulateur) ;
  * - marche : par bornier X1 (pressostat, F00.02 = 1) ou par runCommand ;
  * - vitesse : multi-vitesses F12.xx si une entrée multi-vitesse est active (switchs), sinon F00.06 : RS485 (0x2000)
- *   ou PID (simulé : F11.01 % de F00.09), bornée par F00.12 / F00.11 ; rampe de la fréquence de sortie ;
+ *   ou PID (InverterPid), bornée par F00.12 / F00.11 ; rampe de la fréquence de sortie ;
  * - perte de liaison : F13.07 = 1 et aucune trame pendant F13.06 => défaut E.CE (arrêt), effacé par runCommand = 7 ;
  * - bloc de surveillance C00.00-C00.19 calculé à la lecture (C00.14 : entrées X stockées).
  */
@@ -75,6 +74,7 @@ export class InverterBehavior implements SimulationBehavior {
     private _outputFrequency = 0;
     private _lastFrameAt = Date.now();
     private isCommFault = false;
+    private readonly _pid = new InverterPid();
 
     // Mise sous tension : RAM = EEPROM (sinon valeur usine), variateur à l'arrêt
     public initialize(device: SimulatedDevice): void {
@@ -119,6 +119,7 @@ export class InverterBehavior implements SimulationBehavior {
         if (value === FAULT_RESET) {
             // FAULT_RESET ne change pas l'état de marche
             this.isCommFault = false;
+            this._pid.clearFault();
             return;
         }
         device.set(ModbusTable.HOLDING, RUN_COMMAND, value);
@@ -141,6 +142,7 @@ export class InverterBehavior implements SimulationBehavior {
 
     public tick(device: SimulatedDevice, dtMs: number): void {
         this._checkCommLoss(device);
+        this._pid.update(device, dtMs, this._process(device), this._isRunning(device) && this._isPidMode(device));
         const target = this._isRunning(device) ? this._setpoint(device) : 0;
         const step = RAMP_PER_SECOND * dtMs / 1000;
         const delta = target - this._outputFrequency;
@@ -157,11 +159,10 @@ export class InverterBehavior implements SimulationBehavior {
         }
     }
 
-    // Valeurs brutes C00.00-C00.14 (offset dans le bloc) ; au-delà : 0 (sorties, AI, PUL)
+    // Valeurs brutes C00.00-C00.17 (offset dans le bloc ; PID et AI : InverterPid) ; au-delà : 0 (sorties, PUL)
     private _monitoring(device: SimulatedDevice): Record<number, number> {
         const ratio = Math.min(1, this._outputFrequency / RATED_FREQUENCY);
         const temperature = Math.round(AMBIENT_TEMPERATURE + 100 * ratio);
-        const isPid = this._multiSpeedIndex(device) === 0 && this._ram(device, FREQUENCY_SOURCE_SELECTION) !== CHANNEL_B;
         return {
             0: this._setpoint(device),
             1: this._outputFrequency,
@@ -171,17 +172,30 @@ export class InverterBehavior implements SimulationBehavior {
             5: Math.round((this._outputFrequency / 100) * RPM_PER_HZ),
             6: this._isRunning(device) ? 1000 : 0,
             7: Math.round(800 * ratio),
-            [PID_REFERENCE_OFFSET]: isPid ? this._ram(device, PID_KEYPAD_REFERENCE) : 0,
             10: Math.round(1000 * ratio ** 3),
             11: DC_BUS_VOLTAGE,
             12: temperature,
             13: temperature,
-            [INPUTS_OFFSET]: this._inputs(device)
+            [INPUTS_OFFSET]: this._inputs(device),
+            ...this._pid.monitoring(device, this._process(device), this._isPidMode(device))
         };
     }
 
     private _ram(device: SimulatedDevice, address: number): number {
         return device.get(ModbusTable.HOLDING, address);
+    }
+
+    private _isJog(device: SimulatedDevice): boolean {
+        const command = device.get(ModbusTable.HOLDING, RUN_COMMAND);
+        return this._ram(device, RUN_CHANNEL) !== RUN_BY_TERMINAL && (command === JOG_FORWARD || command === JOG_REVERSE);
+    }
+
+    private _isPidMode(device: SimulatedDevice): boolean {
+        return !this._isJog(device) && !this._multiSpeedIndex(device) && this._ram(device, FREQUENCY_SOURCE_SELECTION) !== CHANNEL_B;
+    }
+
+    private _process(device: SimulatedDevice): PidProcess {
+        return { outputFrequency: this._outputFrequency, maxFrequency: this._ram(device, MAX_FREQUENCY) || RATED_FREQUENCY };
     }
 
     private _inputs(device: SimulatedDevice): number {
@@ -198,7 +212,7 @@ export class InverterBehavior implements SimulationBehavior {
     }
 
     private _isRunning(device: SimulatedDevice): boolean {
-        if (this.isCommFault) {
+        if (this.isCommFault || this._pid.hasFault) {
             return false;
         }
         if (this._ram(device, RUN_CHANNEL) === RUN_BY_TERMINAL) {
@@ -214,22 +228,17 @@ export class InverterBehavior implements SimulationBehavior {
     }
 
     private _setpoint(device: SimulatedDevice): number {
-        const command = device.get(ModbusTable.HOLDING, RUN_COMMAND);
-        if (this._ram(device, RUN_CHANNEL) !== RUN_BY_TERMINAL && (command === JOG_FORWARD || command === JOG_REVERSE)) {
+        if (this._isJog(device)) {
             return JOG_FREQUENCY;
         }
         const multiSpeed = this._multiSpeedIndex(device);
-        let setpoint: number;
         if (multiSpeed) {
-            setpoint = this._ram(device, MULTI_SPEEDS + multiSpeed - 1);
-        } else if (this._ram(device, FREQUENCY_SOURCE_SELECTION) === CHANNEL_B) {
-            setpoint = device.get(ModbusTable.HOLDING, FREQUENCY_COMMAND);
-        } else {
-            // PID simulé : sortie proportionnelle à la consigne F11.01 (0.1 %) de la fréquence max
-            const maxFrequency = this._ram(device, MAX_FREQUENCY) || RATED_FREQUENCY;
-            setpoint = Math.round(this._ram(device, PID_KEYPAD_REFERENCE) * maxFrequency / 1000);
+            return this._clamp(device, this._ram(device, MULTI_SPEEDS + multiSpeed - 1));
         }
-        return this._clamp(device, setpoint);
+        if (this._ram(device, FREQUENCY_SOURCE_SELECTION) === CHANNEL_B) {
+            return this._clamp(device, device.get(ModbusTable.HOLDING, FREQUENCY_COMMAND));
+        }
+        return this._clamp(device, this._pid.frequency(this._process(device)));
     }
 
     private _clamp(device: SimulatedDevice, setpoint: number): number {

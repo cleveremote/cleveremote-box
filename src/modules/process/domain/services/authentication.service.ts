@@ -171,6 +171,22 @@ export class AuthenticationService {
         return { ...this._result(AuthenticationStatus.ACCOUNT_UPDATED), account: ToAccountModel(saved) };
     }
 
+    // confirmation d'identité avant une opération sensible (box/reset/account) : SUCCESS ou statut d'erreur,
+    // un échec compte comme une tentative de connexion ratée (verrou progressif)
+    public async checkCredentials(login: string, password: string): Promise<AuthenticationResultModel> {
+        const stored = login ? await this.authenticationRepository.findByLogin(login) : null;
+        if (!stored) {
+            this.logger.warn({ login }, 'credentials check failed : unknown login');
+            return this._result(AuthenticationStatus.ACCOUNT_NOT_FOUND);
+        }
+        return this._checkPassword(stored, password, login);
+    }
+
+    // résultat traduit (langue / fuseau de la box) pour les services qui partagent les statuts d'authentification
+    public result(status: AuthenticationStatus): AuthenticationResultModel {
+        return this._result(status);
+    }
+
     public async manageAuthentication(data: AuthenticationModel): Promise<AuthenticationResultModel> {
         if (data.isRecovery) {
             return data.code ? this._resetPassword(data.login, data.code, data.newPassword) : this._sendRecoveryCode(data.login);

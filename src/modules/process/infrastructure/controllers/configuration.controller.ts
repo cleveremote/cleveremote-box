@@ -44,8 +44,11 @@ import { DeviceConnectivityService } from '@process/domain/services/device-conne
 import { WaveshareDiscoveryService } from '@process/domain/services/waveshare-discovery.service';
 import { AuthenticationService } from '@process/domain/services/authentication.service';
 import { AccountSynchronizeUC } from '@process/use-cases/account-synchronize.uc';
-import { AccountSynchronizeResultModel } from '@process/domain/models/authentication-result.model';
+import { AccountSynchronizeResultModel, AuthenticationResultModel } from '@process/domain/models/authentication-result.model';
 import { AccountSynchronizeDTO } from '../dto/account-synchronize.dto';
+import { BoxResetDTO } from '../dto/box-reset.dto';
+import { BoxResetService } from '@process/domain/services/box-reset.service';
+import { BoxResetUC } from '@process/use-cases/box-reset.uc';
 
 @Injectable()
 class ToArrayPipe implements PipeTransform {
@@ -65,7 +68,8 @@ export class ConfigurationController {
         private _synchronizeService: SynchronizeService,
         private _deviceConnectivityService: DeviceConnectivityService,
         private _globalSettingsService: GlobalSettingsService,
-        private _authenticationService: AuthenticationService
+        private _authenticationService: AuthenticationService,
+        private _boxResetService: BoxResetService
     ) {
     }
     @MessagePattern(['box/synchronize/configuration'])
@@ -84,11 +88,12 @@ export class ConfigurationController {
         return uc.execute(input);
     }
 
-    // resetPassword : code requis ; newPassword requis
+    // login/password vérifiés (verrou progressif compris). account : identifiants d'usine ; data : toute la BD
+    // hormis le compte (redémarrage) ; les deux : BD entière (redémarrage). Ni l'un ni l'autre : RESET_SCOPE_MISSING
     @MessagePattern(['box/reset/account'])
-    public async resetAccount(@Payload() resetPasswordDTO: any): Promise<boolean> {
-       
-        return true;
+    public async resetAccount(@Payload() boxResetDTO: BoxResetDTO): Promise<AuthenticationResultModel> {
+        const uc = new BoxResetUC(this._boxResetService);
+        return uc.execute(BoxResetDTO.mapToModel(boxResetDTO));
     }
 
     @MessagePattern(['box/synchronize/device'])

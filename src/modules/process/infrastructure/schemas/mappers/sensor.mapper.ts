@@ -1,4 +1,4 @@
-import { AnalogScalingModel, AnalogSensorConfigModel, ComSensorConfigModel, ForcastSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
+import { AnalogScalingModel, AnalogSensorConfigModel, ComSensorConfigModel, ForcastDataUnit, ForcastSensorConfigModel, SensorModel } from '@process/domain/models/sensor.model';
 import { SensorType } from '@process/domain/interfaces/sensor.interface';
 import { AnalogScaling, Sensor, SensorConfig, SensorDocument } from '../sensor.schema';
 
@@ -27,6 +27,8 @@ export class SensorMapper {
             const config = new ForcastSensorConfigModel();
             config.cronPattern = sensor.config.cronPattern;
             config.forcastData = sensor.config.forcastData;
+            // fallback : sensors enregistrés avant la persistance de l'unité
+            config.unit = sensor.config.unit ?? ForcastDataUnit(sensor.config.forcastData);
             return config;
         }
         // ANALOG : config COM (racine ou enfant) + mise à l'échelle
@@ -73,7 +75,7 @@ export class SensorMapper {
         }
         if (model.type === SensorType.FORCAST) {
             const config = model.config as ForcastSensorConfigModel;
-            sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData };
+            sensor.config = { cronPattern: config.cronPattern, forcastData: config.forcastData, unit: ForcastDataUnit(config.forcastData) };
             return sensor;
         }
         const config = model.config as ComSensorConfigModel;

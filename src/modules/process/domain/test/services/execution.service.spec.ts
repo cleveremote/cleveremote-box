@@ -1,4 +1,4 @@
-import { BehaviorSubject, filter } from 'rxjs';
+import { BehaviorSubject, filter, Subject } from 'rxjs';
 import { Connection } from 'mongoose';
 import { SchedulerRegistry, ScheduleModule } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
@@ -127,7 +127,7 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
     let scheduleMongooseRepository: ScheduleMongooseRepository;
     let triggerMongooseRepository: TriggerMongooseRepository;
     let structureService: StructureService;
-    let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock };
+    let actuatorService: { resolve: jest.Mock; execute: jest.Mock; reset: jest.Mock; valueChanged$: Subject<unknown> };
     let deviceCommandService: { execute: jest.Mock; executeOnDevice: jest.Mock; isDigitalOutput: jest.Mock };
     let wsService: { sendMessage: jest.Mock };
     let valueRepository: { getDeviceValue: jest.Mock };
@@ -201,7 +201,8 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
         actuatorService = {
             resolve: jest.fn((moduleIds: string[]) => Promise.resolve(new Map(moduleIds.map((id, i) => [id, CreateFakeActuator(id, 100 + i)])))),
             execute: jest.fn().mockResolvedValue(undefined),
-            reset: jest.fn().mockResolvedValue(undefined)
+            reset: jest.fn().mockResolvedValue(undefined),
+            valueChanged$: new Subject()
         };
         // permet a certains tests de forcer le type (COM/RPI/CTRL) d'un actuator donne, sans
         // perdre le comportement par defaut (RPI) pour tous les autres.
@@ -1789,6 +1790,113 @@ describe('ProcessService (integration mongodb-memory-server for cycles, actuator
             expect(actuatorService.execute).not.toHaveBeenCalled();
 
             await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should ask for confirmation instead of preempting when a child conflicts with a running cycle of equal rank', async () => {
+            const [running, child] = await SeedCycles([
+                { name: 'running', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([{ cycleId: child._id }]);
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush();
+
+            expect(FindCycle(running._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+            expect(FindCycle(child._id).status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+            expect(eventRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+                elementId: child._id,
+                additionalData: expect.objectContaining({
+                    status: ExecutableStatus.WAITTING_CONFIRMATION,
+                    causes: [expect.objectContaining({ type: CauseType.CONFIRMATION, cause: 'conflicted with cycle : running' })]
+                })
+            }));
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should preempt the conflicting cycle when the child (inheriting the group mode) has a better rank', async () => {
+            // MANUAL (rang 0) gagne contre TRIGGER (rang 2)
+            const [running, child] = await SeedCycles([
+                { name: 'running', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([{ cycleId: child._id }]);
+            await service.execute(CreateProcess(running, ProcessMode.TRIGGER, ExecutableAction.ON));
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(250);
+
+            expect(FindCycle(running._id).status).toEqual(ExecutableStatus.STOPPED);
+            expect(FindCycle(child._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should cancel a child pending confirmation when the group is stopped', async () => {
+            const [running, child] = await SeedCycles([
+                { name: 'running', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([{ cycleId: child._id }]);
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush();
+            expect(FindCycle(child._id).status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+
+            expect(FindCycle(child._id).status).toEqual(ExecutableStatus.STOPPED);
+            expect(FindCycle(group._id).status).toEqual(ExecutableStatus.STOPPED);
+            expect(FindCycle(running._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should turn the group OFF when the confirmation of its only active child is refused', async () => {
+            const [running, child] = await SeedCycles([
+                { name: 'running', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([{ cycleId: child._id }]);
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.ON));
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush();
+
+            // reponse IGNORE du front : OFF FORCE sur l'enfant en attente
+            await service.execute(CreateProcess(FindCycle(child._id), ProcessMode.MANUAL, ExecutableAction.OFF));
+
+            expect(FindCycle(child._id).status).toEqual(ExecutableStatus.STOPPED);
+            expect(FindCycle(group._id).status).toEqual(ExecutableStatus.STOPPED);
+            expect(FindCycle(running._id).status).toEqual(ExecutableStatus.IN_PROCCESS);
+
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.OFF));
+        });
+
+        it('should not start the next child while a waitForCompletion child is pending confirmation', async () => {
+            const [running, childA, childB] = await SeedCycles([
+                { name: 'running', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child-a', sequences: [{ moduleIds: ['shared-pump'], maxDuration: 5000 }] },
+                { name: 'child-b', sequences: [{ moduleIds: ['module-b'], maxDuration: 5000 }] }
+            ]);
+            const group = await SeedGroup([
+                { cycleId: childA._id, config: { waitForCompletion: true } },
+                { cycleId: childB._id }
+            ]);
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.ON));
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.ON));
+            await Flush(400);
+
+            expect(FindCycle(childA._id).status).toEqual(ExecutableStatus.WAITTING_CONFIRMATION);
+            expect(FindCycle(childB._id).status).toEqual(ExecutableStatus.STOPPED);
+
+            await service.execute(CreateProcess(group, ProcessMode.MANUAL, ExecutableAction.OFF));
+            await Flush(400);
+            expect(FindCycle(childB._id).status).toEqual(ExecutableStatus.STOPPED);
+            await service.execute(CreateProcess(running, ProcessMode.MANUAL, ExecutableAction.OFF));
         });
     });
 

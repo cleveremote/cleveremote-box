@@ -41,6 +41,14 @@ export class EventQueryDTO {
     @ApiProperty({ description: 'Nombre max de runs renvoyes (defaut : 50 sans periode)', required: false })
     public limit?: number;
 
+    // pagination des runs : runId du dernier run recu, renvoie les runs suivants (plus anciens).
+    // A combiner avec limit ; ignore pour un capteur / une sequence
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    @ApiProperty({ description: 'Pagination : runId du dernier run recu (renvoie les runs plus anciens)', required: false })
+    public afterRunId?: string;
+
     @IsOptional()
     @IsEnum(Language)
     @ApiProperty({ description: 'Langue des messages du journal (défaut : langue de la box)', enum: Language, required: false })

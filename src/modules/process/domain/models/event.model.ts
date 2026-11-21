@@ -23,20 +23,55 @@ export enum ProcessEventKind {
     INVERTER_MODE_CHANGED = 'INVERTER_MODE_CHANGED', // directive appliquee (mode, consigne)
     INVERTER_MANUAL_ENGAGED = 'INVERTER_MANUAL_ENGAGED', // switchs S1..S3 fermes : directives des sequences ignorees
     INVERTER_MANUAL_RELEASED = 'INVERTER_MANUAL_RELEASED', // switchs rouverts : retour au mode auto
-    INVERTER_DIRECTIVE_IGNORED = 'INVERTER_DIRECTIVE_IGNORED' // directive d'une sequence (forcee) non ecrite : variateur en manuel
+    INVERTER_DIRECTIVE_IGNORED = 'INVERTER_DIRECTIVE_IGNORED', // directive d'une sequence (forcee) non ecrite : variateur en manuel
+    // cycle PROPORTIONAL en cours : variation de commande de sa vanne, agregee (control = detail) ; son demarrage / arret
+    // n'est pas journalise (cf. ProcessService._isSilentProportionalEvent)
+    CONTROL_VALUE_CHANGED = 'CONTROL_VALUE_CHANGED'
 }
 
 // events du journal qui ne portent pas de statut (simple notification) : ignores pour rehydrater statut /
 // progression (EventRepository.getLastStatus), mais retenus comme lastEvent (popin du front)
-export const STATUSLESS_EVENT_KINDS: readonly ProcessEventKind[] = [ProcessEventKind.START_REFUSED];
+export const STATUSLESS_EVENT_KINDS: readonly ProcessEventKind[] = [ProcessEventKind.START_REFUSED, ProcessEventKind.CONTROL_VALUE_CHANGED];
 
 // detail d'un event variateur
 export class InverterEventDetail {
     public mode?: string;
     public frequency?: number;
+    // consigne PID en % (écrite dans F11.01)
     public pidSetpoint?: number;
+    // consigne dans l'unité du capteur de retour (pidUnit), quand la directive en porte une
+    public pidTarget?: number;
+    public pidUnit?: string;
     public sequenceId?: string;
     public sequenceName?: string;
+}
+
+// pilotage a l'origine d'une variation de commande d'une vanne CTRL
+export enum ControlValueMode {
+    DIRECT = 'DIRECT', // positionnement direct sur la consigne (customValue / ON par defaut)
+    REGULATION = 'REGULATION', // regulation sur la consigne de la ControlLoop, jusqu'a stabilisation
+    FOLLOW = 'FOLLOW' // suivi de la mesure du sensor de la ControlLoop, jusqu'a stabilisation de la mesure
+}
+
+// detail d'un event CONTROL_VALUE_CHANGED : une variation de commande de la vanne (ouverture en %), agregee
+// de la premiere a la derniere ecriture (une regulation, un positionnement, un mouvement suivi)
+export class ControlValueEventDetail {
+    public actuatorId: string;
+    public actuatorName?: string;
+    public mode: ControlValueMode;
+    public previousValue?: number; // absente : premiere commande depuis le demarrage de la box / le dernier reset
+    public value: number; // ouverture finale
+    public min: number; // ouvertures extremes commandees pendant la variation
+    public max: number;
+    public steps: number; // ecritures de la vanne
+    public startedAt: Date;
+    public endedAt: Date;
+    public durationMs: number;
+    // REGULATION uniquement : resultat de la boucle
+    public setpoint?: number;
+    public measured?: number;
+    public isStabilized?: boolean;
+    public iterations?: number;
 }
 
 // qui a emis l'ordre (plus precis que ProcessMode, qui ne sert qu'a l'arbitrage des rangs)
@@ -150,6 +185,7 @@ export class ProcessEventData {
     public plannedDuration?: number;
     public sequences?: EventSequencesSummary;
     public inverter?: InverterEventDetail; // events INVERTER_*
+    public control?: ControlValueEventDetail; // event CONTROL_VALUE_CHANGED
     public message?: string;
 }
 

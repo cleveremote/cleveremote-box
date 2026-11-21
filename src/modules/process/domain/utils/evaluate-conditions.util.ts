@@ -117,23 +117,44 @@ function compare(left: number | string, operator: ConditionOperator, right: numb
     }
 }
 
+// valeur de statut (ON / OFF) d'une condition CYCLE / SEQUENCE ; sinon valeur numerique (SENSOR, cycle PROPORTIONAL)
+export function isStatusConditionValue(value: unknown): boolean {
+    const upper = String(value).toUpperCase();
+    return upper === ExecutableAction.ON || upper === ExecutableAction.OFF;
+}
+
+// valeur actuelle comparee par la condition : mesure du capteur, ouverture (%) d'un cycle PROPORTIONAL ou statut ON / OFF
+export function getConditionCurrentValue(condition: ConditionModel,
+    extractedVal: SensorValueModel | ProcessValueModel | undefined): string | number | undefined {
+    if (!extractedVal) { return undefined; }
+    if (condition.elementType === ElementType.SENSOR) {
+        return (extractedVal as SensorValueModel).value ?? undefined;
+    }
+    const process = extractedVal as ProcessValueModel;
+    if (!isStatusConditionValue(condition.value)) { return process.percent ?? undefined; }
+    if (process.status === undefined || process.status === null) { return undefined; }
+    return process.status === ExecutableStatus.STOPPED ? ExecutableAction.OFF : ExecutableAction.ON;
+}
+
+function compareNumbers(current: unknown, operator: ConditionOperator, expectedRaw: unknown): boolean {
+    if (current === undefined || current === null) { return false; }
+    const value = Number(current);
+    const expected = Number(expectedRaw);
+    if (Number.isNaN(value) || Number.isNaN(expected)) { return false; }
+    return compare(value, operator, expected);
+}
+
+// SENSOR et cycle PROPORTIONAL (condition numerique) : comparaison numerique, tous operateurs ;
+// statut ON / OFF d'un cycle / d'une sequence : = / != uniquement. Une condition numerique sur un element sans
+// pourcentage (cycle non PROPORTIONAL, sequence) est fausse.
 async function evaluateCondition(condition: ConditionModel, getDeviceValue: DeviceValueResolver): Promise<boolean> {
     const extractedVal = await getDeviceValue(condition.elementId);
-    if (!extractedVal) { return false; }
-
-    if (condition.elementType === ElementType.SENSOR) {
-        const raw = (extractedVal as SensorValueModel).value;
-        if (raw === undefined || raw === null) { return false; }
-        const current = Number(raw);
-        const expected = Number(condition.value);
-        if (Number.isNaN(current) || Number.isNaN(expected)) { return false; }
-        return compare(current, condition.operator, expected);
+    const current = getConditionCurrentValue(condition, extractedVal);
+    if (condition.elementType === ElementType.SENSOR || !isStatusConditionValue(condition.value)) {
+        return compareNumbers(current, condition.operator, condition.value);
     }
-
-    const status = (extractedVal as ProcessValueModel).status;
-    if (status === undefined || status === null) { return false; }
+    if (current === undefined) { return false; }
     if (condition.operator !== ConditionOperator.EQ && condition.operator !== ConditionOperator.NEQ) { return false; }
-    const current = status === ExecutableStatus.STOPPED ? ExecutableAction.OFF : ExecutableAction.ON;
     return compare(current, condition.operator, String(condition.value).toUpperCase());
 }
 

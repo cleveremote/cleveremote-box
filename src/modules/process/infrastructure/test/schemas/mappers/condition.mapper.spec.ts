@@ -62,6 +62,11 @@ describe('ConditionMapper.mapListToModel', () => {
         expect(models[1]).toEqual(expect.objectContaining({ operator: '=', value: 'OFF' }));
     });
 
+    it('should keep the numeric percent of a PROPORTIONAL CYCLE condition (current "=" format)', () => {
+        const condition = Object.assign(new Condition(), { elementId: 'a', elementType: 'CYCLE', operator: '=', value: 1, order: 1 });
+        expect(ConditionMapper.mapListToModel([condition])[0].value).toEqual(1);
+    });
+
     it('should keep numeric values of SENSOR conditions untouched', () => {
         const condition = Object.assign(new Condition(), { elementId: 'a', elementType: 'SENSOR', operator: '>', value: 1, order: 1 });
 

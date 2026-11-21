@@ -51,7 +51,7 @@ export class InverterAutoCreationStrategy implements AutoCreationStrategy {
         inverter.profile = profile.kind;
         inverter.defaultMode = InverterMode.PID;
         inverter.commands = this._roleCommands(device, profile, commands);
-        inverter.parameters = this._parameters(profile, commands);
+        inverter.parameters = BuildInverterParameters(profile, commands);
         inverter.manualSensorId = sensors.find((sensor) => (sensor.config as ComSensorConfigModel).field === profile.inputsField)?._id;
         if (!inverter.manualSensorId) {
             this.logger.warn({ deviceId: device._id, field: profile.inputsField }, 'inverter inputs field not autoCreated, manual mode not detected');
@@ -76,20 +76,23 @@ export class InverterAutoCreationStrategy implements AutoCreationStrategy {
         }
         return roleCommands;
     }
-
-    // un paramètre par champ autoCreateType=inverter dont le bloc a une opération set
-    private _parameters(profile: InverterProfile, commands: TemplateCommand[]): InverterParameterModel[] {
-        return commands.flatMap((read) => AutoCreateFields(read, AutoCreateType.INVERTER).flatMap((field) => {
-            const set = commands.find((c) => c.blockId === read.blockId && c.operationId === 'set');
-            if (!set?._id) return [];
-            return [Object.assign(new InverterParameterModel(), {
-                blockId: read.blockId,
-                field: field.name,
-                readCommandId: read._id,
-                setCommandId: set._id,
-                ...(profile.baseline[read.blockId] !== undefined && { value: profile.baseline[read.blockId] }),
-                isPersistent: true
-            })];
-        }));
-    }
 }
+
+/**
+ * Paramètres d'un variateur : un par champ autoCreateType=inverter dont le bloc a une opération set ;
+ * valeur initiale prise dans la baseline du profil (absente : paramètre exposé mais non imposé).
+ * Partagé par l'auto-création et le rattrapage des variateurs existants.
+ */
+export const BuildInverterParameters = (profile: InverterProfile, commands: TemplateCommand[]): InverterParameterModel[] =>
+    commands.flatMap((read) => AutoCreateFields(read, AutoCreateType.INVERTER).flatMap((field) => {
+        const set = commands.find((c) => c.blockId === read.blockId && c.operationId === 'set');
+        if (!set?._id) return [];
+        return [Object.assign(new InverterParameterModel(), {
+            blockId: read.blockId,
+            field: field.name,
+            readCommandId: read._id,
+            setCommandId: set._id,
+            ...(profile.baseline[read.blockId] !== undefined && { value: profile.baseline[read.blockId] }),
+            isPersistent: true
+        })];
+    }));

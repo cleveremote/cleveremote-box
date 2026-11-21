@@ -14,7 +14,10 @@ export enum RunOutcome {
 }
 
 // selection des runs (box/fetch/events) ; elementIds absent : tous les cycles ; outcomes absent : tous les etats
-export type RunIdsFilter = { elementIds?: string[]; startDate?: Date; endDate?: Date; outcomes?: RunOutcome[]; limit?: number };
+// afterRunId : pagination, runs suivant ce run (dernier recu par le front) dans l'ordre de tri
+export type RunIdsFilter = {
+    elementIds?: string[]; startDate?: Date; endDate?: Date; outcomes?: RunOutcome[]; limit?: number; afterRunId?: string;
+};
 
 export class RunTimelineEntryModel {
     public date: Date;
@@ -38,6 +41,9 @@ export class CycleRunModel {
     public confirmation?: EventConfirmationModel;
     public stop?: EventStopModel;
     public requestedAt: Date; // premier event du run
+    // dernier event de la timeline : un cycle PROPORTIONAL (demarrage / arret non journalises) date son run par sa
+    // derniere variation de commande (CONTROL_VALUE_CHANGED)
+    public lastEventAt: Date;
     public startedAt?: Date;
     public endedAt?: Date;
     public realDuration?: number;

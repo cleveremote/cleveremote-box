@@ -25,16 +25,16 @@ import { ModuleTimingConfig, SequenceModel } from '../models/sequence.model';
 import { ProcessModel } from '../models/process.model';
 import { StructureService } from './configuration.service';
 import { ActuatorService } from './actuator.service';
-import { ActuatorSetOptions } from './actuator-strategies/actuator-strategy.interface';
+import { ActuatorSetOptions, ActuatorValueChange } from './actuator-strategies/actuator-strategy.interface';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { ScheduleModel } from '../models/schedule.model';
-import { ChildCycleRef, CycleModel } from '../models/cycle.model';
+import { ChildCycleRef, CycleModel, ProportionalPercent } from '../models/cycle.model';
 import { CycleRepository } from '@process/infrastructure/repositories/cycle.repository';
 import { ExecutableType } from '../models/value.model';
 import { ValueRepository } from '@process/infrastructure/repositories/value.repository';
 import { EventRepository } from '@process/infrastructure/repositories/event.repository';
 import {
-    ConditionCauseModel, ConfirmationAnswer, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData,
+    ConditionCauseModel, ConfirmationAnswer, ControlValueEventDetail, ElementType, EventModel, EventOriginModel, EventSource, EventStopModel, ProcessEventData,
     ProcessEventKind, StopReason
 } from '../models/event.model';
 import { RunContextModel } from '../models/run-context.model';
@@ -42,7 +42,10 @@ import { DescribeCondition, DescribeProcessEvent, ToProcessLastEvent } from '../
 import { TriggerService } from './trigger.service';
 import { ScheduleService } from './schedule.service';
 import { TriggerModel } from '../models/trigger.model';
-import { ConditionFailureReporter, evaluateConditions, isConditionElementPresent, sortConditions } from '../utils/evaluate-conditions.util';
+import {
+    ConditionFailureReporter, evaluateConditions, getConditionCurrentValue, isConditionElementPresent, isStatusConditionValue,
+    sortConditions
+} from '../utils/evaluate-conditions.util';
 import { ConditionModel } from '../models/condition.model';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { ProcessValueModel } from '../models/proccess-value.model';
@@ -65,6 +68,12 @@ const STOP_REASON_BY_SOURCE: Record<EventSource, StopReason> = {
     [EventSource.SYSTEM]: StopReason.SYSTEM_RESET
 };
 
+// regle PROPORTIONAL : demarrage / arret d'un cycle PROPORTIONAL et de ses sequences non journalises (cycle relance
+// automatiquement hors conflit), seules les variations de commande de sa vanne le sont (CONTROL_VALUE_CHANGED)
+const PROPORTIONAL_SILENT_KINDS: readonly ProcessEventKind[] = [
+    ProcessEventKind.CYCLE_STARTED, ProcessEventKind.CYCLE_ENDED, ProcessEventKind.SEQUENCE_STARTED, ProcessEventKind.SEQUENCE_ENDED
+];
+
 const SOURCE_BY_MODE: Record<ProcessMode, EventSource> = {
     [ProcessMode.MANUAL]: EventSource.MANUAL,
     [ProcessMode.SCHEDULE]: EventSource.SCHEDULE,
@@ -83,6 +92,9 @@ export class ProcessService {
     // Group ids dont _startGroupChildren est actuellement en train de derouler sa sequence
     // (delayBefore/waitForCompletion/delayAfter) : voir le commentaire sur _startGroupChildren.
     private groupStartsInProgress = new Set<string>();
+    // Group ids dont la synchro "tous les enfants stoppes -> OFF" a ete ignoree pendant la sequence
+    // de demarrage : rejouee a la fin de _startGroupChildren.
+    private groupSyncDeferred = new Set<string>();
     // cycle id -> sequences forcees par le front (ordre des demandes), consommees par _runSequences
     // a la fin de la sequence en cours ; entree presente uniquement pendant que _runSequences tourne.
     private forcedSequences = new Map<string, string[]>();
@@ -116,6 +128,10 @@ export class ProcessService {
     ) {
         this.inverterControlService.events$.subscribe((event) => {
             this._onInverterEvent(event).catch((error) => this.logger.warn({ error, kind: event.kind }, 'inverter event handling failed'));
+        });
+        this.actuatorService.valueChanged$.subscribe((change) => {
+            this._journalControlValue(change)
+                .catch((error) => this.logger.warn({ error, actuatorId: change.actuatorId }, 'control value journal failed'));
         });
         // nouveau slave créé par un scan : ses cycles PROPORTIONAL (vannes CTRL) démarrent tout de suite
         this.configurationService.slavesCreated$.subscribe(() => {
@@ -232,18 +248,78 @@ export class ProcessService {
 
     // journal : message lisible calcule ici, et champs principaux repris dans le statut envoye au front ;
     // cycle / sequence : retenu comme dernier event (lastEvent), rendu tel quel par le fetch (front reconnecte)
+    // demarrage / arret d'un cycle PROPORTIONAL (cf. _isSilentProportionalEvent) : statut envoye au front et
+    // lastEvent en memoire, sans event persiste ni champs du journal
     private _publishStatusEvent(eventPayload: EventModel, wsData: object): Promise<string> {
         const journal = eventPayload.additionalData as ProcessEventData;
         let payload = wsData;
         if (journal.kind) {
             journal.message = DescribeProcessEvent(journal, this.globalSettingsService.language);
+            this._setLastEvent(eventPayload);
+            if (this._isSilentProportionalEvent(eventPayload)) {
+                this._sendStatusSync(wsData);
+                return Promise.resolve('sent');
+            }
             const { kind, runId, origin, stop, message } = journal;
             payload = { ...wsData, kind, runId, origin, stop, message };
-            this._setLastEvent(eventPayload);
         }
         return this.eventRepository.save(eventPayload).then(() => {
             this._sendStatusSync(payload);
             return 'sent';
+        });
+    }
+
+    // regle PROPORTIONAL : demarrage / arret (PROPORTIONAL_SILENT_KINDS) d'un cycle PROPORTIONAL ou d'une de ses
+    // sequences ; un arret sur erreur reste journalise
+    private _isSilentProportionalEvent(event: EventModel): boolean {
+        const journal = event.additionalData as ProcessEventData;
+        if (!PROPORTIONAL_SILENT_KINDS.includes(journal.kind) || journal.stop?.reason === StopReason.ERROR) {
+            return false;
+        }
+        const cycles = this.configurationService.structure?.cycles ?? [];
+        const cycle = event.elementType === ElementType.CYCLE
+            ? cycles.find((cyc) => cyc._id === event.elementId)
+            : event.elementType === ElementType.SEQUENCE
+                ? cycles.find((cyc) => cyc.sequences?.some((seq) => seq._id === event.elementId))
+                : undefined;
+        return cycle?.type === CycleType.PROPORTIONAL;
+    }
+
+    // regle PROPORTIONAL : variation agregee de la commande de la vanne pilotee par un cycle PROPORTIONAL (regulation,
+    // suivi, consigne). Le cycle est encore dans processList quand sa vanne est remise au repos a son arret
+    // (cf. reset) : la variation en cours y est publiee. Hors de son cycle PROPORTIONAL (cycle prioritaire), non journalisee.
+    private async _journalControlValue(change: ActuatorValueChange): Promise<void> {
+        const process = this.processList.find((proc) => proc.cycle.type === CycleType.PROPORTIONAL
+            && proc.cycle.sequences?.some((seq) => seq.moduleConfigs?.some((ref) => ref.moduleId === change.actuatorId)));
+        if (!process) {
+            return;
+        }
+        const { cycle } = process;
+        const { name, ...detail } = change;
+        const control: ControlValueEventDetail = { ...detail, actuatorName: name };
+        this.logger.log({ cycleId: cycle._id, ...control }, 'proportional cycle control value changed');
+        // pourcentage du cycle (conditions numeriques) : triggers dont une condition porte sur ce cycle reevalues
+        const structureCycle = this.configurationService.structure?.cycles?.find((cyc) => cyc._id === cycle._id);
+        if (structureCycle) {
+            structureCycle.controlValue = change.value;
+            this.triggerService.onElementValueChanged.next({
+                type: ExecutableType.CYCLE, id: structureCycle._id, status: structureCycle.status, percent: ProportionalPercent(structureCycle)
+            });
+        }
+        await this._publishStatusEvent({
+            elementId: cycle._id,
+            date: change.endedAt,
+            elementType: ElementType.CYCLE,
+            additionalData: {
+                type: process.mode,
+                ...ProcessService._runJournal(process.run),
+                kind: ProcessEventKind.CONTROL_VALUE_CHANGED,
+                name: cycle.name,
+                control
+            }
+        }, {
+            type: ExecutableType.CYCLE, id: cycle._id, status: cycle.status,
+            startedAt: cycle.progression?.startedAt, duration: cycle.progression?.duration, control
         });
     }
 
@@ -305,7 +381,9 @@ export class ProcessService {
 
             const actuators = await this._resolveActuators();
             const modules = process.cycle.getModules(actuators);
-            const modulesToStop = modules
+            // un cycle en file jamais demarre n'a pilote aucun actuator : un arret SYSTEM (ex: OFF de son
+            // Group) couperait sinon ceux du cycle en conflit dont il attendait la fin
+            const modulesToStop = isCancelled ? [] : modules
                 .filter((actuator) => process.mode === ProcessMode.SYSTEM || !this._isActuatorStillInUse(actuator, process.cycle._id, actuators));
             await this.actuatorService.reset(modulesToStop);
             if (index > -1) {
@@ -463,7 +541,14 @@ export class ProcessService {
 
     // refus d'une confirmation (IGNORE) ou OFF sur un cycle en attente : abandonne l'attente sans
     // toucher aux actuators, le cycle n'a jamais demarre.
-    private _cancelPendingConfirmation(process: ProcessModel): Promise<string> {
+    // enfant de Group : un refus peut laisser tous les enfants stoppes -> le Group doit repasser OFF
+    // (reset, qui porte habituellement cette synchro, n'est pas appele pour un cycle jamais demarre).
+    private async _cancelPendingConfirmation(process: ProcessModel): Promise<void> {
+        await this._publishCancelledConfirmation(process);
+        await this._syncParentGroupOffIfAllChildrenStopped(process.cycle._id);
+    }
+
+    private _publishCancelledConfirmation(process: ProcessModel): Promise<string> {
         const stop = this._stopOf(process, StopReason.CANCELLED_WHILE_WAITING);
         const run = this._adoptRun(process, this.pendingConfirmations.get(process.cycle._id),
             stop.reason === StopReason.CONFIRMATION_REFUSED ? ConfirmationAnswer.IGNORE : undefined);
@@ -765,6 +850,11 @@ export class ProcessService {
         if (process.cycle.status === ExecutableStatus.IN_PROCCESS) {
             return false;
         }
+        // enfant demarre par son Group : seul l'arbitrage des conflits s'applique, ses conditions
+        // sont traitees comme pour un demarrage FORCE (pas de refus au demarrage)
+        if (ProcessService._isDriven(process)) {
+            return true;
+        }
         const cycleCauses = await this._getCycleConditionCauses(process);
         if (cycleCauses) {
             this.logger.warn({ cycleId: process.cycle._id, mode: process.mode }, 'cycle conditions not verified, cycle not started');
@@ -856,7 +946,10 @@ export class ProcessService {
         return {
             elementId: condition.elementId, elementType: condition.elementType, elementName,
             operator: condition.operator, expected: condition.value,
-            current: (current as SensorValueModel)?.value ?? (current as ProcessValueModel)?.status
+            // statut brut pour une condition ON / OFF, sinon la valeur comparee (mesure, ouverture % d'un cycle PROPORTIONAL)
+            current: condition.elementType !== ElementType.SENSOR && isStatusConditionValue(condition.value)
+                ? (current as ProcessValueModel)?.status
+                : getConditionCurrentValue(condition, current)
         };
     }
 
@@ -943,6 +1036,11 @@ export class ProcessService {
         } finally {
             this.groupStartsInProgress.delete(groupCycle._id);
         }
+        // un enfant stoppe pendant la sequence (ex: dernier enfant waitForCompletion termine ou dont la
+        // confirmation est refusee) : la synchro ignoree a ce moment est rejouee maintenant
+        if (this.groupSyncDeferred.delete(groupCycle._id) && this.groupRunTokens.get(groupCycle._id) === token) {
+            await this._syncGroupOffIfAllChildrenStopped(groupCycle);
+        }
     }
 
     // parcourt les enfants dans l'ordre (config.order), en respectant isSkipped/delayBefore/
@@ -996,7 +1094,8 @@ export class ProcessService {
             if (!child) {
                 continue;
             }
-            if (child.status === ExecutableStatus.IN_PROCCESS) {
+            // en cours, en attente de confirmation ou en file : l'attente est annulee avec le Group
+            if (child.status !== ExecutableStatus.STOPPED) {
                 await this._stopChildCycle(child, groupCycle._id);
             }
             await this._setChildTriggersAndSchedulesPaused(child._id, true);
@@ -1048,7 +1147,16 @@ export class ProcessService {
         }
         if (this.groupStartsInProgress.has(group._id)) {
             // _startGroupChildren deroule encore sa sequence (ex: attend qu'un enfant
-            // waitForCompletion se termine avant de demarrer le suivant) - ne pas l'interrompre.
+            // waitForCompletion se termine avant de demarrer le suivant) - ne pas l'interrompre ;
+            // la verification est rejouee a la fin de la sequence (cf. _startGroupChildren).
+            this.groupSyncDeferred.add(group._id);
+            return;
+        }
+        await this._syncGroupOffIfAllChildrenStopped(group);
+    }
+
+    private async _syncGroupOffIfAllChildrenStopped(group: CycleModel): Promise<void> {
+        if (group.status !== ExecutableStatus.IN_PROCCESS) {
             return;
         }
         const isEveryChildStopped = this._getOrderedChildRefs(group)
@@ -1069,14 +1177,17 @@ export class ProcessService {
         await this.execute(groupOffProcess);
     }
 
+    // ARBITRATE : un enfant en conflit avec un cycle en cours suit les memes regles qu'un demarrage
+    // schedule (rang, alerte, confirmation) au lieu de le preempter en silence. Deja en cours, en
+    // attente de confirmation ou en file : rien a refaire.
     private async _startChildCycle(child: CycleModel, sourceCycleId: string, mode: ProcessMode): Promise<void> {
-        if (child.status === ExecutableStatus.IN_PROCCESS) {
+        if (child.status !== ExecutableStatus.STOPPED) {
             return;
         }
         const childProcess = new ProcessModel();
         childProcess.cycle = child;
         childProcess.action = ExecutableAction.ON;
-        childProcess.policy = StartPolicy.FORCE;
+        childProcess.policy = StartPolicy.ARBITRATE;
         childProcess.mode = mode;
         childProcess.sourceCycleId = sourceCycleId;
         childProcess.origin = this._cycleOrigin(EventSource.GROUP, sourceCycleId);
@@ -1094,13 +1205,14 @@ export class ProcessService {
         await this.execute(childProcess);
     }
 
+    // STOPPED uniquement : un enfant en attente de confirmation ou en file n'est pas termine
     private _waitForCycleStopped(cycle: CycleModel, pollIntervalMs = 250): Promise<void> {
-        if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+        if (cycle.status === ExecutableStatus.STOPPED) {
             return Promise.resolve();
         }
         return new Promise((resolve) => {
             const interval = setInterval(() => {
-                if (cycle.status !== ExecutableStatus.IN_PROCCESS) {
+                if (cycle.status === ExecutableStatus.STOPPED) {
                     clearInterval(interval);
                     resolve();
                 }
@@ -1750,8 +1862,11 @@ export class ProcessService {
                 ?? (status === ExecutableStatus.STOPPED ? cycFound.progression?.duration : undefined)
                 ?? cycFound.getPlannedDuration();
             cycFound.progression = status === ExecutableStatus.IN_PROCCESS ? { startedAt, duration: cycleDuration } : null;
+            // PROPORTIONAL : nouveau run, l'ouverture du precedent n'est plus celle du cycle (0 a l'arret)
+            cycFound.controlValue = undefined;
             data = { type, id, status, startedAt, duration: cycleDuration };
-            this.triggerService.onElementValueChanged.next(data);
+            const percent = ProportionalPercent(cycFound);
+            this.triggerService.onElementValueChanged.next(percent === undefined ? data : { ...data, percent });
         }
         const journalData = journal &&
             this._buildProgressJournal(journal, cycFound ?? seqFound, !!cycFound, status, data.duration, previousStartedAt);

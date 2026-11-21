@@ -49,7 +49,10 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
     let mongod: Awaited<ReturnType<typeof StartMongoMemory>>['mongod'];
     let connection: Connection;
     let actuatorRepository: ActuatorRepository;
-    let configurationService: { getStructure: jest.Mock; structure: { actuators: ActuatorModel[] } };
+    let configurationService: {
+        getStructure: jest.Mock; structure: { actuators: ActuatorModel[] };
+        completeInverterSlaves: jest.Mock; completeInverterParameters: jest.Mock;
+    };
     let authenticationService: { initAuthentication: jest.Mock };
     let processService: { resetAllModules: jest.Mock; startIdleProportionalCycles: jest.Mock; applyInverterConfig: jest.Mock; executeModuleCycleForDigitalOutput: jest.Mock };
     let scheduleService: { restartAllSchedules: jest.Mock };
@@ -80,7 +83,10 @@ describe('InitService (integration mongodb-memory-server for valves, onoff mocke
         await connection.collection('actuators').deleteMany({});
         Gpio.accessible = false;
 
-        configurationService = { getStructure: jest.fn().mockResolvedValue(undefined), structure: { actuators: [] } };
+        configurationService = {
+            getStructure: jest.fn().mockResolvedValue(undefined), structure: { actuators: [] },
+            completeInverterSlaves: jest.fn().mockResolvedValue([]), completeInverterParameters: jest.fn().mockResolvedValue([])
+        };
         authenticationService = { initAuthentication: jest.fn().mockResolvedValue(true) };
         processService = {
             resetAllModules: jest.fn().mockResolvedValue(undefined),

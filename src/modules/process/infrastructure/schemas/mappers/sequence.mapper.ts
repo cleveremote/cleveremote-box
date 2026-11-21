@@ -75,7 +75,8 @@ export class SequenceMapper {
             inverterId: directive.inverterId,
             mode: directive.mode,
             ...(directive.frequency !== undefined && directive.frequency !== null && { frequency: directive.frequency }),
-            ...(directive.pidSetpoint !== undefined && directive.pidSetpoint !== null && { pidSetpoint: directive.pidSetpoint })
+            ...(directive.pidSetpoint !== undefined && directive.pidSetpoint !== null && { pidSetpoint: directive.pidSetpoint }),
+            ...(directive.pidTarget !== undefined && directive.pidTarget !== null && { pidTarget: directive.pidTarget })
         };
     }
 

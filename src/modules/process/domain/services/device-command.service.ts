@@ -12,6 +12,7 @@ import { READ_FUNCTIONS, RegisterMapTemplate, RegisterOperationCommand, Register
 import { REGISTER_MAPS_I18N_DIR, RegisterMapI18nService } from '@register-map/domain/services/register-map-i18n.service';
 import { REGISTER_MAPS_DIR, RegisterMapLoader } from '@register-map/domain/services/register-map-loader.service';
 import { RegisterMapService } from '@register-map/domain/services/register-map.service';
+import { RegisterValueEncoder } from '@register-map/domain/utils/register-map.util';
 import { ActuatorActionConfig } from '../models/actuator.model';
 import { DeviceCommandModel, DeviceCommandOverride, DeviceCommandType } from '../models/device-command.model';
 import { DeviceModel, MasterConfigModel, SlaveConfigModel, SlaveTemplate } from '../models/device.model';
@@ -177,6 +178,26 @@ export class DeviceCommandService {
     public isAnalogOutputOf(kind: string, command: Pick<DeviceCommandModel, 'blockId' | 'operationId'>): boolean {
         const { block, operation } = this.registerMapService.findOperation(this.getTemplate(kind), command.blockId, command.operationId);
         return block.area === 'holdingRegister' && operation.scope === 'channel' && operation.input?.type === 'number';
+    }
+
+    /**
+     * Vérifie une valeur de saisie de l'opération (plage numérique, entrée d'enum) sans l'exécuter, ex: valeur imposée
+     * d'un paramètre de variateur ; lève l'erreur codée de la register map (VALUE_OUT_OF_RANGE, VALUE_NOT_IN_ENUM...).
+     */
+    public checkValueOf(kind: string, command: Pick<DeviceCommandModel, 'blockId' | 'operationId'>, value: number): void {
+        const template = this.getTemplate(kind);
+        const { operation } = this.registerMapService.findOperation(template, command.blockId, command.operationId);
+        RegisterValueEncoder.encode(template, operation, value);
+    }
+
+    /**
+     * Valeur physique (unité de la saisie, ex: Hz, V, %) -> valeur brute de la saisie numérique de l'opération
+     * (échelle de la register map, ex: scale 0.01 : 4,5 V -> 450) ; saisie non numérique : valeur arrondie telle quelle.
+     */
+    public toRawInputOf(kind: string, command: Pick<DeviceCommandModel, 'blockId' | 'operationId'>, value: number): number {
+        const { operation } = this.registerMapService.findOperation(this.getTemplate(kind), command.blockId, command.operationId);
+        const scale = operation.input?.type === 'number' ? operation.input.scale ?? 1 : 1;
+        return Math.round(value / scale);
     }
 
     /** Plage [min, max] de la saisie numérique de l'opération (ex: consigne analogique en mV) ; undefined si non numérique */

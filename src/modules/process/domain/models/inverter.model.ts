@@ -1,4 +1,5 @@
 import { DeviceKind } from './device.model';
+import { AnalogSignalType } from './sensor.model';
 
 // Source de vitesse en mode auto (switchs S1..S3 ouverts) ; le manuel (switchs) n'est pas pilotable, il est détecté
 export enum InverterMode {
@@ -27,11 +28,39 @@ export interface InverterDirective {
     frequency?: number;
     // PID : consigne dans l'unité de F11.01 (% sur SI23)
     pidSetpoint?: number;
+    // PID : consigne dans l'unité du capteur de retour (ex: 3 bar), convertie en % par sa caractéristique
+    // (InverterModel.analogInputs) ; prioritaire sur pidSetpoint quand la caractéristique existe
+    pidTarget?: number;
 }
 
 // Directive portée par une séquence, pour un variateur donné
 export interface SequenceInverterDirective extends InverterDirective {
     inverterId: string;
+}
+
+// Entrées analogiques du variateur pouvant porter le capteur de retour PID
+export enum InverterAnalogInput {
+    AI1 = 'AI1',
+    AI2 = 'AI2'
+}
+
+// Type de signal d'un capteur branché sur une entrée analogique du variateur
+export type InverterAnalogSignalType = AnalogSignalType.VOLTAGE | AnalogSignalType.CURRENT;
+export const INVERTER_ANALOG_SIGNAL_TYPES: InverterAnalogSignalType[] = [AnalogSignalType.VOLTAGE, AnalogSignalType.CURRENT];
+
+/**
+ * Caractéristique du capteur branché sur une entrée analogique : [inputMin, inputMax] (V ou mA) ↔ [outputMin, outputMax]
+ * (unité physique). Reportée dans la courbe AI du variateur (tension basse / haute ↔ 0 % / 100 %) et utilisée pour
+ * traduire une consigne capteur (pidTarget) en consigne PID (%). Plages inversées admises, inputMin !== inputMax.
+ */
+export class InverterAnalogSensorModel {
+    public signalType: InverterAnalogSignalType;
+    public inputMin: number;
+    public inputMax: number;
+    public outputMin: number;
+    public outputMax: number;
+    // unité physique (bar, °C, m³/h...)
+    public unit: string;
 }
 
 // Paramètre du variateur (champ autoCreateType=inverter de la register map) et valeur à y maintenir
@@ -60,6 +89,8 @@ export class InverterModel {
     // commandIds par rôle
     public commands: Partial<Record<InverterRole, string>> = {};
     public parameters: InverterParameterModel[] = [];
+    // capteurs branchés sur les entrées analogiques (retour PID)
+    public analogInputs: Partial<Record<InverterAnalogInput, InverterAnalogSensorModel>> = {};
     // sensor enfant portant l'état des entrées X (détection du manuel)
     public manualSensorId?: string;
     // mode appliqué quand aucune séquence ne pilote le variateur

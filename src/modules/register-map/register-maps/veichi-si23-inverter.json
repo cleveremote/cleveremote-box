@@ -2034,7 +2034,9 @@
                 "offset": 16,
                 "type": "uint16",
                 "unit": "V / mA",
-                "formula": "raw / 1000"
+                "formula": "raw / 1000",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_17",
@@ -2042,7 +2044,9 @@
                 "offset": 17,
                 "type": "uint16",
                 "unit": "V / mA",
-                "formula": "raw / 1000"
+                "formula": "raw / 1000",
+                "autoCreate": true,
+                "autoCreateType": "sensor"
               },
               {
                 "name": "c00_18",
@@ -11397,7 +11401,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "V",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11460,7 +11466,9 @@
                 "offset": 0,
                 "type": "int16",
                 "unit": "%",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11523,7 +11531,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "V",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11586,7 +11596,9 @@
                 "offset": 0,
                 "type": "int16",
                 "unit": "%",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11649,7 +11661,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "s",
-                "formula": "raw / 1000"
+                "formula": "raw / 1000",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11712,7 +11726,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "V",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11775,7 +11791,9 @@
                 "offset": 0,
                 "type": "int16",
                 "unit": "%",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11838,7 +11856,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "V",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11901,7 +11921,9 @@
                 "offset": 0,
                 "type": "int16",
                 "unit": "%",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -11964,7 +11986,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "s",
-                "formula": "raw / 1000"
+                "formula": "raw / 1000",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -12515,7 +12539,9 @@
                 "name": "f03_19",
                 "label": "Courbe des entrées analogiques",
                 "offset": 0,
-                "type": "hex"
+                "type": "hex",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -24092,7 +24118,9 @@
                 "label": "Source du retour PID",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "pidSource"
+                "enum": "pidSource",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -24213,7 +24241,9 @@
                 "label": "Gain du retour PID",
                 "offset": 0,
                 "type": "uint16",
-                "formula": "raw / 100"
+                "formula": "raw / 100",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -24274,7 +24304,9 @@
                 "label": "Plage consigne / retour",
                 "offset": 0,
                 "type": "uint16",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -25456,7 +25488,9 @@
                 "label": "Action sur coupure du retour",
                 "offset": 0,
                 "type": "uint16",
-                "enum": "pidWireBreak"
+                "enum": "pidWireBreak",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -25515,7 +25549,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "%",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }
@@ -25578,7 +25614,9 @@
                 "offset": 0,
                 "type": "uint16",
                 "unit": "%",
-                "formula": "raw / 10"
+                "formula": "raw / 10",
+                "autoCreate": true,
+                "autoCreateType": "inverter"
               }
             ]
           }

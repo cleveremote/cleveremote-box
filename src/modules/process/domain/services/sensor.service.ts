@@ -7,7 +7,7 @@ import { TriggerService } from './trigger.service';
 import { SensorValueModel } from '../models/sensor-value.model';
 import { SocketIoClientProxyService } from 'src/common/websocket/socket-io-client-proxy/socket-io-client-proxy.service';
 import { randomUUID } from 'node:crypto';
-import { ComSensorConfigModel, ForcastSensorConfigModel, forcastDataName, IsCurrentForcastData, SensorModel } from '../models/sensor.model';
+import { ComSensorConfigModel, ForcastDataUnit, ForcastSensorConfigModel, forcastDataName, IsCurrentForcastData, SensorModel } from '../models/sensor.model';
 import { GENERATED_TEXTS } from 'src/common/framework/i18n/generated-texts';
 import { SensorType } from '../interfaces/sensor.interface';
 import { SensorRepository } from '@process/infrastructure/repositories/sensor.repository';
@@ -74,7 +74,7 @@ export class SensorService {
         const texts = GENERATED_TEXTS[this.globalSettingsService.language];
         const created: SensorModel[] = [];
         for (const { forcastData, cronPattern, text } of DEFAULT_FORCAST_SENSORS.filter((d) => !existing.has(d.forcastData))) {
-            const config = Object.assign(new ForcastSensorConfigModel(), { forcastData, cronPattern });
+            const config = Object.assign(new ForcastSensorConfigModel(), { forcastData, cronPattern, unit: ForcastDataUnit(forcastData) });
             const name = texts.forcastSensor[text];
             created.push(await this.sensorRepository.save(Object.assign(new SensorModel(), {
                 _id: randomUUID(),

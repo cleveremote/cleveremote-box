@@ -3,7 +3,7 @@ import { SensorValueModel } from '@process/domain/models/sensor-value.model';
 import { ProcessValueModel } from '@process/domain/models/proccess-value.model';
 import { EventModel } from '@process/domain/models/event.model';
 import { SensorModel } from '@process/domain/models/sensor.model';
-import { CycleModel } from '@process/domain/models/cycle.model';
+import { CycleModel, ProportionalPercent } from '@process/domain/models/cycle.model';
 import { SequenceModel } from '@process/domain/models/sequence.model';
 import { EventRepository } from './event.repository';
 import { StructureService } from '@process/domain/services/configuration.service';
@@ -38,10 +38,15 @@ export class ValueRepository {
         return this._toSensorValue(structure.sensors.find((x) => x._id === deviceId));
     }
 
+    // cycle PROPORTIONAL : ouverture (%) commandee a sa vanne, 0 a l'arret (cf. ProportionalPercent)
     private _toProcessValue(executable: CycleModel | SequenceModel): ProcessValueModel {
         const value = new ProcessValueModel();
         value.id = executable._id;
         value.status = executable.status;
+        const percent = 'type' in executable ? ProportionalPercent(executable) : undefined;
+        if (percent !== undefined) {
+            value.percent = percent;
+        }
         return value;
     }
 

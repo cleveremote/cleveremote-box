@@ -1,5 +1,5 @@
 import { DeviceKind } from '@process/domain/models/device.model';
-import { InverterMode, InverterRole } from '@process/domain/models/inverter.model';
+import { InverterAnalogInput, InverterMode, InverterRole } from '@process/domain/models/inverter.model';
 import { InverterProfile } from './inverter-profile.interface';
 
 // bits de C00.14 (bit n = Xn+1, cf. enum inputTerminals) : switchs S1..S3 câblés sur X3..X5 (à vérifier sur l'appareil)
@@ -64,5 +64,13 @@ export const VEICHI_SI23_PROFILE: InverterProfile = {
         ]
     },
     inputsField: 'c00_14',
-    manualInputMask: X3 | X4 | X5
+    manualInputMask: X3 | X4 | X5,
+    analogCurves: {
+        [InverterAnalogInput.AI1]: { lowVoltage: 'F03.00', lowPercent: 'F03.01', highVoltage: 'F03.02', highPercent: 'F03.03' },
+        [InverterAnalogInput.AI2]: { lowVoltage: 'F03.06', lowPercent: 'F03.07', highVoltage: 'F03.08', highPercent: 'F03.09' }
+    },
+    // F11.03 : 2 = AI1, 3 = AI2 (enum pidSource) ; usine : AI1
+    pidSource: { blockId: 'F11.03', inputs: { 2: InverterAnalogInput.AI1, 3: InverterAnalogInput.AI2 }, defaultValue: 2 },
+    // entrée en courant (cavalier mA) : 0..20 mA lus comme 0..10 V (à vérifier sur l'appareil)
+    voltsPerMilliAmp: 0.5
 };

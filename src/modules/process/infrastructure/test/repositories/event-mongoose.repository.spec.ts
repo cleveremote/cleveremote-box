@@ -59,6 +59,49 @@ describe('EventMongooseRepository (integration mongodb-memory-server)', () => {
         });
     });
 
+    describe('findRunIds (pagination afterRunId)', () => {
+        // run-N : un event CYCLE_STARTED a la date donnee
+        const createRun = (runId: string, date: string, elementId = 'cycle-1') => {
+            const data = new ProcessEventData();
+            data.type = 'manual';
+            data.kind = 'CYCLE_STARTED' as never;
+            data.runId = runId;
+            return repository.create(CreateEventModel({ elementId, date: new Date(date), additionalData: data }));
+        };
+
+        beforeEach(async () => {
+            await createRun('run-a', '2026-01-01T00:00:00Z');
+            await createRun('run-b', '2026-01-02T00:00:00Z');
+            await createRun('run-c', '2026-01-02T00:00:00Z'); // meme date que run-b : departage par runId
+            await createRun('run-d', '2026-01-03T00:00:00Z');
+            await createRun('run-e', '2026-01-04T00:00:00Z');
+        });
+
+        it('should page through all runs without gaps nor duplicates, most recent first', async () => {
+            const page1 = await repository.findRunIds({ limit: 2 });
+            const page2 = await repository.findRunIds({ limit: 2, afterRunId: page1[page1.length - 1] });
+            const page3 = await repository.findRunIds({ limit: 2, afterRunId: page2[page2.length - 1] });
+
+            expect(page1).toEqual(['run-e', 'run-d']);
+            expect(page2).toEqual(['run-c', 'run-b']);
+            expect(page3).toEqual(['run-a']);
+        });
+
+        it('should apply the same period filter to the cursor and the following runs', async () => {
+            const range = { startDate: new Date('2026-01-02T00:00:00Z'), endDate: new Date('2026-01-31T00:00:00Z') };
+
+            const result = await repository.findRunIds({ ...range, afterRunId: 'run-d' });
+
+            expect(result).toEqual(['run-c', 'run-b']);
+        });
+
+        it('should return no run when the cursor run no longer exists', async () => {
+            const result = await repository.findRunIds({ limit: 2, afterRunId: 'run-purged' });
+
+            expect(result).toEqual([]);
+        });
+    });
+
     describe('findLastByDevice', () => {
         it('should return the most recent event for the element', async () => {
             await repository.create(CreateEventModel({ date: new Date('2026-01-01') }));

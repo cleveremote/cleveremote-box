@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { AddressRange, DEVICE_KIND_SPECS, DeviceKind } from '@process/domain/models/device.model';
@@ -32,7 +32,7 @@ interface SimulatedKind {
  * Avec `KIND:n`, un seul module neuf à la fois sur range.min : le suivant apparaît quand le précédent est réadressé.
  */
 @Injectable()
-export class SimulatorService implements OnApplicationBootstrap, OnModuleDestroy {
+export class SimulatorService implements OnModuleInit, OnModuleDestroy {
     private _kinds = new Map<string, SimulatedKind>();
     // Équipements servis sur le bus
     private _devices: SimulatedDevice[] = [];
@@ -48,7 +48,9 @@ export class SimulatorService implements OnApplicationBootstrap, OnModuleDestroy
         private readonly logger: Logger
     ) { }
 
-    public async onApplicationBootstrap(): Promise<void> {
+    // onModuleInit (et non onApplicationBootstrap) : la passerelle doit écouter avant InitService.initialize(),
+    // attendu par AppModule.onModuleInit (appelé après celui des modules importés)
+    public async onModuleInit(): Promise<void> {
         if (this.config.get<string>('SIMULATOR_ENABLED') !== 'true') {
             this.logger.debug('simulator disabled');
             return;

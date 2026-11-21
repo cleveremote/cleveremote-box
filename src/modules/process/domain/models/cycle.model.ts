@@ -25,6 +25,13 @@ export interface ChildCycleRef {
     config: ChildCycleConfig;
 }
 
+// pourcentage d'un cycle PROPORTIONAL (conditions numeriques) : ouverture commandee a sa vanne pendant le run, 0 a
+// l'arret (vanne au repos) ; undefined pour les autres types de cycle
+export function ProportionalPercent(cycle: Pick<CycleModel, 'type' | 'status' | 'controlValue'>): number | undefined {
+    if (cycle.type !== CycleType.PROPORTIONAL) { return undefined; }
+    return cycle.status === ExecutableStatus.STOPPED ? 0 : cycle.controlValue ?? 0;
+}
+
 export class CycleModel implements IExecutable {
     public _id: string;
     public name: string;
@@ -39,6 +46,9 @@ export class CycleModel implements IExecutable {
     public progression?: { startedAt: Date; duration: number };
     // dernier event de statut (non persiste sur l'element : relu du journal, tenu a jour par ProcessService)
     public lastEvent?: ProcessLastEventModel;
+    // PROPORTIONAL : derniere ouverture (%) agregee de sa vanne pendant le run (non persiste, remis a zero a chaque
+    // changement de statut, cf. ProcessService._journalControlValue) ; lu par les conditions (ValueRepository)
+    public controlValue?: number;
     public sequences?: SequenceModel[] = [];
     public schedules?: ScheduleModel[] = [];
     public triggers?: TriggerModel[] = [];

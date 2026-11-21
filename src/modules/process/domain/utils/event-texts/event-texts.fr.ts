@@ -1,5 +1,5 @@
 import {
-    ConfirmationAnswer, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
+    ConfirmationAnswer, ControlValueMode, EventOriginModel, EventSource, EventStopModel, ProcessEventData, ProcessEventKind, StopReason
 } from '@process/domain/models/event.model';
 import { ConditionTexts, EventTexts, FormatDuration, LostConflicts, ProportionalOverrides } from './event-texts';
 
@@ -84,6 +84,24 @@ function DescribeConfirmationRequest(data: ProcessEventData): string {
     return reasons.length ? ` — ${reasons.join(', ')}` : '';
 }
 
+const CONTROL_MODE_LABELS: Record<ControlValueMode, string> = {
+    [ControlValueMode.DIRECT]: 'consigne',
+    [ControlValueMode.REGULATION]: 'régulation',
+    [ControlValueMode.FOLLOW]: 'suivi'
+};
+
+// variation agregee de l'ouverture d'une vanne (CONTROL_VALUE_CHANGED)
+function DescribeControlValue(data: ProcessEventData): string {
+    const control = data.control;
+    if (!control) { return ''; }
+    return `Ouverture de ${Quote(control.actuatorName)} : ${control.previousValue ?? '?'} % → ${control.value} %` +
+        ` (${CONTROL_MODE_LABELS[control.mode] ?? control.mode}` +
+        (control.steps > 1 ? `, ${Plural(control.steps, 'écriture')} en ${FormatDuration(control.durationMs)}` : '') +
+        (control.setpoint !== undefined
+            ? `, consigne ${control.setpoint} ${control.isStabilized ? 'atteinte' : 'non atteinte'} (mesure ${control.measured})`
+            : '') + ')';
+}
+
 function DescribeSummary(data: ProcessEventData): string {
     const sequences = data.sequences;
     if (!sequences || (!sequences.run.length && !sequences.skipped.length)) { return ''; }
@@ -126,11 +144,15 @@ export const FR_EVENT_TEXTS: EventTexts = {
         [ProcessEventKind.SEQUENCE_SKIPPED]: (data, name) => `Séquence ${name} sautée : conditions non vérifiées${ConditionList(data)}`,
         [ProcessEventKind.INVERTER_MODE_CHANGED]: (data, name) => `Variateur ${name} en ${data.inverter?.mode ?? ''}` +
             (data.inverter?.frequency !== undefined ? ` à ${data.inverter.frequency} Hz` : '') +
-            (data.inverter?.pidSetpoint !== undefined ? `, consigne ${data.inverter.pidSetpoint}` : '') +
+            (data.inverter?.pidTarget !== undefined
+                ? `, consigne ${data.inverter.pidTarget} ${data.inverter.pidUnit ?? ''}`.trimEnd()
+                    + (data.inverter.pidSetpoint !== undefined ? ` (${data.inverter.pidSetpoint} %)` : '')
+                : data.inverter?.pidSetpoint !== undefined ? `, consigne ${data.inverter.pidSetpoint}` : '') +
             (data.inverter?.sequenceName ? ` (séquence ${Quote(data.inverter.sequenceName)})` : ' (mode par défaut)'),
         [ProcessEventKind.INVERTER_MANUAL_ENGAGED]: (_data, name) => `Variateur ${name} passé en manuel : directives des séquences ignorées`,
         [ProcessEventKind.INVERTER_MANUAL_RELEASED]: (_data, name) => `Variateur ${name} revenu en mode auto`,
         [ProcessEventKind.INVERTER_DIRECTIVE_IGNORED]: (data, name) => `Directive de la séquence ${Quote(data.inverter?.sequenceName ?? '')}` +
-            ` ignorée : variateur ${name} en manuel`
+            ` ignorée : variateur ${name} en manuel`,
+        [ProcessEventKind.CONTROL_VALUE_CHANGED]: (data) => DescribeControlValue(data)
     }
 };
